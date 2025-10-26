@@ -41,7 +41,7 @@ layout_mode = 2
 theme_override_constants/separation = 100
 alignment = 1
 
-[node name="Button" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
+[node name="Button1" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 
@@ -59,15 +59,15 @@ layout_mode = 2
 theme_override_constants/separation = 100
 alignment = 1
 
-[node name="Button" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer2"]
+[node name="Button4" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer2"]
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 
-[node name="Button2" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer2"]
+[node name="Button5" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer2"]
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 
-[node name="Button3" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer2"]
+[node name="Button6" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer2"]
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 
@@ -95,3 +95,17 @@ horizontal_alignment = 1
 [node name="ScoreLabel" type="Label" parent="Control/HBoxContainer"]
 layout_mode = 2
 theme_override_font_sizes/font_size = 40
+
+[node name="refresh" type="Button" parent="Control"]
+layout_mode = 0
+offset_left = 908.0
+offset_top = 776.0
+offset_right = 1020.0
+offset_bottom = 832.0
+
+[node name="message label" type="Button" parent="Control"]
+layout_mode = 0
+offset_left = 775.0
+offset_top = 516.0
+offset_right = 1147.0
+offset_bottom = 564.0
