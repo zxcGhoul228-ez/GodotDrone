@@ -1,0 +1,97 @@
+[gd_scene load_steps=2 format=3 uid="uid://c2cdbk2ehc4o3"]
+
+[ext_resource type="Script" uid="uid://dggeif8rq6jwp" path="res://shop/shop.gd" id="1_r2p71"]
+
+[node name="Node2D" type="Node2D"]
+
+[node name="Control" type="Control" parent="." node_paths=PackedStringArray("score_label")]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 1920.0
+offset_bottom = 1080.0
+script = ExtResource("1_r2p71")
+score_label = NodePath("HBoxContainer/ScoreLabel")
+
+[node name="ColorRect" type="ColorRect" parent="Control"]
+layout_mode = 0
+offset_right = 1920.0
+offset_bottom = 1080.0
+color = Color(0.03137255, 0.8235294, 1, 1)
+
+[node name="CanvasLayer" type="CanvasLayer" parent="Control"]
+
+[node name="CenterContainer" type="CenterContainer" parent="Control"]
+layout_mode = 1
+offset_right = 1920.0
+offset_bottom = 1080.0
+
+[node name="Panel" type="Panel" parent="Control/CenterContainer"]
+custom_minimum_size = Vector2(1100, 700)
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Control/CenterContainer"]
+custom_minimum_size = Vector2(1100, 300)
+layout_mode = 2
+theme_override_constants/separation = 50
+alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Control/CenterContainer/VBoxContainer"]
+custom_minimum_size = Vector2(100.085, 200)
+layout_mode = 2
+theme_override_constants/separation = 100
+alignment = 1
+
+[node name="Button" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+
+[node name="Button2" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+
+[node name="Button3" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="Control/CenterContainer/VBoxContainer"]
+custom_minimum_size = Vector2(1100, 200)
+layout_mode = 2
+theme_override_constants/separation = 100
+alignment = 1
+
+[node name="Button" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer2"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+
+[node name="Button2" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer2"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+
+[node name="Button3" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer2"]
+custom_minimum_size = Vector2(200, 0)
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Control"]
+layout_mode = 0
+offset_left = 410.0
+offset_top = 190.0
+offset_right = 1510.0
+offset_bottom = 300.0
+scale = Vector2(1, 0.95)
+theme_override_constants/separation = 144
+alignment = 1
+
+[node name="back_butt" type="Button" parent="Control/HBoxContainer"]
+custom_minimum_size = Vector2(130, 0)
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Control/HBoxContainer"]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+theme_override_font_sizes/font_size = 70
+text = "МАГАЗИН"
+horizontal_alignment = 1
+
+[node name="ScoreLabel" type="Label" parent="Control/HBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 40

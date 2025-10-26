@@ -1,0 +1,14 @@
+Node3D
+VBoxContainer
+CollisionShape3D
+MeshInstance3D
+DirectionalLight3D
+WorldEnvironment
+Node
+HBoxContainer
+Button
+Panel
+Control
+CanvasLayer
+Camera3D
+CharacterBody3D

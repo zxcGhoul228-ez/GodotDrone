@@ -1,0 +1,141 @@
+[gd_scene load_steps=9 format=3 uid="uid://iptwjnakh7pa"]
+
+[ext_resource type="Script" uid="uid://dkh0356onqtm" path="res://DroneScene.gd" id="1_1yg74"]
+[ext_resource type="Script" uid="uid://ijlm2h2haei6" path="res://DroneLevels/Grid.gd" id="2_av3q6"]
+[ext_resource type="Script" uid="uid://c48eg6uf17jgd" path="res://DroneLevels/Drone.gd" id="2_vq6ct"]
+[ext_resource type="Script" uid="uid://c6ym1avy0qeuu" path="res://DroneLevels/BlockProgramming.gd" id="3_k5mp3"]
+
+[sub_resource type="Environment" id="Environment_anata"]
+background_mode = 1
+background_color = Color(0.41025895, 0.82660055, 0.9487414, 1)
+ambient_light_source = 2
+adjustment_enabled = true
+adjustment_contrast = 1.21
+adjustment_saturation = 1.51
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_nq8q2"]
+size = Vector2(320, 320)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_av3q6"]
+albedo_color = Color(0.46594083, 0.7809177, 0.6882008, 1)
+metallic = 0.75
+metallic_specular = 0.64
+roughness = 0.8
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_av3q6"]
+size = Vector3(320, 0.1, 320)
+
+[node name="DroneScene" type="Node3D"]
+script = ExtResource("1_1yg74")
+
+[node name="GridHighlight" type="Node3D" parent="."]
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_anata")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.70710677, -0.49999997, 0.49999997, 0, 0.70710677, 0.70710677, -0.70710677, -0.49999997, 0.49999997, 0, 10, 0)
+shadow_enabled = true
+shadow_bias = 2.491
+shadow_blur = 3.214
+
+[node name="Grid" type="Node3D" parent="."]
+script = ExtResource("2_av3q6")
+
+[node name="Floor" type="StaticBody3D" parent="."]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor"]
+mesh = SubResource("PlaneMesh_nq8q2")
+surface_material_override/0 = SubResource("StandardMaterial3D_av3q6")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("BoxShape3D_av3q6")
+
+[node name="Drone" type="CharacterBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 32, 0)
+script = ExtResource("2_vq6ct")
+
+[node name="CameraPivot" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 16, 0)
+
+[node name="Camera3D" type="Camera3D" parent="CameraPivot"]
+transform = Transform3D(1, 0, 0, 0, 0.8660254, 0.5, 0, -0.5, 0.8660254, 0, 0, 20)
+fov = 70.0
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="Control" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 10
+anchor_right = 1.0
+offset_right = 40.0
+offset_bottom = 40.0
+grow_horizontal = 2
+metadata/_edit_use_anchors_ = true
+
+[node name="ProgrammingButton" type="Button" parent="UI/Control"]
+layout_mode = 0
+offset_right = 198.0
+offset_bottom = 40.0
+text = "🧩 Программирование"
+metadata/_edit_use_anchors_ = true
+
+[node name="BlockProgramming" type="Panel" parent="UI"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = 360.0
+offset_top = -540.0
+offset_right = 960.0
+offset_bottom = 540.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("3_k5mp3")
+metadata/_edit_use_anchors_ = true
+
+[node name="BlockPalette" type="VBoxContainer" parent="UI/BlockProgramming"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 193.0
+offset_bottom = 978.0
+metadata/_edit_use_anchors_ = true
+
+[node name="ProgramArea" type="VBoxContainer" parent="UI/BlockProgramming"]
+layout_mode = 0
+offset_left = 230.0
+offset_top = 20.0
+offset_right = 559.0
+offset_bottom = 859.0
+metadata/_edit_use_anchors_ = true
+
+[node name="StartButton" type="Button" parent="UI/BlockProgramming"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 1024.0
+offset_right = 120.0
+offset_bottom = 1064.0
+text = "🟢 Пуск"
+metadata/_edit_use_anchors_ = true
+
+[node name="ClearButton" type="Button" parent="UI/BlockProgramming"]
+layout_mode = 0
+offset_left = 140.0
+offset_top = 1024.0
+offset_right = 253.0
+offset_bottom = 1064.0
+text = "🗑️ Очистить"
+metadata/_edit_use_anchors_ = true
+
+[node name="CloseButton" type="Button" parent="UI/BlockProgramming"]
+layout_mode = 0
+offset_left = 475.0
+offset_top = 1024.0
+offset_right = 579.0
+offset_bottom = 1064.0
+text = "❌ Закрыть"
+metadata/_edit_use_anchors_ = true
+
+[node name="DroneContainer" type="Node3D" parent="."]
