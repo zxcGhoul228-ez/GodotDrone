@@ -9,6 +9,17 @@ const GRID_SIZE = 32
 @onready var block_ui = $UI/BlockProgramming
 @onready var programming_button = $UI/Control/ProgrammingButton
 
+# Таймер переменные
+var timer_ui: CanvasLayer
+var timer_label: Label
+var timer: Timer
+var start_time: int
+var current_time_ms: int
+var is_timer_running: bool = false
+var best_time_ms: int = 0
+var best_time_label: Label
+
+# Основные переменные
 var camera_rotation = Vector2(0, 0)
 var camera_distance = 40.0
 var ROTATION_SPEED = 0.003
@@ -53,14 +64,275 @@ func _ready():
 	update_camera_position()
 	connect_buttons()
 	
-	# Устанавливаем процесс режим чтобы input работал даже на паузе
-	process_mode = Node.PROCESS_MODE_ALWAYS
+	# Инициализируем таймер
+	setup_timer()
 	
-	# Захватываем мышь сразу при запуске
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	
 	print("Сцена готова!")
 
+# ================== ТАЙМЕР ==================
+func setup_timer():
+	timer = Timer.new()
+	timer.wait_time = 0.01
+	timer.timeout.connect(_on_timer_timeout)
+	add_child(timer)
+	
+	create_timer_ui()
+	load_best_time()
+	
+	print("✅ Таймер инициализирован")
+
+func create_timer_ui():
+	timer_ui = CanvasLayer.new()
+	timer_ui.name = "TimerUI"
+	timer_ui.layer = 10
+	
+	var panel = Panel.new()
+	panel.size = Vector2(250, 90)
+	panel.position = Vector2(20, 20)
+	panel.add_theme_stylebox_override("panel", create_panel_style())
+	
+	timer_label = Label.new()
+	timer_label.name = "TimerLabel"
+	timer_label.text = "00:00.000"
+	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	timer_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	timer_label.add_theme_font_size_override("font_size", 20)
+	timer_label.add_theme_color_override("font_color", Color.WHITE)
+	timer_label.size = Vector2(panel.size.x, 45)
+	
+	best_time_label = Label.new()
+	best_time_label.name = "BestTimeLabel"
+	best_time_label.text = "Лучшее: --:--.---"
+	best_time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	best_time_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	best_time_label.add_theme_font_size_override("font_size", 14)
+	best_time_label.add_theme_color_override("font_color", Color.YELLOW)
+	best_time_label.position = Vector2(0, 45)
+	best_time_label.size = Vector2(panel.size.x, 30)
+	
+	panel.add_child(timer_label)
+	panel.add_child(best_time_label)
+	timer_ui.add_child(panel)
+	add_child(timer_ui)
+	
+	update_best_time_display()
+
+func create_panel_style() -> StyleBoxFlat:
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0, 0, 0, 0.7)
+	style.border_color = Color(1, 1, 1, 0.5)
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.corner_radius_top_left = 8
+	style.corner_radius_top_right = 8
+	style.corner_radius_bottom_right = 8
+	style.corner_radius_bottom_left = 8
+	return style
+
+func start_timer():
+	if not timer:
+		setup_timer()
+	
+	start_time = Time.get_ticks_msec()
+	current_time_ms = 0
+	is_timer_running = true
+	timer.start()
+	
+	update_timer_display()
+	print("⏱️ Таймер запущен")
+
+func stop_timer() -> String:
+	if timer and is_timer_running:
+		is_timer_running = false
+		timer.stop()
+		
+		var final_time = format_time_ms(current_time_ms)
+		print("⏹️ Таймер остановлен. Итоговое время: ", final_time)
+		return final_time
+	return ""
+
+func reset_timer():
+	if timer:
+		timer.stop()
+	is_timer_running = false
+	current_time_ms = 0
+	update_timer_display()
+	print("🔄 Таймер сброшен")
+
+func _on_timer_timeout():
+	if is_timer_running:
+		current_time_ms = Time.get_ticks_msec() - start_time
+		update_timer_display()
+
+func update_timer_display():
+	if timer_label:
+		timer_label.text = format_time_ms(current_time_ms)
+
+func format_time_ms(milliseconds: int) -> String:
+	var total_seconds = milliseconds / 1000
+	var minutes = total_seconds / 60
+	var seconds = total_seconds % 60
+	var ms = milliseconds % 1000
+	return "%02d:%02d.%03d" % [minutes, seconds, ms]
+
+func update_best_time_display():
+	if best_time_label:
+		if best_time_ms > 0:
+			best_time_label.text = "Лучшее: " + format_time_ms(best_time_ms)
+		else:
+			best_time_label.text = "Лучшее: --:--.---"
+
+func save_best_time():
+	var config = ConfigFile.new()
+	config.set_value("best_times", "level_%d" % Global.current_level, best_time_ms)
+	config.save("user://best_times.cfg")
+	print("💾 Лучшее время сохранено: ", format_time_ms(best_time_ms))
+
+func load_best_time():
+	var config = ConfigFile.new()
+	var error = config.load("user://best_times.cfg")
+	if error == OK:
+		best_time_ms = config.get_value("best_times", "level_%d" % Global.current_level, 0)
+		print("📁 Загружено лучшее время: ", format_time_ms(best_time_ms))
+	else:
+		best_time_ms = 0
+		print("📁 Лучшее время не найдено")
+	
+	update_best_time_display()
+
+func _on_program_finished(success: bool):
+	print("🎯 Программа завершена, успех: ", success)
+	
+	var final_time = stop_timer()
+	
+	if success:
+		print("🎉 Уровень пройден! Время: ", final_time)
+		show_success_message(final_time)
+		if best_time_ms == 0 or current_time_ms < best_time_ms:
+			best_time_ms = current_time_ms
+			save_best_time()
+			update_best_time_display()
+			print("🏆 Новый рекорд!")
+	else:
+		print("❌ Программа завершена, цель не достигнута. Время: ", final_time)
+
+func show_success_message(final_time: String):
+	# Создаем полноэкранный CanvasLayer
+	var canvas = CanvasLayer.new()
+	canvas.layer = 100  # Высокий слой чтобы было поверх всего
+	canvas.name = "SuccessCanvas"
+	
+	# Создаем полноэкранный ColorRect
+	var overlay = ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.7)  # Полупрозрачный черный фон
+	overlay.size = get_viewport().size
+	overlay.name = "Overlay"
+	
+	# Создаем панель победного сообщения
+	var panel = Panel.new()
+	panel.name = "SuccessPanel"
+	
+	# Устанавливаем размер панели (больше чем было)
+	panel.size = Vector2(600, 300)  # Увеличили размер
+	panel.position = (get_viewport().get_visible_rect().size - panel.size) / 2
+	
+	# Создаем красивый стиль для панели
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.1, 0.1, 0.1, 0.95)
+	panel_style.border_color = Color.GREEN
+	panel_style.border_width_left = 4
+	panel_style.border_width_top = 4
+	panel_style.border_width_right = 4
+	panel_style.border_width_bottom = 4
+	panel_style.corner_radius_top_left = 12
+	panel_style.corner_radius_top_right = 12
+	panel_style.corner_radius_bottom_right = 12
+	panel_style.corner_radius_bottom_left = 12
+	panel.add_theme_stylebox_override("panel", panel_style)
+	
+	# Создаем контейнер для текста
+	var vbox = VBoxContainer.new()
+	vbox.name = "VBox"
+	vbox.size = panel.size
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	
+	# Заголовок
+	var title_label = Label.new()
+	title_label.name = "TitleLabel"
+	title_label.text = "🎉 УРОВЕНЬ ПРОЙДЕН! 🎉"
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.add_theme_font_size_override("font_size", 32)
+	title_label.add_theme_color_override("font_color", Color.GREEN)
+	title_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	
+	# Время прохождения
+	var time_label = Label.new()
+	time_label.name = "TimeLabel"
+	time_label.text = "Ваше время: " + final_time
+	time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	time_label.add_theme_font_size_override("font_size", 24)
+	time_label.add_theme_color_override("font_color", Color.GOLD)
+	time_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	
+	# Лучшее время
+	var best_time_text = ""
+	if best_time_ms > 0 and current_time_ms <= best_time_ms:
+		best_time_text = "🏆 НОВЫЙ РЕКОРД! 🏆"
+	else:
+		best_time_text = "Лучшее время: " + format_time_ms(best_time_ms)
+	
+	var best_time_label = Label.new()
+	best_time_label.name = "BestTimeLabel"
+	best_time_label.text = best_time_text
+	best_time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	best_time_label.add_theme_font_size_override("font_size", 20)
+	best_time_label.add_theme_color_override("font_color", Color.YELLOW)
+	best_time_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	
+	# Сообщение о возврате
+	var return_label = Label.new()
+	return_label.name = "ReturnLabel"
+	return_label.text = "Автоматический возврат через 5 секунд..."
+	return_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	return_label.add_theme_font_size_override("font_size", 18)
+	return_label.add_theme_color_override("font_color", Color.LIGHT_BLUE)
+	return_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	
+	# Добавляем все в контейнер
+	vbox.add_child(title_label)
+	vbox.add_child(time_label)
+	vbox.add_child(best_time_label)
+	vbox.add_child(return_label)
+	
+	# Центрируем содержимое
+	vbox.add_theme_constant_override("separation", 20)
+	
+	panel.add_child(vbox)
+	overlay.add_child(panel)
+	canvas.add_child(overlay)
+	add_child(canvas)
+	
+	print("✅ Финальный экран создан: ", final_time)
+	
+	# Ждем 5 секунд и возвращаемся
+	await get_tree().create_timer(5.0).timeout
+	
+	# Удаляем CanvasLayer перед возвратом
+	if canvas and is_instance_valid(canvas):
+		canvas.queue_free()
+	
+	return_to_selection()
+
+func return_to_selection():
+	print("🔄 Возвращаемся к выбору уровней...")
+	get_tree().change_scene_to_file("res://UI/game_level.tscn")
+
+# ================== СИСТЕМА ДРОНА ==================
 func load_drone():
 	for child in drone_container.get_children():
 		child.queue_free()
@@ -125,14 +397,11 @@ func create_drone_from_parts(drone_node: Node3D) -> CharacterBody3D:
 	new_drone.owner = get_tree().edited_scene_root
 	if drone_node is Node3D:
 		print("📦 Копируем компоненты дрона...")
-		@warning_ignore("unused_variable")
-		var original_global_pos = drone_node.global_position
 		var children_to_copy = []
 		for child in drone_node.get_children():
 			children_to_copy.append(child)
 		for child in children_to_copy:
 			if child is Node3D:
-				print("  📥 Копируем: ", child.name, " относительная позиция: ", child.position)
 				var relative_transform = child.transform
 				var child_name = child.name
 				drone_node.remove_child(child)
@@ -140,8 +409,6 @@ func create_drone_from_parts(drone_node: Node3D) -> CharacterBody3D:
 				child.owner = get_tree().edited_scene_root
 				child.transform = relative_transform
 				child.name = child_name
-				print("  ✅ Скопирован: ", child.name, " новая позиция: ", child.position)
-	# Округляем до центра клетки
 	@warning_ignore("integer_division")
 	var aligned_x = round((start_point_x + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
 	@warning_ignore("integer_division")
@@ -151,27 +418,38 @@ func create_drone_from_parts(drone_node: Node3D) -> CharacterBody3D:
 		drone_node.queue_free()
 	print("✅ Дрон создан из частей")
 	return new_drone
+
+# В DroneScene.gd в setup_drone():
 func setup_drone(drone_node: CharacterBody3D):
 	print("🔧 Настраиваем дрон...")
-	# Округляем до центра клетки (середина между линиями сетки)
 	@warning_ignore("integer_division")
 	var aligned_x = round((start_point_x + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
 	@warning_ignore("integer_division")
 	var aligned_z = round((start_point_z + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
 	drone_node.global_position = Vector3(aligned_x, start_point_y, aligned_z)
 	drone_node.scale = Vector3(3, 3, 3)
+	
+	# Убедись что коллизия добавлена
 	add_collision_if_needed(drone_node)
+	
+	# Включаем обработку коллизий
+	drone_node.collision_layer = 1
+	drone_node.collision_mask = 1
+	
 	if drone_node.has_signal("drone_moved"):
 		drone_node.drone_moved.connect(on_drone_moved)
+	if drone_node.has_signal("program_finished"):
+		drone_node.program_finished.connect(_on_program_finished)
+		print("✅ Сигнал program_finished подключен")
+	
+	# БЕЗОПАСНАЯ проверка коллизии
+	var collision_node = drone_node.get_node_or_null("CollisionShape3D")
+	if collision_node:
+		print("🚁 Коллизия дрона: ", collision_node.global_position)
+	else:
+		print("⚠️ Коллизия дрона еще не готова")
+	
 	print("✅ Дрон настроен: ", drone_node.name)
-	print("🎯 Стартовая позиция выровнена: ", drone_node.global_position)
-func print_drone_structure(node: Node, indent: int = 0):
-	var indent_str = "  ".repeat(indent)
-	print(indent_str + "└─ " + node.name + " (" + node.get_class() + ") позиция: " + str(node.global_position))
-	for child in node.get_children():
-		if child is Node3D:
-			print_drone_structure(child, indent + 1)
-
 func add_collision_if_needed(drone_node: CharacterBody3D):
 	if drone_node.get_node_or_null("CollisionShape3D") == null:
 		var collision = CollisionShape3D.new()
@@ -230,6 +508,7 @@ func create_default_character_drone() -> CharacterBody3D:
 func get_drone() -> CharacterBody3D:
 	return current_drone
 
+# ================== СЕТКА И ВИЗУАЛЬНЫЕ ЭФФЕКТЫ ==================
 func create_grid():
 	var grid = $Grid
 	var material = StandardMaterial3D.new()
@@ -249,7 +528,6 @@ func create_grid():
 			material, 0.3
 		)
 
-@warning_ignore("unused_parameter")
 func create_grid_line(from: Vector3, to: Vector3, material: Material, thickness: float):
 	var mesh_instance = MeshInstance3D.new()
 	var immediate_mesh = ImmediateMesh.new()
@@ -288,7 +566,6 @@ func update_grid_highlight():
 		create_trail_marker(current_cell_position)
 	current_cell_position = new_cell_position
 
-@warning_ignore("shadowed_variable_base_class")
 func create_trail_marker(position: Vector3):
 	var trail_mesh = MeshInstance3D.new()
 	add_child(trail_mesh)
@@ -310,24 +587,19 @@ func create_trail_marker(position: Vector3):
 	start_trail_fade(trail_mesh)
 
 func start_trail_fade(trail_mesh: MeshInstance3D):
-	# Сохраняем ссылку на трейл до начала анимации
 	var trail_index = trail_meshes.find(trail_mesh)
-	
 	var tween = create_tween()
 	tween.tween_property(trail_mesh, "scale", Vector3(0.5, 0.5, 0.5), trail_fade_time * 0.7)
 	tween.parallel().tween_property(trail_mesh.material_override, "albedo_color:a", 0.0, trail_fade_time)
-	
-	# Используем индекс вместо прямой ссылки на объект
 	tween.tween_callback(_on_trail_fade_finished.bind(trail_index))
 
 func _on_trail_fade_finished(trail_index: int):
-	# Проверяем что индекс валидный и объект еще существует
 	if trail_index >= 0 and trail_index < trail_meshes.size():
 		var trail_mesh = trail_meshes[trail_index]
 		if is_instance_valid(trail_mesh):
 			trail_mesh.queue_free()
-		# Удаляем из массива по индексу
 		trail_meshes.remove_at(trail_index)
+
 func remove_trail_mesh(trail_mesh_ref):
 	var trail_mesh = trail_mesh_ref as MeshInstance3D
 	if trail_mesh and is_instance_valid(trail_mesh) and trail_mesh in trail_meshes:
@@ -342,24 +614,23 @@ func clear_all_trails():
 
 func on_drone_moved():
 	update_grid_highlight()
+
+# ================== УПРАВЛЕНИЕ КАМЕРОЙ ==================
 func _input(event):
-	# Обрабатываем ESC всегда, даже когда игра на паузе
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		toggle_pause_menu()
 		get_viewport().set_input_as_handled()
 		return
+
 func _unhandled_input(event):
-	# Обрабатываем Tab для программирования
 	if event is InputEventKey and event.pressed and event.keycode == KEY_TAB:
 		toggle_programming()
 		get_viewport().set_input_as_handled()
 		return
 	
-	# Остальной input только когда игра не на паузе и не открыто программирование
 	if is_paused or block_ui.visible:
 		return
 	
-	# Вращение камеры при движении мыши
 	if event is InputEventMouseMotion:
 		var mouse_delta = event.relative
 		
@@ -378,7 +649,6 @@ func _unhandled_input(event):
 		
 		update_camera_position()
 	
-	# Приближение/отдаление колесиком мыши
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			camera_distance = clamp(camera_distance - ZOOM_SPEED, MIN_DISTANCE, MAX_DISTANCE)
@@ -396,19 +666,7 @@ func _unhandled_input(event):
 			KEY_D: camera_move_input.x = 1.0 if pressed else 0.0
 			KEY_SPACE: camera_move_input.y = 1.0 if pressed else 0.0
 			KEY_CTRL: camera_move_input.y = -1.0 if pressed else 0.0
-func toggle_programming():
-	if block_ui.visible:
-		# Закрываем программирование
-		block_ui.hide()
-		programming_button.show()
-		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-		print("❌ Закрываем панель программирования")
-	else:
-		# Открываем программирование
-		block_ui.show()
-		programming_button.hide()
-		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-		print("🧩 Открываем панель программирования")
+
 func _process(delta):
 	if camera_move_input != Vector3.ZERO:
 		var move_direction = camera_move_input.normalized()
@@ -421,7 +679,6 @@ func _process(delta):
 		world_direction += camera_up * move_direction.y
 		camera_pivot.global_position += world_direction * CAMERA_MOVE_SPEED * delta
 	
-	# Применяем инерцию вращения
 	if rotation_velocity.x != 0 or rotation_velocity.y != 0:
 		camera_rotation.x += rotation_velocity.x
 		camera_rotation.y += rotation_velocity.y
@@ -443,8 +700,8 @@ func update_camera_position():
 	camera.position = camera_position
 	camera.look_at(camera_pivot.global_position, Vector3.UP)
 
+# ================== UI И КНОПКИ ==================
 func connect_buttons():
-	# Убираем кнопку назад
 	var programming_btn = $UI/Control/ProgrammingButton
 	var start_btn = $UI/BlockProgramming/StartButton
 	var clear_btn = $UI/BlockProgramming/ClearButton
@@ -462,14 +719,7 @@ func connect_buttons():
 	print("✅ Все кнопки подключены")
 
 func _on_programming_button_pressed():
-	# Кнопка программирования в UI тоже работает
 	toggle_programming()
-
-	# Мышь остается захваченной - для UI будет работать даже при захваченной мыши
-
-func _on_back_button_pressed():
-	print("◀️ Возвращаемся к выбору уровней")
-	get_tree().change_scene_to_file("res://game_level.tscn")
 
 func _on_start_button_pressed():
 	print("🟢 Запускаем программу дрона")
@@ -479,6 +729,7 @@ func _on_start_button_pressed():
 		print("Полученная последовательность: ", sequence)
 		if sequence.size() > 0:
 			print("✅ Запускаем программу из ", sequence.size(), " команд")
+			start_timer()
 			drone.execute_sequence(sequence)
 		else:
 			print("❌ Программа пуста! Добавьте блоки команд.")
@@ -488,46 +739,57 @@ func _on_start_button_pressed():
 func _on_clear_button_pressed():
 	print("🗑️ Очищаем программу")
 	if block_ui and block_ui.has_method("_on_clear_button_pressed"):
-		# Вызываем метод очистки внутри BlockProgramming
 		block_ui._on_clear_button_pressed()
 	elif block_ui and block_ui.has_method("clear_program"):
-		# Альтернативное имя метода
 		block_ui.clear_program()
 	else:
-		print("❌ BlockProgramming UI не найден или не имеет метода очистки")		
+		print("❌ BlockProgramming UI не найден или не имеет метода очистки")
 
 func _on_close_button_pressed():
-	# Кнопка закрытия в UI
 	toggle_programming()
 
+func toggle_programming():
+	if block_ui.visible:
+		block_ui.hide()
+		programming_button.show()
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+		print("❌ Закрываем панель программирования")
+	else:
+		block_ui.show()
+		programming_button.hide()
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+		print("🧩 Открываем панель программирования")
+
+# ================== МЕНЮ ПАУЗЫ И НАСТРОЕК ==================
 func toggle_pause_menu():
 	print("🔄 Нажата кнопка ESC, текущая пауза:", is_paused)
 	
-	# Если открыты настройки, закрываем их
 	if settings_menu and settings_menu.visible:
 		print("📋 Закрываем настройки")
 		close_settings()
 		return
 	
-	# Если открыто программирование, закрываем его вместо паузы
 	if block_ui.visible:
 		print("🧩 Закрываем программирование вместо паузы")
 		toggle_programming()
 		return
 	
-	# Создаем меню если его нет
 	if pause_menu == null:
 		print("🆕 Создаем меню паузы впервые")
 		create_pause_menu()
 	
-	# Переключаем состояние
 	is_paused = !is_paused
 	print("🎯 Новое состояние паузы:", is_paused)
 	
-	# Обновляем видимость
+	if is_paused and is_timer_running:
+		timer.paused = true
+		print("⏸️ Таймер на паузе")
+	elif not is_paused and is_timer_running:
+		timer.paused = false
+		print("▶️ Таймер возобновлен")
+	
 	pause_menu.visible = is_paused
 	
-	# Управляем мышью
 	if is_paused:
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 		print("⏸️ Меню паузы ОТКРЫТО - мышь видима")
@@ -535,7 +797,6 @@ func toggle_pause_menu():
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 		print("▶️ Меню паузы ЗАКРЫТО - мышь захвачена")
 	
-	# Ставим игру на паузу
 	get_tree().paused = is_paused
 
 func create_pause_menu():
@@ -846,7 +1107,6 @@ func _on_start_y_changed(value: float):
 func _on_apply_start_position():
 	print("🎯 Применяем новую стартовую позицию: ", start_point_x, ", ", start_point_y, ", ", start_point_z)
 	if current_drone:
-		# Округляем до центра клетки
 		@warning_ignore("integer_division")
 		var aligned_x = round((start_point_x + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
 		@warning_ignore("integer_division")
@@ -862,6 +1122,7 @@ func go_to_main_menu():
 func quit_game():
 	get_tree().quit()
 
+# ================== НАСТРОЙКИ ==================
 func save_settings():
 	var config = ConfigFile.new()
 	config.set_value("settings", "mouse_sensitivity", mouse_sensitivity)

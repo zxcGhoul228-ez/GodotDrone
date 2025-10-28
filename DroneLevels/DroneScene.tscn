@@ -74,6 +74,7 @@ grow_horizontal = 2
 metadata/_edit_use_anchors_ = true
 
 [node name="ProgrammingButton" type="Button" parent="UI/Control"]
+visible = false
 layout_mode = 0
 offset_right = 198.0
 offset_bottom = 40.0
@@ -137,5 +138,14 @@ offset_right = 579.0
 offset_bottom = 1064.0
 text = "❌ Закрыть"
 metadata/_edit_use_anchors_ = true
+
+[node name="TimerUI" type="Panel" parent="UI"]
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="TimerLabel" type="Label" parent="UI/TimerUI"]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 23.0
 
 [node name="DroneContainer" type="Node3D" parent="."]
