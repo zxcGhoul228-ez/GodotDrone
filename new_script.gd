@@ -25,7 +25,7 @@ func _on_button_pressed():
 
 func _on_start_pressed():
 	# Загрузка игровой сцены
-	get_tree().change_scene_to_file("res://game_level.tscn")
+	get_tree().change_scene_to_file("res://UI/game_level.tscn")
 
 func _on_shop_pressed():
 	# Загрузка сцены настроек

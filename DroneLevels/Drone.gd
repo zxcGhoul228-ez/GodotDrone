@@ -46,7 +46,7 @@ func perform_grid_movement(direction: int):
 		2: target_position.x -= GRID_SIZE
 		3: target_position.x += GRID_SIZE
 		4: target_position.y += GRID_SIZE
-		5: target_position.y = max(target_position.y - GRID_SIZE, GRID_SIZE)
+		5: target_position.y = max(target_position.y - GRID_SIZE, 0)  # Исправлено: минимальная высота 0
 	
 	print("📍 Двигаюсь из ", vector3_to_str(start_position), " в ", vector3_to_str(target_position))
 	current_tween = create_tween()

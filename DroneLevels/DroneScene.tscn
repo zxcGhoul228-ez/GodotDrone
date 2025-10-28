@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://dkh0356onqtm" path="res://DroneScene.gd" id="1_1yg74"]
 [ext_resource type="Script" uid="uid://ijlm2h2haei6" path="res://DroneLevels/Grid.gd" id="2_av3q6"]
 [ext_resource type="Script" uid="uid://c48eg6uf17jgd" path="res://DroneLevels/Drone.gd" id="2_vq6ct"]
-[ext_resource type="Script" uid="uid://c6ym1avy0qeuu" path="res://DroneLevels/BlockProgramming.gd" id="3_k5mp3"]
+[ext_resource type="Script" uid="uid://c6ym1avy0qeuu" path="res://BlockProgramming.gd" id="3_k5mp3"]
 
 [sub_resource type="Environment" id="Environment_anata"]
 background_mode = 1
