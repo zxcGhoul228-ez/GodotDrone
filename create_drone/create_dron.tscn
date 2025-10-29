@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3 uid="uid://b70lx416ht2xn"]
+[gd_scene load_steps=3 format=3 uid="uid://dbrcvb058nfje"]
 
 [ext_resource type="Script" uid="uid://bxjqfxylx2xxc" path="res://create_drone/back_butt.gd" id="1_caali"]
 
@@ -9,7 +9,11 @@ script/source = "extends Node3D
 var components_container
 var list_panel
 var component_list
-var add_buttons
+
+var frame_buttons = []
+var board_buttons = []
+var motor_buttons = []
+var propeller_buttons = []
 
 # Переменные для хранения компонентов
 var drone_frame = null
@@ -17,11 +21,42 @@ var drone_board = null
 var motors = []
 var propellers = []
 
-# Префабы компонентов
-var frame_scene = preload(\"res://create_drone/components/frame.tscn\")
-var board_scene = preload(\"res://create_drone/components/board.tscn\")
-var motor_scene = preload(\"res://create_drone/components/motor.tscn\")
-var propeller_scene = preload(\"res://create_drone/components/propeller.tscn\")
+# Словари префабов для каждого типа компонентов
+var frame_prefabs = {
+	\"Рама1\": preload(\"res://create_drone/components/frame.tscn\"),
+	#\"Рама2\": preload(\"res://create_drone/components/frames/Рама2.tscn\"),
+	#\"Рама3\": preload(\"res://create_drone/components/frames/Рама3.tscn\")
+}
+
+var board_prefabs = {
+	\"Плата1\": preload(\"res://create_drone/components/board.tscn\"),
+	#\"Плата2\": preload(\"res://create_drone/components/boards/Плата2.tscn\"),
+	#\"Плата3\": preload(\"res://create_drone/components/boards/Плата3.tscn\")
+}
+
+var motor_prefabs = {
+	\"Мотор1\": preload(\"res://create_drone/components/motor.tscn\"),
+	#\"Мотор2\": preload(\"res://create_drone/components/motors/Мотор2.tscn\"),
+	#\"Мотор3\": preload(\"res://create_drone/components/motors/Мотор3.tscn\")
+}
+
+var propeller_prefabs = {
+	\"Пропеллер1\": preload(\"res://create_drone/components/motor.tscn\"),
+	#\"Пропеллер2\": preload(\"res://create_drone/components/propellers/Пропеллер2.tscn\"),
+	#\"Пропеллер3\": preload(\"res://create_drone/components/propellers/Пропеллер3.tscn\")
+}
+
+# Текущие выбранные типы компонентов
+var current_frame_type = \"Рама1\"
+var current_board_type = \"Плата1\"
+var current_motor_type = \"Мотор1\"
+var current_propeller_type = \"Пропеллер1\"
+
+# UI элементы для выбора компонентов
+@onready var frame_selector = $UI/ComponentSelectors/FrameSelector
+@onready var board_selector = $UI/ComponentSelectors/BoardSelector
+@onready var motor_selector = $UI/ComponentSelectors/MotorSelector
+@onready var propeller_selector = $UI/ComponentSelectors/PropellerSelector
 
 # Переменные для управления камерой и вращения
 var camera_rotation = Vector2(0, 0)
@@ -54,7 +89,6 @@ func _ready():
 	# Получаем ссылки на узлы
 	components_container = $Components
 	list_panel = $UI/Hierarchy
-	add_buttons = $UI/VBoxContainer
 	
 	# Пробуем найти Complist разными способами
 	component_list = find_component_list()
@@ -69,6 +103,9 @@ func _ready():
 	else:
 		print(\"Ошибка: Hierarchy не найден!\")
 	
+	# Создаем UI через код
+	create_component_selectors_ui()
+	
 	# Создаем сетку
 	create_grid()
 	
@@ -81,8 +118,283 @@ func _ready():
 	# Подключаем сигналы кнопок
 	connect_buttons()
 	
+	# Создаем кнопки компонентов
+	create_component_buttons()
+	
 	# Настраиваем начальную позицию камеры
 	update_camera_position()
+
+func create_component_selectors_ui():
+	# Создаем основной контейнер для выбора компонентов
+	var component_selectors = VBoxContainer.new()
+	component_selectors.name = \"ComponentSelectors\"
+	
+	# Настраиваем привязки к левому нижнему углу
+	component_selectors.anchors_preset = Control.PRESET_BOTTOM_LEFT
+	component_selectors.anchor_left = 0.0
+	component_selectors.anchor_bottom = 1.0
+	component_selectors.anchor_right = 0.0
+	component_selectors.anchor_top = 1.0
+	
+	# Устанавливаем отступы от краев
+	component_selectors.offset_left = 20
+	component_selectors.offset_bottom = -20  # Отрицательный, так как anchor_bottom = 1.0
+	component_selectors.offset_right = 420   # Ширина 400px + отступ 20px
+	component_selectors.offset_top = -620    # Высота 600px + отступ 20px
+	
+	# Альтернативный вариант - через позицию и размер (проще)
+	# component_selectors.position = Vector2(20, 1080 - 600 - 20)  # 1080 - высота экрана
+	# component_selectors.size = Vector2(400, 600)
+	
+	# Создаем секции для каждого типа компонентов
+	create_frame_section(component_selectors)
+	create_board_section(component_selectors)
+	create_motor_section(component_selectors)
+	create_propeller_section(component_selectors)
+	
+	# Добавляем в UI
+	$UI.add_child(component_selectors)
+	
+	# Для отладки - добавляем цветной фон
+	add_debug_style(component_selectors, Color(0, 0.5, 1, 0.3))
+
+func create_frame_section(parent: VBoxContainer):
+	var frame_section = HBoxContainer.new()
+	frame_section.name = \"FrameSelector\"
+	frame_section.custom_minimum_size = Vector2(0, 120)
+	frame_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	var frame_label = Label.new()
+	frame_label.name = \"FrameLabel\"
+	frame_label.text = \"Рамы      \"
+	frame_label.custom_minimum_size = Vector2(80, 0)
+	frame_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	
+	var frame_container = ScrollContainer.new()
+	frame_container.name = \"FrameContainer\"
+	frame_container.custom_minimum_size = Vector2(300, 120)
+	frame_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	var frame_hbox = HBoxContainer.new()
+	frame_hbox.name = \"FrameHBox\"
+	frame_hbox.custom_minimum_size = Vector2(400, 120)
+	
+	frame_container.add_child(frame_hbox)
+	frame_section.add_child(frame_label)
+	frame_section.add_child(frame_container)
+	parent.add_child(frame_section)
+	
+	# Отладочный стиль
+	add_debug_style(frame_section, Color(1, 0, 0, 0.2))
+
+func create_board_section(parent: VBoxContainer):
+	var board_section = HBoxContainer.new()
+	board_section.name = \"BoardSelector\"
+	board_section.custom_minimum_size = Vector2(0, 120)
+	board_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	var board_label = Label.new()
+	board_label.name = \"BoardLabel\"
+	board_label.text = \"Платы     \"
+	board_label.custom_minimum_size = Vector2(80, 0)
+	board_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	
+	var board_container = ScrollContainer.new()
+	board_container.name = \"BoardContainer\"
+	board_container.custom_minimum_size = Vector2(300, 120)
+	board_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	var board_hbox = HBoxContainer.new()
+	board_hbox.name = \"BoardHBox\"
+	board_hbox.custom_minimum_size = Vector2(400, 120)
+	
+	board_container.add_child(board_hbox)
+	board_section.add_child(board_label)
+	board_section.add_child(board_container)
+	parent.add_child(board_section)
+	
+	add_debug_style(board_section, Color(0, 1, 0, 0.2))
+
+func create_motor_section(parent: VBoxContainer):
+	var motor_section = HBoxContainer.new()
+	motor_section.name = \"MotorSelector\"
+	motor_section.custom_minimum_size = Vector2(0, 120)
+	motor_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	var motor_label = Label.new()
+	motor_label.name = \"MotorLabel\"
+	motor_label.text = \"Двигатели \"
+	motor_label.custom_minimum_size = Vector2(80, 0)
+	motor_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	
+	var motor_container = ScrollContainer.new()
+	motor_container.name = \"MotorContainer\"
+	motor_container.custom_minimum_size = Vector2(300, 120)
+	motor_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	var motor_hbox = HBoxContainer.new()
+	motor_hbox.name = \"MotorHBox\"
+	motor_hbox.custom_minimum_size = Vector2(400, 120)
+	
+	motor_container.add_child(motor_hbox)
+	motor_section.add_child(motor_label)
+	motor_section.add_child(motor_container)
+	parent.add_child(motor_section)
+	
+	add_debug_style(motor_section, Color(1, 1, 0, 0.2))
+
+func create_propeller_section(parent: VBoxContainer):
+	var propeller_section = HBoxContainer.new()
+	propeller_section.name = \"PropellerSelector\"
+	propeller_section.custom_minimum_size = Vector2(0, 120)
+	propeller_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	var propeller_label = Label.new()
+	propeller_label.name = \"PropellerLabel\"
+	propeller_label.text = \"Пропеллеры\"
+	propeller_label.custom_minimum_size = Vector2(80, 0)
+	propeller_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	
+	var propeller_container = ScrollContainer.new()
+	propeller_container.name = \"PropellerContainer\"
+	propeller_container.custom_minimum_size = Vector2(300, 120)
+	propeller_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	
+	var propeller_hbox = HBoxContainer.new()
+	propeller_hbox.name = \"PropellerHBox\"
+	propeller_hbox.custom_minimum_size = Vector2(400, 120)
+	
+	propeller_container.add_child(propeller_hbox)
+	propeller_section.add_child(propeller_label)
+	propeller_section.add_child(propeller_container)
+	parent.add_child(propeller_section)
+	
+	add_debug_style(propeller_section, Color(0.5, 0, 1, 0.2))
+
+# Вспомогательная функция для добавления отладочного стиля
+func add_debug_style(control: Control, color: Color):
+	var stylebox = StyleBoxFlat.new()
+	stylebox.bg_color = color
+	stylebox.border_width_bottom = 1
+	stylebox.border_width_left = 1
+	stylebox.border_width_right = 1
+	stylebox.border_width_top = 1
+	stylebox.border_color = Color(1, 1, 1, 0.5)
+	control.add_theme_stylebox_override(\"panel\", stylebox)
+
+func create_component_buttons():
+	# Создаем кнопки для каждого типа компонентов
+	create_frame_buttons()
+	create_board_buttons()
+	create_motor_buttons()
+	create_propeller_buttons()
+
+func create_frame_buttons():
+	var frame_hbox = $UI/ComponentSelectors/FrameSelector/FrameContainer/FrameHBox
+	
+	# Очищаем существующие кнопки
+	for child in frame_hbox.get_children():
+		child.queue_free()
+	frame_buttons.clear()
+	
+	for frame_name in frame_prefabs.keys():
+		var button = Button.new()
+		button.text = frame_name
+		button.custom_minimum_size = Vector2(100, 100)
+		button.connect(\"pressed\", _on_frame_button_pressed.bind(frame_name))
+		frame_hbox.add_child(button)
+		frame_buttons.append(button)
+	
+	# Выделяем первую кнопку
+	if frame_buttons.size() > 0:
+		update_button_selector(frame_buttons, current_frame_type)
+
+func create_board_buttons():
+	var board_hbox = $UI/ComponentSelectors/BoardSelector/BoardContainer/BoardHBox
+	
+	# Очищаем существующие кнопки
+	for child in board_hbox.get_children():
+		child.queue_free()
+	board_buttons.clear()
+	
+	for board_name in board_prefabs.keys():
+		var button = Button.new()
+		button.text = board_name
+		button.custom_minimum_size = Vector2(100, 100)
+		button.connect(\"pressed\", _on_board_button_pressed.bind(board_name))
+		board_hbox.add_child(button)
+		board_buttons.append(button)
+	
+	if board_buttons.size() > 0:
+		update_button_selector(board_buttons, current_board_type)
+
+func create_motor_buttons():
+	var motor_hbox = $UI/ComponentSelectors/MotorSelector/MotorContainer/MotorHBox
+	
+	# Очищаем существующие кнопки
+	for child in motor_hbox.get_children():
+		child.queue_free()
+	motor_buttons.clear()
+	
+	for motor_name in motor_prefabs.keys():
+		var button = Button.new()
+		button.text = motor_name
+		button.custom_minimum_size = Vector2(100, 100)
+		button.connect(\"pressed\", _on_motor_button_pressed.bind(motor_name))
+		motor_hbox.add_child(button)
+		motor_buttons.append(button)
+	
+	if motor_buttons.size() > 0:
+		update_button_selector(motor_buttons, current_motor_type)
+
+func create_propeller_buttons():
+	var propeller_hbox = $UI/ComponentSelectors/PropellerSelector/PropellerContainer/PropellerHBox
+	
+	# Очищаем существующие кнопки
+	for child in propeller_hbox.get_children():
+		child.queue_free()
+	propeller_buttons.clear()
+	
+	for propeller_name in propeller_prefabs.keys():
+		var button = Button.new()
+		button.text = propeller_name
+		button.custom_minimum_size = Vector2(100, 100)
+		button.connect(\"pressed\", _on_propeller_button_pressed.bind(propeller_name))
+		propeller_hbox.add_child(button)
+		propeller_buttons.append(button)
+	
+	if propeller_buttons.size() > 0:
+		update_button_selector(propeller_buttons, current_propeller_type)
+
+# Обработчики нажатий кнопок
+func _on_frame_button_pressed(frame_name):
+	current_frame_type = frame_name
+	add_frame()
+	update_button_selector(frame_buttons, frame_name)
+
+func _on_board_button_pressed(board_name):
+	current_board_type = board_name
+	add_board()
+	update_button_selector(board_buttons, board_name)
+
+func _on_motor_button_pressed(motor_name):
+	current_motor_type = motor_name
+	add_motor()
+	update_button_selector(motor_buttons, motor_name)
+
+func _on_propeller_button_pressed(propeller_name):
+	current_propeller_type = propeller_name
+	add_propeller()
+	update_button_selector(propeller_buttons, propeller_name)
+
+func update_button_selector(buttons, selected_name):
+	for button in buttons:
+		if button.text == selected_name:
+			button.add_theme_color_override(\"font_color\", Color(0, 1, 0))  # Зеленый для выбранного
+		else:
+			button.add_theme_color_override(\"font_color\", Color(1, 1, 1))  # Белый для о
+
+# Обработчики нажатий кнопок
 
 func find_component_list():
 	# Пробуем разные возможные пути
@@ -142,40 +454,16 @@ func add_save_load_buttons():
 	$UI.add_child(save_load_container)
 
 func connect_buttons():
-	# Подключаем кнопки с проверками
+	# Подключаем только необходимые кнопки
 	if has_node(\"UI/OpenClose\"):
 		$UI/OpenClose.connect(\"pressed\", _on_OpenClose_pressed)
 	else:
 		print(\"Кнопка OpenClose не найдена!\")
 	
-	if has_node(\"UI/VBoxContainer/Frame\"):
-		$UI/VBoxContainer/Frame.connect(\"pressed\", add_frame)
-	else:
-		print(\"Кнопка Frame не найдена!\")
-	
-	if has_node(\"UI/VBoxContainer/Board\"):
-		$UI/VBoxContainer/Board.connect(\"pressed\", add_board)
-	else:
-		print(\"Кнопка Board не найдена!\")
-	
-	if has_node(\"UI/VBoxContainer/Motor\"):
-		$UI/VBoxContainer/Motor.connect(\"pressed\", add_motor)
-	else:
-		print(\"Кнопка Motor не найдена!\")
-	
-	if has_node(\"UI/VBoxContainer/Propeller\"):
-		$UI/VBoxContainer/Propeller.connect(\"pressed\", add_propeller)
-	else:
-		print(\"Кнопка Propeller не найдена!\")
-	
 	# Подключаем сигнал клика по списку компонентов
 	if component_list:
-		# Проверяем, не подключен ли сигнал уже
 		if not component_list.is_connected(\"item_clicked\", _on_component_list_item_clicked):
 			component_list.connect(\"item_clicked\", _on_component_list_item_clicked)
-			print(\"Сигнал item_clicked подключен\")
-		else:
-			print(\"Сигнал item_clicked уже подключен\")
 
 func create_grid():
 	# Простая сетка из кубов
@@ -351,9 +639,21 @@ func get_component_data(component):
 	if component == null:
 		return null
 	
+	var component_type = \"\"
+	
+	# Определяем тип компонента на основе текущих выбранных типов
+	if component == drone_frame:
+		component_type = current_frame_type
+	elif component == drone_board:
+		component_type = current_board_type
+	elif component in motors:
+		component_type = current_motor_type
+	elif component in propellers:
+		component_type = current_propeller_type
+	
 	return {
-		\"component_type\": component.component_type,
-		\"component_name\": component.component_name,
+		\"component_type\": component_type,
+		\"component_name\": component.component_name if component.has_method(\"get_component_name\") else component_type,
 		\"position\": {
 			\"x\": component.position.x,
 			\"y\": component.position.y,
@@ -367,6 +667,9 @@ func get_component_data(component):
 	}
 
 func create_drone_from_data(drone_data):
+	# Очищаем текущий дрон
+	clear_drone()
+	
 	# Создаем раму
 	if drone_data.get(\"frame\"):
 		add_frame_from_data(drone_data[\"frame\"])
@@ -386,62 +689,138 @@ func create_drone_from_data(drone_data):
 			add_propeller_from_data(propeller_data)
 	
 	update_component_list()
-
+	print(\"Дрон полностью загружен из данных\")
+	
 func add_frame_from_data(frame_data):
-	var new_frame = frame_scene.instantiate()
-	components_container.add_child(new_frame)
-	new_frame.position = Vector3(frame_data[\"position\"][\"x\"], frame_data[\"position\"][\"y\"], frame_data[\"position\"][\"z\"])
-	new_frame.rotation = Vector3(frame_data[\"rotation\"][\"x\"], frame_data[\"rotation\"][\"y\"], frame_data[\"rotation\"][\"z\"])
-	drone_frame = new_frame
-	print(\"Рама создана из данных, позиция: \", new_frame.position)
+	if frame_data == null:
+		return
+		
+	var frame_type = frame_data.get(\"component_type\", \"Рама1\")
+	var frame_prefab = frame_prefabs.get(frame_type)
+	
+	if frame_prefab:
+		var new_frame = frame_prefab.instantiate()
+		components_container.add_child(new_frame)
+		new_frame.position = Vector3(frame_data[\"position\"][\"x\"], frame_data[\"position\"][\"y\"], frame_data[\"position\"][\"z\"])
+		new_frame.rotation = Vector3(frame_data[\"rotation\"][\"x\"], frame_data[\"rotation\"][\"y\"], frame_data[\"rotation\"][\"z\"])
+		drone_frame = new_frame
+		current_frame_type = frame_type
+		
+		# Обновляем выделение кнопки
+		update_button_selector(frame_buttons, frame_type)
+				
+		print(\"Рама создана из данных, тип: \", current_frame_type, \" позиция: \", new_frame.position)
+	else:
+		print(\"Ошибка: не найден префаб для рамы типа \", frame_type)
+		add_frame()
 
 func add_board_from_data(board_data):
-	var new_board = board_scene.instantiate()
-	components_container.add_child(new_board)
-	new_board.position = Vector3(board_data[\"position\"][\"x\"], board_data[\"position\"][\"y\"], board_data[\"position\"][\"z\"])
-	new_board.rotation = Vector3(board_data[\"rotation\"][\"x\"], board_data[\"rotation\"][\"y\"], board_data[\"rotation\"][\"z\"])
-	drone_board = new_board
-	print(\"Плата создана из данных, позиция: \", new_board.position)
+	if board_data == null:
+		return
+		
+	var board_type = board_data.get(\"component_type\", \"Плата1\")
+	var board_prefab = board_prefabs.get(board_type)
+	
+	if board_prefab:
+		var new_board = board_prefab.instantiate()
+		components_container.add_child(new_board)
+		new_board.position = Vector3(board_data[\"position\"][\"x\"], board_data[\"position\"][\"y\"], board_data[\"position\"][\"z\"])
+		new_board.rotation = Vector3(board_data[\"rotation\"][\"x\"], board_data[\"rotation\"][\"y\"], board_data[\"rotation\"][\"z\"])
+		drone_board = new_board
+		current_board_type = board_type
+		
+		# Обновляем выделение кнопки вместо старого селектора
+		update_button_selector(board_buttons, board_type)
+				
+		print(\"Плата создана из данных, тип: \", current_board_type, \" позиция: \", new_board.position)
+	else:
+		print(\"Ошибка: не найден префаб для платы типа \", board_type)
+		# Создаем базовую плату как запасной вариант
+		add_board()
+
 
 func add_motor_from_data(motor_data):
-	var new_motor = motor_scene.instantiate()
-	components_container.add_child(new_motor)
-	new_motor.position = Vector3(motor_data[\"position\"][\"x\"], motor_data[\"position\"][\"y\"], motor_data[\"position\"][\"z\"])
-	new_motor.rotation = Vector3(motor_data[\"rotation\"][\"x\"], motor_data[\"rotation\"][\"y\"], motor_data[\"rotation\"][\"z\"])
-	motors.append(new_motor)
-	print(\"Двигатель создан из данных, позиция: \", new_motor.position)
+	if motor_data == null:
+		return
+		
+	var motor_type = motor_data.get(\"component_type\", \"Мотор1\")
+	var motor_prefab = motor_prefabs.get(motor_type)
+	
+	if motor_prefab:
+		var new_motor = motor_prefab.instantiate()
+		components_container.add_child(new_motor)
+		new_motor.position = Vector3(motor_data[\"position\"][\"x\"], motor_data[\"position\"][\"y\"], motor_data[\"position\"][\"z\"])
+		new_motor.rotation = Vector3(motor_data[\"rotation\"][\"x\"], motor_data[\"rotation\"][\"y\"], motor_data[\"rotation\"][\"z\"])
+		motors.append(new_motor)
+		
+		# Если это первый мотор, обновляем выделение кнопки
+		if motors.size() == 1:
+			current_motor_type = motor_type
+			update_button_selector(motor_buttons, motor_type)
+		
+		print(\"Двигатель создан из данных, тип: \", motor_type, \" позиция: \", new_motor.position)
+	else:
+		print(\"Ошибка: не найден префаб для мотора типа \", motor_type)
+		# Создаем базовый мотор как запасной вариант
+		add_motor()
 
 func add_propeller_from_data(propeller_data):
-	var new_propeller = propeller_scene.instantiate()
-	components_container.add_child(new_propeller)
-	new_propeller.position = Vector3(propeller_data[\"position\"][\"x\"], propeller_data[\"position\"][\"y\"], propeller_data[\"position\"][\"z\"])
-	new_propeller.rotation = Vector3(propeller_data[\"rotation\"][\"x\"], propeller_data[\"rotation\"][\"y\"], propeller_data[\"rotation\"][\"z\"])
-	propellers.append(new_propeller)
-	print(\"Пропеллер создан из данных, позиция: \", new_propeller.position)
+	if propeller_data == null:
+		return
+		
+	var propeller_type = propeller_data.get(\"component_type\", \"Пропеллер1\")
+	var propeller_prefab = propeller_prefabs.get(propeller_type)
+	
+	if propeller_prefab:
+		var new_propeller = propeller_prefab.instantiate()
+		components_container.add_child(new_propeller)
+		new_propeller.position = Vector3(propeller_data[\"position\"][\"x\"], propeller_data[\"position\"][\"y\"], propeller_data[\"position\"][\"z\"])
+		new_propeller.rotation = Vector3(propeller_data[\"rotation\"][\"x\"], propeller_data[\"rotation\"][\"y\"], propeller_data[\"rotation\"][\"z\"])
+		propellers.append(new_propeller)
+		
+		# Если это первый пропеллер, обновляем выделение кнопки
+		if propellers.size() == 1:
+			current_propeller_type = propeller_type
+			update_button_selector(propeller_buttons, propeller_type)
+		
+		print(\"Пропеллер создан из данных, тип: \", propeller_type, \" позиция: \", new_propeller.position)
+	else:
+		print(\"Ошибка: не найден префаб для пропеллера типа \", propeller_type)
+		# Создаем базовый пропеллер как запасной вариант
+		add_propeller()
 
 func clear_drone():
 	# Удаляем все компоненты
 	if drone_frame:
-		print(\"Удаляем раму\")
 		drone_frame.queue_free()
 		drone_frame = null
 	
 	if drone_board:
-		print(\"Удаляем плату\")
 		drone_board.queue_free()
 		drone_board = null
 	
 	for motor in motors:
-		print(\"Удаляем двигатель\")
 		motor.queue_free()
 	motors.clear()
 	
 	for propeller in propellers:
-		print(\"Удаляем пропеллер\")
 		propeller.queue_free()
 	propellers.clear()
 	
+	# Сбрасываем селекторы к базовым значениям
+	current_frame_type = \"Рама1\"
+	current_board_type = \"Плата1\" 
+	current_motor_type =\"Мотор\"
+	current_propeller_type = \"Пропеллер1\"
+	
+	# Обновляем выделение кнопок
+	update_button_selector(frame_buttons, current_frame_type)
+	update_button_selector(board_buttons, current_board_type)
+	update_button_selector(motor_buttons, current_motor_type)
+	update_button_selector(propeller_buttons, current_propeller_type)
+	
 	update_component_list()
+
 
 func is_drone_complete():
 	return (drone_frame != null and 
@@ -542,25 +921,17 @@ func update_component_list():
 	component_list.clear()
 	
 	if drone_frame:
-		component_list.add_item(\"Рама: \" + drone_frame.component_name)
-		print(\"Добавлена рама в список\")
+		component_list.add_item(\"Рама: \" + current_frame_type)
 	if drone_board:
-		component_list.add_item(\"Плата: \" + drone_board.component_name)
-		print(\"Добавлена плата в список\")
+		component_list.add_item(\"Плата: \" + current_board_type)
 	
-	for i in motors.size():
-		component_list.add_item(\"Двигатель \" + str(i+1) + \": \" + motors[i].component_name)
-		print(\"Добавлен двигатель \", i+1, \" в список\")
+	for i in range(motors.size()):
+		component_list.add_item(\"Двигатель \" + str(i+1) + \": \" + current_motor_type)
 	
-	for i in propellers.size():
-		component_list.add_item(\"Пропеллер \" + str(i+1) + \": \" + propellers[i].component_name)
-		print(\"Добавлен пропеллер \", i+1, \" в список\")
+	for i in range(propellers.size()):
+		component_list.add_item(\"Пропеллер \" + str(i+1) + \": \" + current_propeller_type)
 	
-	print(\"=== Обновлен список компонентов ===\")
-	print(\"Рама: \", \"есть\" if drone_frame else \"нет\")
-	print(\"Плата: \", \"есть\" if drone_board else \"нет\") 
-	print(\"Двигателей: \", motors.size())
-	print(\"Пропеллеров: \", propellers.size())
+	print(\"Список компонентов обновлен\")
 
 # Функция удаления компонента по индексу в списке
 func _on_component_list_item_clicked(index: int, at_position: Vector2, mouse_button_index: int):
@@ -672,64 +1043,98 @@ func delete_propeller(index: int):
 # Функции для добавления компонентов
 func add_frame():
 	if drone_frame == null:
-		print(\"Создаем новую раму\")
-		var new_frame = frame_scene.instantiate()
-		components_container.add_child(new_frame)
-		new_frame.position = Vector3(0, 0.5, 0)
-		drone_frame = new_frame
-		print(\"Рама создана, позиция: \", new_frame.position)
-		print(\"Количество детей у components_container: \", components_container.get_child_count())
-		update_component_list()
+		print(\"Создаем новую раму типа: \", current_frame_type)
+		var frame_prefab = frame_prefabs.get(current_frame_type)
+		if frame_prefab:
+			var new_frame = frame_prefab.instantiate()
+			components_container.add_child(new_frame)
+			new_frame.position = Vector3(0, 0.5, 0)
+			drone_frame = new_frame
+			print(\"Рама создана, тип: \", current_frame_type, \" позиция: \", new_frame.position)
+			update_component_list()
+		else:
+			print(\"Ошибка: префаб для рамы \", current_frame_type, \" не найден!\")
 	else:
 		print(\"Рама уже существует\")
 
 func add_board():
 	if drone_frame != null and drone_board == null:
-		print(\"Создаем новую плату\")
-		var new_board = board_scene.instantiate()
-		components_container.add_child(new_board)
-		new_board.position = drone_frame.position + Vector3(0, 0.2, 0)
-		drone_board = new_board
-		print(\"Плата создана, позиция: \", new_board.position)
-		update_component_list()
+		print(\"Создаем новую плату типа: \", current_board_type)
+		var board_prefab = board_prefabs.get(current_board_type)
+		if board_prefab:
+			var new_board = board_prefab.instantiate()
+			components_container.add_child(new_board)
+			new_board.position = drone_frame.position + Vector3(0, 0.2, 0)
+			drone_board = new_board
+			print(\"Плата создана, тип: \", current_board_type, \" позиция: \", new_board.position)
+			update_component_list()
+		else:
+			print(\"Ошибка: префаб для платы \", current_board_type, \" не найден!\")
 	else:
 		print(\"Не могу создать плату: \", \"нет рамы\" if drone_frame == null else \"плата уже существует\")
 
 func add_motor():
 	if drone_frame != null and motors.size() < 4:
-		print(\"Создаем новый двигатель \", motors.size() + 1)
-		var new_motor = motor_scene.instantiate()
-		components_container.add_child(new_motor)
-		
-		# Позиции для 4 двигателей квадрокоптера
-		var motor_positions = [
-			Vector3(1, 0.2, 1),
-			Vector3(-1, 0.2, 1),
-			Vector3(1, 0.2, -1),
-			Vector3(-1, 0.2, -1)
-		]
-		
-		new_motor.position = drone_frame.position + motor_positions[motors.size()]
-		motors.append(new_motor)
-		print(\"Двигатель создан, позиция: \", new_motor.position)
-		update_component_list()
+		print(\"Создаем новый двигатель типа: \", current_motor_type)
+		var motor_prefab = motor_prefabs.get(current_motor_type)
+		if motor_prefab:
+			var new_motor = motor_prefab.instantiate()
+			components_container.add_child(new_motor)
+			
+			# Позиции для 4 двигателей квадрокоптера
+			var motor_positions = [
+				Vector3(1, 0.2, 1),
+				Vector3(-1, 0.2, 1),
+				Vector3(1, 0.2, -1),
+				Vector3(-1, 0.2, -1)
+			]
+			
+			new_motor.position = drone_frame.position + motor_positions[motors.size()]
+			motors.append(new_motor)
+			print(\"Двигатель создан, тип: \", current_motor_type, \" позиция: \", new_motor.position)
+			update_component_list()
+		else:
+			print(\"Ошибка: префаб для мотора \", current_motor_type, \" не найден!\")
 	else:
 		print(\"Не могу создать двигатель: \", \"нет рамы\" if drone_frame == null else \"достигнут лимит двигателей\")
 
 func add_propeller():
 	if motors.size() > 0 and propellers.size() < motors.size():
-		print(\"Создаем новый пропеллер \", propellers.size() + 1)
-		var new_propeller = propeller_scene.instantiate()
-		components_container.add_child(new_propeller)
-		
-		# Ставим пропеллер над соответствующим двигателем
-		var motor_index = propellers.size()
-		new_propeller.position = motors[motor_index].position + Vector3(0, 0.3, 0)
-		propellers.append(new_propeller)
-		print(\"Пропеллер создан, позиция: \", new_propeller.position)
-		update_component_list()
+		print(\"Создаем новый пропеллер типа: \", current_propeller_type)
+		var propeller_prefab = propeller_prefabs.get(current_propeller_type)
+		if propeller_prefab:
+			var new_propeller = propeller_prefab.instantiate()
+			components_container.add_child(new_propeller)
+			
+			# Ставим пропеллер над соответствующим двигателем
+			var motor_index = propellers.size()
+			new_propeller.position = motors[motor_index].position + Vector3(0, 0.3, 0)
+			propellers.append(new_propeller)
+			print(\"Пропеллер создан, тип: \", current_propeller_type, \" позиция: \", new_propeller.position)
+			update_component_list()
+		else:
+			print(\"Ошибка: префаб для пропеллера \", current_propeller_type, \" не найден!\")
 	else:
 		print(\"Не могу создать пропеллер: \", \"нет двигателей\" if motors.size() == 0 else \"у всех двигателей уже есть пропеллеры\")
+
+
+
+
+func _on_frame_selected(index: int):
+	current_frame_type = frame_selector.get_item_text(index)
+	print(\"Выбрана рама: \", current_frame_type)
+
+func _on_board_selected(index: int):
+	current_board_type = board_selector.get_item_text(index)
+	print(\"Выбрана плата: \", current_board_type)
+
+func _on_motor_selected(index: int):
+	current_motor_type = motor_selector.get_item_text(index)
+	print(\"Выбран мотор: \", current_motor_type)
+
+func _on_propeller_selected(index: int):
+	current_propeller_type = propeller_selector.get_item_text(index)
+	print(\"Выбран пропеллер: \", current_propeller_type)
 "
 
 [node name="create_dron" type="Node3D"]
@@ -772,33 +1177,6 @@ offset_bottom = 84.0
 theme_override_font_sizes/font_size = 56
 text = "Иерархия"
 horizontal_alignment = 1
-
-[node name="VBoxContainer" type="VBoxContainer" parent="UI"]
-offset_left = 4.0
-offset_top = 956.0
-offset_right = 404.0
-offset_bottom = 1080.0
-theme_override_constants/separation = 0
-
-[node name="Frame" type="Button" parent="UI/VBoxContainer"]
-layout_mode = 2
-action_mode = 0
-text = "Рама"
-
-[node name="Board" type="Button" parent="UI/VBoxContainer"]
-layout_mode = 2
-action_mode = 0
-text = "Плата"
-
-[node name="Motor" type="Button" parent="UI/VBoxContainer"]
-layout_mode = 2
-action_mode = 0
-text = "Мотор"
-
-[node name="Propeller" type="Button" parent="UI/VBoxContainer"]
-layout_mode = 2
-action_mode = 0
-text = "Пропеллер"
 
 [node name="Control" type="Control" parent="UI"]
 layout_mode = 3

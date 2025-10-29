@@ -150,6 +150,11 @@ func update_buttons_state():
 			button.text = "%s\n%d монет" % [product_name, item_prices[i]]
 			button.modulate = Color.WHITE
 func _on_back_pressed():
+	# Обновляем сцену создания дрона при возврате из магазина
+	var create_drone_scene = get_tree().get_root().get_node("create_dron") # или правильный путь к вашей сцене
+	if create_drone_scene and create_drone_scene.has_method("refresh_component_selectors"):
+		create_drone_scene.refresh_component_selectors()
+	
 	get_tree().change_scene_to_file("main_scene.tscn")
 func update_score_display():
 	score_label.text = "Счет: " + str(Global.score)
@@ -160,3 +165,4 @@ func show_message():
 		var timer = get_tree().create_timer(2.0)
 		await timer.timeout
 		message_label.hide()
+		
