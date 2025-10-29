@@ -56,7 +56,7 @@ func create_target_point():
 	target_point.add_child(mesh_instance)
 	
 	# Позиция цели - ВЫШЕ уровня земли чтобы дрон мог в нее влететь
-	target_point.position = grid_to_world(2, 2, 20)  # Высота 20
+	target_point.position = grid_to_world(2, 2, 32)  # Высота 20
 	
 	# Настраиваем маски коллизий
 	target_point.collision_layer = 2
@@ -198,7 +198,9 @@ func show_success_message():
 func _input(event):
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		return_to_selection()
+		
 
 func return_to_selection():
 	print("🔄 Возвращаемся к выбору уровней...")
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	get_tree().change_scene_to_file("res://script_game_level.tscn")

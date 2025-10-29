@@ -5,7 +5,7 @@ res://create_drone/components/propeller.tscn::cceba1c646819245a8b82f0147ad4763::
 res://create_drone/create_dron.tscn::35d140c612d800ffd2a6bdf850d85175::1761235810::res://.godot/exported/133200997/export-7c94712c9927c7acb3e957b1317c1faf-create_dron.scn
 res://shop/shop.tscn::be5223c7a06de55ec9807e4b742d2f95::1761477381::res://.godot/exported/133200997/export-c0f4247d6890f9595170cd1a1596959f-shop.scn
 res://main_scene.tscn::e16c23933eb61570e6e61a3b3ca6cdc3::1761111334::res://.godot/exported/133200997/export-fac9db9380da720a7609154e1ecab771-main_scene.scn
-res://DroneLevels/DroneScene.tscn::5b1db3f8eb7e0357da2fac34b766b02a::1761640152::res://.godot/exported/133200997/export-2062c1f8ba4bdd1eadfd9c1c68ab4554-DroneScene.scn
-res://DroneLevels/levels/Level1.tscn::e0758163bc6502ad8cc2ca7af9b9e5e5::1761668854::res://.godot/exported/133200997/export-35dd5aeb6337c795338ccee4d97c9254-Level1.scn
+res://DroneLevels/DroneScene.tscn::4163f46b1bd98f23aaf89c5054a5fab5::1761674141::res://.godot/exported/133200997/export-2062c1f8ba4bdd1eadfd9c1c68ab4554-DroneScene.scn
+res://DroneLevels/levels/Level1.tscn::e0758163bc6502ad8cc2ca7af9b9e5e5::1761677239::res://.godot/exported/133200997/export-35dd5aeb6337c795338ccee4d97c9254-Level1.scn
 res://UI/game_level.tscn::b9a01b00f50a6c22e76e36fbf5823fe7::1761643558::res://.godot/exported/133200997/export-f68d1a2c2d3eae30fd099488e0579030-game_level.scn
 res://UI/LevelButton.tscn::29e50dcb449405c8e835f2b3abb8ab33::1761642085::res://.godot/exported/133200997/export-0ebff098c9f171c2fb2be58413461232-LevelButton.scn

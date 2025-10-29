@@ -325,11 +325,12 @@ func show_success_message(final_time: String):
 	# Удаляем CanvasLayer перед возвратом
 	if canvas and is_instance_valid(canvas):
 		canvas.queue_free()
-	
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	return_to_selection()
 
 func return_to_selection():
 	print("🔄 Возвращаемся к выбору уровней...")
+	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	get_tree().change_scene_to_file("res://UI/game_level.tscn")
 
 # ================== СИСТЕМА ДРОНА ==================

@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3 uid="uid://cjgeg4rvuegme"]
+
+[ext_resource type="Script" uid="uid://w4c2njk8ld7m" path="res://DroneLevels/levels/Level3.gd" id="1_fu7qt"]
+[ext_resource type="PackedScene" uid="uid://iptwjnakh7pa" path="res://DroneLevels/DroneScene.tscn" id="2_a24jq"]
+
+[node name="Level3" type="Node3D"]
+script = ExtResource("1_fu7qt")
+
+[node name="DroneScene" parent="." instance=ExtResource("2_a24jq")]

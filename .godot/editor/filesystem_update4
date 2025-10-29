@@ -1,5 +1,6 @@
 res://DroneLevels/levels/Level1.tscn
-res://DroneLevels/levels/Level1.gd
-res://DroneLevels/DroneScene.tscn
-res://DroneScene.gd
-res://DroneLevels/Drone.gd
+res://DroneLevels/levels/Level2.gd
+res://UI/game_level.tscn
+res://DroneLevels/levels/Level2.tscn
+res://DroneLevels/levels/Level3.tscn
+res://DroneLevels/levels/Level3.gd
