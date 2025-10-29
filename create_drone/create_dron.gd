@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3 uid="uid://drx1viol8ntcc"]
+[gd_scene load_steps=3 format=3 uid="uid://dbrcvb058nfje"]
 
 [ext_resource type="Script" uid="uid://bxjqfxylx2xxc" path="res://create_drone/back_butt.gd" id="1_caali"]
 
@@ -52,6 +52,11 @@ var current_board_type = \"Плата1\"
 var current_motor_type = \"Мотор1\"
 var current_propeller_type = \"Пропеллер1\"
 
+# UI элементы для выбора компонентов
+@onready var frame_selector = $UI/ComponentSelectors/FrameSelector
+@onready var board_selector = $UI/ComponentSelectors/BoardSelector
+@onready var motor_selector = $UI/ComponentSelectors/MotorSelector
+@onready var propeller_selector = $UI/ComponentSelectors/PropellerSelector
 
 # Переменные для управления камерой и вращения
 var camera_rotation = Vector2(0, 0)
@@ -118,70 +123,6 @@ func _ready():
 	
 	# Настраиваем начальную позицию камеры
 	update_camera_position()
-	
-	# Добавляем эту сцену в группу для обновления из магазина
-	add_to_group(\"drone_creator\")
-	
-	# Обновляем доступность кнопок при старте
-	update_buttons_availability()
-
-# Новая функция для обновления доступности кнопок
-func update_buttons_availability():
-	update_component_buttons_availability(frame_buttons, frame_prefabs.keys())
-	update_component_buttons_availability(board_buttons, board_prefabs.keys())
-	update_component_buttons_availability(motor_buttons, motor_prefabs.keys())
-	update_component_buttons_availability(propeller_buttons, propeller_prefabs.keys())
-	
-	# Обновляем текущие выбранные типы на доступные
-	update_current_selections()
-
-# Функция для обновления состояния кнопок компонентов
-func update_component_buttons_availability(buttons: Array, component_names: Array):
-	for i in range(buttons.size()):
-		var button = buttons[i]
-		if i < component_names.size():
-			var component_name = component_names[i]
-			var is_available = Global.is_component_available(\"\", component_name)
-			
-			if is_available:
-				# Деталь доступна - зеленый цвет
-				button.disabled = false
-				button.add_theme_color_override(\"font_color\", Color(0, 1, 0))
-				button.tooltip_text = \"Доступно\"
-			else:
-				# Деталь не доступна - красный цвет и заблокирована
-				button.disabled = true
-				button.add_theme_color_override(\"font_color\", Color(1, 0, 0))
-				button.tooltip_text = \"Не куплено в магазине\"
-
-# Функция для обновления текущих выборов на доступные детали
-func update_current_selections():
-	# Для рам
-	if not Global.is_component_available(\"\", current_frame_type):
-		current_frame_type = get_first_available_component(frame_prefabs.keys())
-		update_button_selector(frame_buttons, current_frame_type)
-	
-	# Для плат
-	if not Global.is_component_available(\"\", current_board_type):
-		current_board_type = get_first_available_component(board_prefabs.keys())
-		update_button_selector(board_buttons, current_board_type)
-	
-	# Для моторов
-	if not Global.is_component_available(\"\", current_motor_type):
-		current_motor_type = get_first_available_component(motor_prefabs.keys())
-		update_button_selector(motor_buttons, current_motor_type)
-	
-	# Для пропеллеров
-	if not Global.is_component_available(\"\", current_propeller_type):
-		current_propeller_type = get_first_available_component(propeller_prefabs.keys())
-		update_button_selector(propeller_buttons, current_propeller_type)
-
-# Функция для получения первой доступной детали
-func get_first_available_component(component_names: Array) -> String:
-	for name in component_names:
-		if Global.is_component_available(\"\", name):
-			return name
-	return component_names[0] if component_names.size() > 0 else \"\"
 
 func create_component_selectors_ui():
 	# Создаем основной контейнер для выбора компонентов
@@ -427,28 +368,24 @@ func create_propeller_buttons():
 
 # Обработчики нажатий кнопок
 func _on_frame_button_pressed(frame_name):
-	if Global.is_component_available(\"frame\", frame_name):
-		current_frame_type = frame_name
-		add_frame()
-		update_button_selector(frame_buttons, frame_name)
+	current_frame_type = frame_name
+	add_frame()
+	update_button_selector(frame_buttons, frame_name)
 
 func _on_board_button_pressed(board_name):
-	if Global.is_component_available(\"board\", board_name):
-		current_board_type = board_name
-		add_board()
-		update_button_selector(board_buttons, board_name)
+	current_board_type = board_name
+	add_board()
+	update_button_selector(board_buttons, board_name)
 
 func _on_motor_button_pressed(motor_name):
-	if Global.is_component_available(\"motor\", motor_name):
-		current_motor_type = motor_name
-		add_motor()
-		update_button_selector(motor_buttons, motor_name)
+	current_motor_type = motor_name
+	add_motor()
+	update_button_selector(motor_buttons, motor_name)
 
 func _on_propeller_button_pressed(propeller_name):
-	if Global.is_component_available(\"propeller\", propeller_name):
-		current_propeller_type = propeller_name
-		add_propeller()
-		update_button_selector(propeller_buttons, propeller_name)
+	current_propeller_type = propeller_name
+	add_propeller()
+	update_button_selector(propeller_buttons, propeller_name)
 
 func update_button_selector(buttons, selected_name):
 	for button in buttons:
@@ -1105,9 +1042,6 @@ func delete_propeller(index: int):
 
 # Функции для добавления компонентов
 func add_frame():
-	if not Global.is_component_available(\"frame\", current_frame_type):
-		print(\"Рама '\", current_frame_type, \"' не доступна! Купите в магазине.\")
-		return
 	if drone_frame == null:
 		print(\"Создаем новую раму типа: \", current_frame_type)
 		var frame_prefab = frame_prefabs.get(current_frame_type)
@@ -1124,9 +1058,6 @@ func add_frame():
 		print(\"Рама уже существует\")
 
 func add_board():
-	if not Global.is_component_available(\"board\", current_board_type):
-		print(\"Плата '\", current_board_type, \"' не доступна! Купите в магазине.\")
-		return
 	if drone_frame != null and drone_board == null:
 		print(\"Создаем новую плату типа: \", current_board_type)
 		var board_prefab = board_prefabs.get(current_board_type)
@@ -1143,9 +1074,6 @@ func add_board():
 		print(\"Не могу создать плату: \", \"нет рамы\" if drone_frame == null else \"плата уже существует\")
 
 func add_motor():
-	if not Global.is_component_available(\"motor\", current_motor_type):
-		print(\"Мотор '\", current_motor_type, \"' не доступна! Купите в магазине.\")
-		return
 	if drone_frame != null and motors.size() < 4:
 		print(\"Создаем новый двигатель типа: \", current_motor_type)
 		var motor_prefab = motor_prefabs.get(current_motor_type)
@@ -1171,9 +1099,6 @@ func add_motor():
 		print(\"Не могу создать двигатель: \", \"нет рамы\" if drone_frame == null else \"достигнут лимит двигателей\")
 
 func add_propeller():
-	if not Global.is_component_available(\"propeller\", current_propeller_type):
-		print(\"Пропеллер '\", current_propeller_type, \"' не доступна! Купите в магазине.\")
-		return
 	if motors.size() > 0 and propellers.size() < motors.size():
 		print(\"Создаем новый пропеллер типа: \", current_propeller_type)
 		var propeller_prefab = propeller_prefabs.get(current_propeller_type)
@@ -1191,6 +1116,25 @@ func add_propeller():
 			print(\"Ошибка: префаб для пропеллера \", current_propeller_type, \" не найден!\")
 	else:
 		print(\"Не могу создать пропеллер: \", \"нет двигателей\" if motors.size() == 0 else \"у всех двигателей уже есть пропеллеры\")
+
+
+
+
+func _on_frame_selected(index: int):
+	current_frame_type = frame_selector.get_item_text(index)
+	print(\"Выбрана рама: \", current_frame_type)
+
+func _on_board_selected(index: int):
+	current_board_type = board_selector.get_item_text(index)
+	print(\"Выбрана плата: \", current_board_type)
+
+func _on_motor_selected(index: int):
+	current_motor_type = motor_selector.get_item_text(index)
+	print(\"Выбран мотор: \", current_motor_type)
+
+func _on_propeller_selected(index: int):
+	current_propeller_type = propeller_selector.get_item_text(index)
+	print(\"Выбран пропеллер: \", current_propeller_type)
 "
 
 [node name="create_dron" type="Node3D"]

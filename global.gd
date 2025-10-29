@@ -13,11 +13,31 @@ func has_item(item_name):
 func get_purchased_items():
 	return purchased_items.duplicate() 
 
-# global.gd
+# Новая функция: проверка доступности детали по типу и названию
+func is_component_available(component_type: String, component_name: String) -> bool:
+	# Бусты всегда доступны
+	if component_name.begins_with("Буст"):
+		return true
+	
+	# Проверяем, куплена ли деталь
+	return component_name in purchased_items
+
+# Новая функция: получение всех доступных деталей определенного типа
+func get_available_components(component_names: Array) -> Array:
+	var available = []
+	for name in component_names:
+		if is_component_available("", name):  # Тип не важен для базовой проверки
+			available.append(name)
+	return available
 
 func _ready():
 	print("=== GLOBAL.GD INIT ===")
 	load_levels_data()
+	
+	# Добавляем базовые детали, если их нет
+	if purchased_items.is_empty():
+		purchased_items = ["Рама1", "Плата1", "Мотор1", "Пропеллер1"]
+		print("Добавлены базовые детали: ", purchased_items)
 	
 	print("Данные уровней загружены. Разблокировано уровней: ", levels_unlocked)
 

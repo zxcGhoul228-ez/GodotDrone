@@ -48,25 +48,22 @@ func _ready():
 		if not refresh_button.is_connected("pressed", _on_refresh_pressed):
 			refresh_button.connect("pressed", _on_refresh_pressed)
 	update_score_display()
-	connect_buttons()
 	setup_buttons()
 	update_buttons_state()
 	if message_label:
 		message_label.hide()
 		message_label.text = "Недостаточно средств!"
 	
-func connect_buttons():
-	for i in range(buttons.size()):
-		var button = buttons[i]
-		if not button.is_connected("pressed", _on_item_bought.bind(i)):
-			button.connect("pressed", _on_item_bought.bind(i))
+
 func setup_buttons():
 	for i in range(buttons.size()):
 		var button = buttons[i]
 		# Устанавливаем текст кнопки с названием и ценой
 		button.text = "%s\n%d монет" % [current_items[i], item_prices[i]]
 		# Подключаем сигнал нажатия
-		button.connect("pressed", _on_item_bought.bind(i))
+		if not button.is_connected("pressed", _on_item_bought.bind(i)):
+			button.connect("pressed", _on_item_bought.bind(i))
+
 func get_random_index_different_from(array_size, last_index):
 	if array_size <= 1:
 		return 0  # Если только один вариант, всегда возвращаем 0
@@ -93,9 +90,20 @@ func _on_item_bought(item_index):
 		update_score_display()
 		update_buttons_state()
 		print("Куплен: ", product_name)
+		# Обновляем состояние кнопок в сцене создания дрона, если она активна
+		update_drone_creator_buttons()
 	else:
 		print("Недостаточно монет для покупки ", product_name)
 		show_message()
+
+func update_drone_creator_buttons():
+	# Если сцена создания дрона активна, обновляем кнопки
+	var drone_creator = get_tree().get_nodes_in_group("drone_creator")
+	if drone_creator.size() > 0:
+		for creator in drone_creator:
+			if creator.has_method("update_buttons_availability"):
+				creator.update_buttons_availability()
+
 func _on_refresh_pressed():
 	# Проверяем, хватает ли монет для обновления
 	if Global.score >= 10:
@@ -150,11 +158,6 @@ func update_buttons_state():
 			button.text = "%s\n%d монет" % [product_name, item_prices[i]]
 			button.modulate = Color.WHITE
 func _on_back_pressed():
-	# Обновляем сцену создания дрона при возврате из магазина
-	var create_drone_scene = get_tree().get_root().get_node("create_dron") # или правильный путь к вашей сцене
-	if create_drone_scene and create_drone_scene.has_method("refresh_component_selectors"):
-		create_drone_scene.refresh_component_selectors()
-	
 	get_tree().change_scene_to_file("main_scene.tscn")
 func update_score_display():
 	score_label.text = "Счет: " + str(Global.score)
