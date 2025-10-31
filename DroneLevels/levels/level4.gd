@@ -213,4 +213,4 @@ func _input(event):
 func return_to_selection():
 	print("🔄 Возвращаемся к выбору уровней...")
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-	get_tree().change_scene_to_file("res://script_game_level.tscn")
+	get_tree().change_scene_to_file("res://UI/game_level.tscn")
