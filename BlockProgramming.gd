@@ -1,4 +1,3 @@
-# BlockProgramming.gd
 extends Panel
 
 @onready var block_palette = $BlockPalette
@@ -7,6 +6,9 @@ extends Panel
 var dragged_block = null
 var dragged_block_data = null
 var program_blocks = []  # Хранит {type, container, count, color}
+
+# Сигнал для обновления предпросмотра траектории
+signal trajectory_updated(sequence: Array)
 
 func _ready():
 	print("🧩 Инициализация панели программирования с перетаскиванием")
@@ -91,7 +93,7 @@ func apply_block_style(button: Button, color: Color):
 	style_box.corner_radius_bottom_left = 8
 	
 	button.add_theme_stylebox_override("normal", style_box)
-	button.add_theme_stylebox_override("disabled", style_box)  # ВАЖНО: для disabled тоже
+	button.add_theme_stylebox_override("disabled", style_box)
 	button.add_theme_color_override("font_color", Color.WHITE)
 	button.add_theme_font_size_override("font_size", 14)
 
@@ -199,12 +201,16 @@ func add_block_to_program(block_data: Dictionary, count: int):
 		"type": block_data["type"],
 		"container": program_block,
 		"count": count,
-		"color": block_data["color"],  # Сохраняем цвет!
+		"color": block_data["color"],
 		"name": block_data["name"],
 		"icon": block_data["icon"]
 	})
 	
 	update_block_numbers()
+	
+	# ОБНОВЛЯЕМ ПРЕДПРОСМОТР ТРАЕКТОРИИ
+	update_trajectory_preview()
+	
 	print("✅ Блок '", block_data["name"], "' добавлен в программу. Всего блоков: ", program_blocks.size())
 
 func create_program_block(block_data: Dictionary, count: int) -> HBoxContainer:
@@ -235,7 +241,7 @@ func create_program_block(block_data: Dictionary, count: int) -> HBoxContainer:
 	block_content.size = Vector2(150, 45)
 	block_content.mouse_filter = Control.MOUSE_FILTER_PASS
 	
-	# Применяем ТАКОЙ ЖЕ цветной стиль - ВАЖНО!
+	# Применяем ТАКОЙ ЖЕ цветной стиль
 	apply_block_style(block_content, block_data["color"])
 	
 	# Подключаем редактирование количества по клику
@@ -309,7 +315,7 @@ func apply_count_change(container: HBoxContainer, count_edit: LineEdit, block_da
 	# Обновляем количество
 	var count = 1
 	if count_edit.text.is_valid_int():
-		count = clamp(count_edit.text.to_int(), 1, 10)
+		count = clamp(count_edit.text.to_int(), 1, 25)
 		count_edit.text = str(count)
 	
 	# Обновляем текст кнопки
@@ -320,6 +326,9 @@ func apply_count_change(container: HBoxContainer, count_edit: LineEdit, block_da
 		if program_blocks[i]["container"] == container:
 			program_blocks[i]["count"] = count
 			break
+	
+	# ОБНОВЛЯЕМ ПРЕДПРОСМОТР ТРАЕКТОРИИ
+	update_trajectory_preview()
 
 func _on_move_up(container: HBoxContainer):
 	var index = -1
@@ -337,6 +346,9 @@ func _on_move_up(container: HBoxContainer):
 		# Меняем порядок в UI
 		program_area.move_child(container, index - 1)
 		update_block_numbers()
+		
+		# ОБНОВЛЯЕМ ПРЕДПРОСМОТР ТРАЕКТОРИИ
+		update_trajectory_preview()
 
 func _on_move_down(container: HBoxContainer):
 	var index = -1
@@ -354,6 +366,9 @@ func _on_move_down(container: HBoxContainer):
 		# Меняем порядок в UI
 		program_area.move_child(container, index + 1)
 		update_block_numbers()
+		
+		# ОБНОВЛЯЕМ ПРЕДПРОСМОТР ТРАЕКТОРИИ
+		update_trajectory_preview()
 
 func _on_delete_block(block_container: HBoxContainer):
 	# Находим и удаляем блок из массива
@@ -366,6 +381,9 @@ func _on_delete_block(block_container: HBoxContainer):
 	
 	# Обновляем номера оставшихся блоков
 	update_block_numbers()
+	
+	# ОБНОВЛЯЕМ ПРЕДПРОСМОТР ТРАЕКТОРИИ
+	update_trajectory_preview()
 	
 	print("🗑️ Блок удален. Осталось блоков: ", program_blocks.size())
 	
@@ -419,6 +437,9 @@ func _on_clear_button_pressed():
 	# Очищаем массив
 	program_blocks.clear()
 	
+	# ОБНОВЛЯЕМ ПРЕДПРОСМОТР ТРАЕКТОРИИ
+	update_trajectory_preview()
+	
 	# Показываем подсказку
 	show_program_hint()
 	
@@ -427,3 +448,12 @@ func _on_clear_button_pressed():
 func _on_close_button_pressed():
 	print("❌ Закрываем панель программирования")
 	hide()
+
+# ================== ПРЕДПРОСМОТР ТРАЕКТОРИИ ==================
+func update_trajectory_preview():
+	var sequence = get_program_sequence()
+	
+	# Отправляем сигнал с последовательностью для предпросмотра
+	trajectory_updated.emit(sequence)
+	
+	print("👀 Обновлен предпросмотр траектории для ", sequence.size(), " команд")

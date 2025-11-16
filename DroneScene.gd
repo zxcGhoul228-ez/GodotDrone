@@ -1,7 +1,7 @@
-# DroneScene.gd
 extends Node3D
 
 const GRID_SIZE = 32
+const GRID_CELLS_COUNT = 32
 
 @onready var camera_pivot = $CameraPivot
 @onready var camera = $CameraPivot/Camera3D
@@ -21,14 +21,14 @@ var best_time_label: Label
 
 # Основные переменные
 var camera_rotation = Vector2(0, 0)
-var camera_distance = 40.0
+var camera_distance = 80.0
 var ROTATION_SPEED = 0.003
 var ZOOM_SPEED = 3.0
-var MIN_DISTANCE = 6.0
-var MAX_DISTANCE = 150.0
+var MIN_DISTANCE = 12.0
+var MAX_DISTANCE = 400.0
 var MIN_VERTICAL_ANGLE = -1.0
 var MAX_VERTICAL_ANGLE = 1.5
-var CAMERA_MOVE_SPEED = 25.0
+var CAMERA_MOVE_SPEED = 50.0
 var camera_move_input = Vector3.ZERO
 var current_drone: CharacterBody3D = null
 var pause_menu = null
@@ -46,7 +46,7 @@ const MAX_VELOCITY = 0.1
 var highlight_mesh: MeshInstance3D
 var current_cell_position = Vector3.ZERO
 var trail_meshes: Array[MeshInstance3D] = []
-var max_trail_length = 10
+var max_trail_length = 20
 var trail_fade_time = 2.0
 var start_point_x: int = 0
 var start_point_z: int = 0
@@ -54,10 +54,28 @@ var start_point_y: int = GRID_SIZE
 var highlight_color: Color = Color(0, 1, 0, 0.6)
 var trail_color: Color = Color(0, 1, 0, 0.3)
 
+# Границы сетки
+var grid_boundary_min: Vector3
+var grid_boundary_max: Vector3
+
+# Траектория и предпросмотр
+var trajectory_markers: Array[MeshInstance3D] = []
+var preview_color: Color = Color(0.2, 0.6, 1.0, 0.4)
+var preview_material: StandardMaterial3D
+
 func _ready():
 	print("=== ИНИЦИАЛИЗАЦИЯ СЦЕНЫ ДРОНА ===")
+	print("Размер сетки: ", GRID_SIZE, "x", GRID_SIZE)
+	print("Количество клеток: ", GRID_CELLS_COUNT, "x", GRID_CELLS_COUNT)
+	
+	# Инициализация границ
+	calculate_grid_boundaries()
+	
+	# Создаем материал для предпросмотра траектории
+	create_preview_material()
+	
 	load_settings()
-	load_drone()
+	create_drone()
 	create_grid()
 	create_grid_highlight()
 	block_ui.hide()
@@ -70,8 +88,120 @@ func _ready():
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	
-	print("Сцена готова!")
+	print("Сцена готова! Сетка: ", GRID_CELLS_COUNT, "x", GRID_CELLS_COUNT, " клеток")
+	print("Границы сетки: от ", grid_boundary_min, " до ", grid_boundary_max)
 
+# ================== ГРАНИЦЫ СЕТКИ ==================
+func calculate_grid_boundaries():
+	var half_size = (GRID_CELLS_COUNT * GRID_SIZE) / 2
+	grid_boundary_min = Vector3(-half_size, 0, -half_size)
+	grid_boundary_max = Vector3(half_size, GRID_SIZE * 10, half_size)
+
+func is_position_within_bounds(position: Vector3) -> bool:
+	return (position.x >= grid_boundary_min.x and position.x <= grid_boundary_max.x and
+			position.z >= grid_boundary_min.z and position.z <= grid_boundary_max.z and
+			position.y >= grid_boundary_min.y and position.y <= grid_boundary_max.y)
+
+func clamp_position_to_bounds(position: Vector3) -> Vector3:
+	return Vector3(
+		clamp(position.x, grid_boundary_min.x, grid_boundary_max.x),
+		clamp(position.y, grid_boundary_min.y, grid_boundary_max.y),
+		clamp(position.z, grid_boundary_min.z, grid_boundary_max.z)
+	)
+
+# ================== ПРЕДПРОСМОТР ТРАЕКТОРИИ ==================
+func create_preview_material():
+	preview_material = StandardMaterial3D.new()
+	preview_material.flags_unshaded = true
+	preview_material.flags_transparent = true
+	preview_material.albedo_color = preview_color
+
+func update_trajectory_preview(sequence: Array):
+	# Очищаем старые маркеры
+	clear_trajectory_preview()
+	
+	if not current_drone or sequence.is_empty():
+		return
+	
+	print("🔄 Обновляем предпросмотр траектории для ", sequence.size(), " команд")
+	
+	# Начинаем от текущей позиции дрона
+	var current_pos = current_drone.global_position
+	var visited_cells = {}
+	
+	# Создаем маркер для стартовой позиции
+	create_trajectory_marker(current_pos, true)
+	visited_cells[vector2_to_key(current_pos.x, current_pos.z)] = true
+	
+	# Проходим по всем командам и вычисляем позиции
+	for i in range(sequence.size()):
+		var direction = sequence[i]
+		var next_pos = calculate_next_position(current_pos, direction)
+		
+		# Проверяем, была ли уже эта клетка
+		var cell_key = vector2_to_key(next_pos.x, next_pos.z)
+		var is_new_cell = not visited_cells.has(cell_key)
+		
+		# Создаем маркер для следующей позиции
+		if is_new_cell:
+			create_trajectory_marker(next_pos, false)
+			visited_cells[cell_key] = true
+		
+		current_pos = next_pos
+	
+	print("✅ Предпросмотр обновлен: ", trajectory_markers.size(), " клеток подсвечено")
+
+func calculate_next_position(current_pos: Vector3, direction: int) -> Vector3:
+	var next_pos = current_pos
+	
+	match direction:
+		0: next_pos.z -= GRID_SIZE  # Вперед
+		1: next_pos.z += GRID_SIZE  # Назад
+		2: next_pos.x -= GRID_SIZE  # Влево
+		3: next_pos.x += GRID_SIZE  # Вправо
+		4: next_pos.y += GRID_SIZE  # Вверх
+		5: next_pos.y = max(next_pos.y - GRID_SIZE, grid_boundary_min.y)  # Вниз - ИСПРАВЛЕНО: boundary_min -> grid_boundary_min
+	
+	return next_pos
+
+func create_trajectory_marker(position: Vector3, is_start: bool):
+	var marker = MeshInstance3D.new()
+	add_child(marker)
+	marker.owner = get_tree().edited_scene_root
+	
+	# Позиционируем маркер чуть выше пола
+	marker.global_position = Vector3(position.x, 0.08, position.z)
+	
+	# Создаем меш для маркера
+	var box_mesh = BoxMesh.new()
+	if is_start:
+		box_mesh.size = Vector3(GRID_SIZE * 0.6, 0.15, GRID_SIZE * 0.6)  # Стартовая клетка меньше
+	else:
+		box_mesh.size = Vector3(GRID_SIZE * 0.8, 0.12, GRID_SIZE * 0.8)  # Обычные клетки
+	
+	marker.mesh = box_mesh
+	
+	# Настраиваем материал
+	var marker_material = preview_material.duplicate()
+	if is_start:
+		marker_material.albedo_color = Color(0, 1, 0, 0.6)  # Зеленый для старта
+	else:
+		marker_material.albedo_color = preview_color
+	
+	marker.material_override = marker_material
+	
+	trajectory_markers.append(marker)
+
+func clear_trajectory_preview():
+	for marker in trajectory_markers:
+		if is_instance_valid(marker):
+			marker.queue_free()
+	trajectory_markers.clear()
+	
+	print("🧹 Предпросмотр траектории очищен")
+
+func vector2_to_key(x: float, z: float) -> String:
+	return "%.1f_%.1f" % [x, z]
 # ================== ТАЙМЕР ==================
 func setup_timer():
 	timer = Timer.new()
@@ -222,26 +352,20 @@ func _on_program_finished(success: bool):
 		print("❌ Программа завершена, цель не достигнута. Время: ", final_time)
 
 func show_success_message(final_time: String):
-	# Создаем полноэкранный CanvasLayer
 	var canvas = CanvasLayer.new()
-	canvas.layer = 100  # Высокий слой чтобы было поверх всего
+	canvas.layer = 100
 	canvas.name = "SuccessCanvas"
 	
-	# Создаем полноэкранный ColorRect
 	var overlay = ColorRect.new()
-	overlay.color = Color(0, 0, 0, 0.7)  # Полупрозрачный черный фон
+	overlay.color = Color(0, 0, 0, 0.7)
 	overlay.size = get_viewport().size
 	overlay.name = "Overlay"
 	
-	# Создаем панель победного сообщения
 	var panel = Panel.new()
 	panel.name = "SuccessPanel"
-	
-	# Устанавливаем размер панели (больше чем было)
-	panel.size = Vector2(600, 300)  # Увеличили размер
+	panel.size = Vector2(600, 300)
 	panel.position = (get_viewport().get_visible_rect().size - panel.size) / 2
 	
-	# Создаем красивый стиль для панели
 	var panel_style = StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.1, 0.1, 0.1, 0.95)
 	panel_style.border_color = Color.GREEN
@@ -255,13 +379,11 @@ func show_success_message(final_time: String):
 	panel_style.corner_radius_bottom_left = 12
 	panel.add_theme_stylebox_override("panel", panel_style)
 	
-	# Создаем контейнер для текста
 	var vbox = VBoxContainer.new()
 	vbox.name = "VBox"
 	vbox.size = panel.size
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	
-	# Заголовок
 	var title_label = Label.new()
 	title_label.name = "TitleLabel"
 	title_label.text = "🎉 УРОВЕНЬ ПРОЙДЕН! 🎉"
@@ -270,7 +392,6 @@ func show_success_message(final_time: String):
 	title_label.add_theme_color_override("font_color", Color.GREEN)
 	title_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	
-	# Время прохождения
 	var time_label = Label.new()
 	time_label.name = "TimeLabel"
 	time_label.text = "Ваше время: " + final_time
@@ -279,7 +400,6 @@ func show_success_message(final_time: String):
 	time_label.add_theme_color_override("font_color", Color.GOLD)
 	time_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	
-	# Лучшее время
 	var best_time_text = ""
 	if best_time_ms > 0 and current_time_ms <= best_time_ms:
 		best_time_text = "🏆 НОВЫЙ РЕКОРД! 🏆"
@@ -294,7 +414,6 @@ func show_success_message(final_time: String):
 	best_time_label.add_theme_color_override("font_color", Color.YELLOW)
 	best_time_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	
-	# Сообщение о возврате
 	var return_label = Label.new()
 	return_label.name = "ReturnLabel"
 	return_label.text = "Автоматический возврат через 5 секунд..."
@@ -303,13 +422,11 @@ func show_success_message(final_time: String):
 	return_label.add_theme_color_override("font_color", Color.LIGHT_BLUE)
 	return_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	
-	# Добавляем все в контейнер
 	vbox.add_child(title_label)
 	vbox.add_child(time_label)
 	vbox.add_child(best_time_label)
 	vbox.add_child(return_label)
 	
-	# Центрируем содержимое
 	vbox.add_theme_constant_override("separation", 20)
 	
 	panel.add_child(vbox)
@@ -319,10 +436,8 @@ func show_success_message(final_time: String):
 	
 	print("✅ Финальный экран создан: ", final_time)
 	
-	# Ждем 5 секунд и возвращаемся
 	await get_tree().create_timer(5.0).timeout
 	
-	# Удаляем CanvasLayer перед возвратом
 	if canvas and is_instance_valid(canvas):
 		canvas.queue_free()
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
@@ -334,33 +449,57 @@ func return_to_selection():
 	get_tree().change_scene_to_file("res://UI/game_level.tscn")
 
 # ================== СИСТЕМА ДРОНА ==================
-func load_drone():
+func create_drone():
+	print("🔧 Создаем дрон...")
+	
+	# Очищаем контейнер
 	for child in drone_container.get_children():
 		child.queue_free()
-	var exported_drone_path = "user://exported_drone.tscn"
-	if FileAccess.file_exists(exported_drone_path):
-		print("✅ Найден экспортированный дрон: ", exported_drone_path)
-		load_exported_drone(exported_drone_path)
-	else:
-		print("❌ Экспортированный дрон не найден, создаем дрон по умолчанию")
+	
+	# Пытаемся загрузить существующий дрон
+	var drone_paths = [
+		"res://exported_drone.tscn",
+		"user://exported_drone.tscn", 
+		"res://DroneLevels/Drone.tscn"
+	]
+	
+	var drone_loaded = false
+	for path in drone_paths:
+		if ResourceLoader.exists(path):
+			print("✅ Найден дрон: ", path)
+			drone_loaded = load_drone_from_path(path)
+			if drone_loaded:
+				break
+	
+	if not drone_loaded:
+		print("❌ Дрон не найден, создаем дрон по умолчанию")
 		create_default_drone()
+	
+	print("✅ Дрон создан и готов")
 
-func load_exported_drone(scene_path: String):
-	var drone_scene = load(scene_path)
+func load_drone_from_path(path: String) -> bool:
+	var drone_scene = load(path)
 	if drone_scene:
 		var drone_instance = drone_scene.instantiate()
 		drone_container.add_child(drone_instance)
-		var root_drone = find_drone_root(drone_instance)
-		if root_drone:
-			print("✅ Найден корень дрона: ", root_drone.name)
-			current_drone = create_drone_from_parts(root_drone)
+		
+		if drone_instance is CharacterBody3D:
+			current_drone = drone_instance
 			setup_drone(current_drone)
+			return true
 		else:
-			print("❌ Не удалось найти корень дрона, создаем нового")
-			current_drone = create_default_character_drone()
-	else:
-		print("❌ Ошибка загрузки сцены дрона")
-		current_drone = create_default_character_drone()
+			# Если это не CharacterBody3D, ищем внутри
+			var drone_body = find_drone_root(drone_instance)
+			if drone_body:
+				current_drone = create_drone_from_parts(drone_body)
+				setup_drone(current_drone)
+				drone_instance.queue_free()
+				return true
+		
+		print("❌ Не удалось создать дрон из: ", path)
+		drone_instance.queue_free()
+	
+	return false
 
 func find_drone_root(root_node: Node) -> Node3D:
 	if root_node is CharacterBody3D:
@@ -390,12 +529,16 @@ func create_drone_from_parts(drone_node: Node3D) -> CharacterBody3D:
 	print("🔧 Создаем дрон из частей...")
 	var new_drone = CharacterBody3D.new()
 	new_drone.name = "Drone"
+	
+	# Загружаем скрипт дрона
 	var drone_script = load("res://DroneLevels/Drone.gd")
 	if drone_script:
 		new_drone.set_script(drone_script)
 		print("✅ Добавлен скрипт Drone.gd")
+	
 	drone_container.add_child(new_drone)
 	new_drone.owner = get_tree().edited_scene_root
+	
 	if drone_node is Node3D:
 		print("📦 Копируем компоненты дрона...")
 		var children_to_copy = []
@@ -410,85 +553,79 @@ func create_drone_from_parts(drone_node: Node3D) -> CharacterBody3D:
 				child.owner = get_tree().edited_scene_root
 				child.transform = relative_transform
 				child.name = child_name
-	@warning_ignore("integer_division")
-	var aligned_x = round((start_point_x + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
-	@warning_ignore("integer_division")
-	var aligned_z = round((start_point_z + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
-	new_drone.global_position = Vector3(aligned_x, start_point_y, aligned_z)
+	
+	# Устанавливаем позицию с проверкой границ
+	var start_pos = calculate_start_position()
+	if not is_position_within_bounds(start_pos):
+		start_pos = clamp_position_to_bounds(start_pos)
+		print("⚠️ Стартовая позиция скорректирована: ", start_pos)
+	
+	new_drone.global_position = start_pos
+	
 	if drone_node.get_parent() and drone_node.get_parent() != drone_container:
 		drone_node.queue_free()
+	
 	print("✅ Дрон создан из частей")
 	return new_drone
 
-# В DroneScene.gd в setup_drone():
-func setup_drone(drone_node: CharacterBody3D):
-	print("🔧 Настраиваем дрон...")
+func calculate_start_position() -> Vector3:
 	@warning_ignore("integer_division")
 	var aligned_x = round((start_point_x + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
 	@warning_ignore("integer_division")
 	var aligned_z = round((start_point_z + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
-	drone_node.global_position = Vector3(aligned_x, start_point_y, aligned_z)
+	return Vector3(aligned_x, start_point_y, aligned_z)
+
+func setup_drone(drone_node: CharacterBody3D):
+	print("🔧 Настраиваем дрон...")
+	
+	# Устанавливаем позицию с проверкой границ
+	var start_pos = calculate_start_position()
+	if not is_position_within_bounds(start_pos):
+		start_pos = clamp_position_to_bounds(start_pos)
+		print("⚠️ Стартовая позиция скорректирована: ", start_pos)
+	
+	drone_node.global_position = start_pos
 	drone_node.scale = Vector3(3, 3, 3)
 	
-	# Убедись что коллизия добавлена
+	# Добавляем коллизию если нужно
 	add_collision_if_needed(drone_node)
 	
-	# Включаем обработку коллизий
 	drone_node.collision_layer = 1
 	drone_node.collision_mask = 1
 	
+	# Подключаем сигналы
 	if drone_node.has_signal("drone_moved"):
 		drone_node.drone_moved.connect(on_drone_moved)
 	if drone_node.has_signal("program_finished"):
 		drone_node.program_finished.connect(_on_program_finished)
 		print("✅ Сигнал program_finished подключен")
 	
-	# БЕЗОПАСНАЯ проверка коллизии
+	# Устанавливаем границы
+	if drone_node.has_method("set_boundaries"):
+		drone_node.set_boundaries(grid_boundary_min, grid_boundary_max)
+		print("✅ Границы установлены для дрона")
+	
+	# Проверяем коллизию
 	var collision_node = drone_node.get_node_or_null("CollisionShape3D")
 	if collision_node:
 		print("🚁 Коллизия дрона: ", collision_node.global_position)
 	else:
-		print("⚠️ Коллизия дрона еще не готова")
+		print("⚠️ Коллизия дрона не найдена, добавляем...")
+		add_collision_if_needed(drone_node)
 	
 	print("✅ Дрон настроен: ", drone_node.name)
+
 func add_collision_if_needed(drone_node: CharacterBody3D):
 	if drone_node.get_node_or_null("CollisionShape3D") == null:
+		print("➕ Добавляем коллизию дрону...")
 		var collision = CollisionShape3D.new()
 		var shape = BoxShape3D.new()
-		var bounds = calculate_drone_bounds(drone_node)
-		shape.size = bounds.size
+		shape.size = Vector3(6, 1.5, 6)  # Стандартный размер для дрона
 		collision.shape = shape
-		collision.position = bounds.center
+		collision.position = Vector3(0, 0.75, 0)  # Центрируем по высоте
 		drone_node.add_child(collision)
 		collision.owner = get_tree().edited_scene_root
-		print("✅ Добавлена коллизия дрону: ", bounds.size)
-
-func calculate_drone_bounds(node: Node3D) -> Dictionary:
-	var min_point = Vector3.INF
-	var max_point = -Vector3.INF
-	calculate_mesh_bounds(node, Transform3D.IDENTITY, min_point, max_point)
-	if min_point == Vector3.INF:
-		return {"size": Vector3(6, 1.5, 6), "center": Vector3.ZERO}
-	var size = max_point - min_point
-	var center = (min_point + max_point) / 2
-	size += Vector3(1, 1, 1)
-	return {"size": size, "center": center}
-
-func calculate_mesh_bounds(node: Node3D, parent_transform: Transform3D, min_point: Vector3, max_point: Vector3):
-	var node_transform = parent_transform * node.transform
-	if node is MeshInstance3D:
-		var mesh = node.mesh
-		if mesh:
-			var aabb = mesh.get_aabb()
-			var transformed_min = node_transform * aabb.position
-			var transformed_max = node_transform * aabb.end
-			min_point = min_point.min(transformed_min)
-			min_point = min_point.min(transformed_max)
-			max_point = max_point.max(transformed_min)
-			max_point = max_point.max(transformed_max)
-	for child in node.get_children():
-		if child is Node3D:
-			calculate_mesh_bounds(child, node_transform, min_point, max_point)
+		print("✅ Добавлена коллизия дрону")
 
 func create_default_drone():
 	print("🔧 Создаем дрон по умолчанию...")
@@ -497,11 +634,28 @@ func create_default_drone():
 func create_default_character_drone() -> CharacterBody3D:
 	var drone_node = CharacterBody3D.new()
 	drone_node.name = "DefaultDrone"
-	drone_container.add_child(drone_node)
-	drone_node.owner = get_tree().edited_scene_root
+	
+	# Добавляем скрипт
 	var drone_script = load("res://DroneLevels/Drone.gd")
 	if drone_script:
 		drone_node.set_script(drone_script)
+	
+	# Добавляем визуальную часть
+	var mesh_instance = MeshInstance3D.new()
+	var box_mesh = BoxMesh.new()
+	box_mesh.size = Vector3(4, 1, 4)
+	mesh_instance.mesh = box_mesh
+	
+	var material = StandardMaterial3D.new()
+	material.albedo_color = Color(0.8, 0.2, 0.2)  # Красный цвет для видимости
+	mesh_instance.material_override = material
+	
+	drone_node.add_child(mesh_instance)
+	mesh_instance.owner = get_tree().edited_scene_root
+	
+	drone_container.add_child(drone_node)
+	drone_node.owner = get_tree().edited_scene_root
+	
 	setup_drone(drone_node)
 	print("✅ Дрон по умолчанию создан")
 	return drone_node
@@ -517,17 +671,22 @@ func create_grid():
 	material.albedo_color = Color(0.3, 0.3, 0.3)
 	for child in grid.get_children():
 		child.queue_free()
-	for i in range(-5, 6):
+	
+	# Создаем сетку 32x32 клеток
+	var half_cells = GRID_CELLS_COUNT / 2
+	for i in range(-half_cells, half_cells + 1):
 		create_grid_line(
-			Vector3(i * GRID_SIZE, 0, -5 * GRID_SIZE),
-			Vector3(i * GRID_SIZE, 0, 5 * GRID_SIZE),
+			Vector3(i * GRID_SIZE, 0, -half_cells * GRID_SIZE),
+			Vector3(i * GRID_SIZE, 0, half_cells * GRID_SIZE),
 			material, 0.3
 		)
 		create_grid_line(
-			Vector3(-5 * GRID_SIZE, 0, i * GRID_SIZE),
-			Vector3(5 * GRID_SIZE, 0, i * GRID_SIZE),
+			Vector3(-half_cells * GRID_SIZE, 0, i * GRID_SIZE),
+			Vector3(half_cells * GRID_SIZE, 0, i * GRID_SIZE),
 			material, 0.3
 		)
+	
+	print("✅ Сетка создана: ", GRID_CELLS_COUNT, "x", GRID_CELLS_COUNT, " клеток")
 
 func create_grid_line(from: Vector3, to: Vector3, material: Material, thickness: float):
 	var mesh_instance = MeshInstance3D.new()
@@ -560,14 +719,28 @@ func update_grid_highlight():
 	if not current_drone or not grid_highlight:
 		return
 	var drone_pos = current_drone.global_position
-	grid_highlight.global_position = Vector3(drone_pos.x, 0.1, drone_pos.z)
-	grid_highlight.visible = true
+	
+	# Проверяем, находится ли дрон в пределах сетки
+	if is_position_within_bounds(drone_pos):
+		grid_highlight.global_position = Vector3(drone_pos.x, 0.1, drone_pos.z)
+		grid_highlight.visible = true
+		highlight_mesh.material_override.albedo_color = highlight_color
+	else:
+		# Подсветка красным, если дрон за пределами
+		grid_highlight.global_position = Vector3(drone_pos.x, 0.1, drone_pos.z)
+		grid_highlight.visible = true
+		highlight_mesh.material_override.albedo_color = Color(1, 0, 0, 0.6)
+	
 	var new_cell_position = Vector3(drone_pos.x, 0, drone_pos.z)
 	if new_cell_position != current_cell_position and current_cell_position != Vector3.ZERO:
 		create_trail_marker(current_cell_position)
 	current_cell_position = new_cell_position
 
 func create_trail_marker(position: Vector3):
+	# Создаем след только если позиция в пределах сетки
+	if not is_position_within_bounds(position):
+		return
+	
 	var trail_mesh = MeshInstance3D.new()
 	add_child(trail_mesh)
 	trail_mesh.owner = get_tree().edited_scene_root
@@ -717,6 +890,11 @@ func connect_buttons():
 	if close_btn:
 		close_btn.pressed.connect(_on_close_button_pressed)
 	
+	# ПОДКЛЮЧАЕМ СИГНАЛ ДЛЯ ПРЕДПРОСМОТРА ТРАЕКТОРИИ
+	if block_ui and block_ui.has_signal("trajectory_updated"):
+		block_ui.trajectory_updated.connect(update_trajectory_preview)
+		print("✅ Сигнал trajectory_updated подключен")
+	
 	print("✅ Все кнопки подключены")
 
 func _on_programming_button_pressed():
@@ -724,6 +902,10 @@ func _on_programming_button_pressed():
 
 func _on_start_button_pressed():
 	print("🟢 Запускаем программу дрона")
+	
+	# Очищаем предпросмотр перед запуском
+	clear_trajectory_preview()
+	
 	var drone = get_drone()
 	if drone and drone.has_method("execute_sequence"):
 		var sequence = block_ui.get_program_sequence()
@@ -739,6 +921,10 @@ func _on_start_button_pressed():
 
 func _on_clear_button_pressed():
 	print("🗑️ Очищаем программу")
+	
+	# Очищаем предпросмотр при очистке программы
+	clear_trajectory_preview()
+	
 	if block_ui and block_ui.has_method("_on_clear_button_pressed"):
 		block_ui._on_clear_button_pressed()
 	elif block_ui and block_ui.has_method("clear_program"):
@@ -754,11 +940,21 @@ func toggle_programming():
 		block_ui.hide()
 		programming_button.show()
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+		
+		# Очищаем предпросмотр при закрытии панели
+		clear_trajectory_preview()
+		
 		print("❌ Закрываем панель программирования")
 	else:
 		block_ui.show()
 		programming_button.hide()
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+		
+		# Обновляем предпросмотр при открытии панели
+		if block_ui.has_method("get_program_sequence"):
+			var sequence = block_ui.get_program_sequence()
+			update_trajectory_preview(sequence)
+		
 		print("🧩 Открываем панель программирования")
 
 # ================== МЕНЮ ПАУЗЫ И НАСТРОЕК ==================
@@ -865,16 +1061,21 @@ func create_settings_menu():
 	settings_menu.color = Color(0, 0, 0, 0.8)
 	settings_menu.size = get_viewport().size
 	settings_menu.visible = false
+	
 	var container = VBoxContainer.new()
 	container.alignment = BoxContainer.ALIGNMENT_CENTER
 	container.size = Vector2(500, 700)
+	
 	var viewport_size = Vector2(get_viewport().size)
 	container.position = (viewport_size - container.size) / 2
+	
 	var title = Label.new()
 	title.text = "НАСТРОЙКИ"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_font_size_override("font_size", 32)
 	title.add_theme_color_override("font_color", Color.WHITE)
+	
+	# Настройки чувствительности мыши
 	var mouse_sens_container = HBoxContainer.new()
 	var mouse_sens_label = Label.new()
 	mouse_sens_label.text = "Чувствительность мыши:"
@@ -891,6 +1092,8 @@ func create_settings_menu():
 	mouse_sens_container.add_child(mouse_sens_label)
 	mouse_sens_container.add_child(mouse_sens_slider)
 	mouse_sens_container.add_child(mouse_sens_value)
+	
+	# Настройки FOV
 	var fov_container = HBoxContainer.new()
 	var fov_label = Label.new()
 	fov_label.text = "Поле зрения (FOV):"
@@ -907,6 +1110,8 @@ func create_settings_menu():
 	fov_container.add_child(fov_label)
 	fov_container.add_child(fov_slider)
 	fov_container.add_child(fov_value)
+	
+	# Настройки яркости
 	var brightness_container = HBoxContainer.new()
 	var brightness_label = Label.new()
 	brightness_label.text = "Яркость:"
@@ -923,6 +1128,8 @@ func create_settings_menu():
 	brightness_container.add_child(brightness_label)
 	brightness_container.add_child(brightness_slider)
 	brightness_container.add_child(brightness_value)
+	
+	# Настройки громкости музыки
 	var music_volume_container = HBoxContainer.new()
 	var music_volume_label = Label.new()
 	music_volume_label.text = "Громкость музыки:"
@@ -939,6 +1146,8 @@ func create_settings_menu():
 	music_volume_container.add_child(music_volume_label)
 	music_volume_container.add_child(music_volume_slider)
 	music_volume_container.add_child(music_volume_value)
+	
+	# Настройки громкости звуков
 	var sfx_volume_container = HBoxContainer.new()
 	var sfx_volume_label = Label.new()
 	sfx_volume_label.text = "Громкость звуков:"
@@ -955,19 +1164,24 @@ func create_settings_menu():
 	sfx_volume_container.add_child(sfx_volume_label)
 	sfx_volume_container.add_child(sfx_volume_slider)
 	sfx_volume_container.add_child(sfx_volume_value)
+	
+	# Разделитель для стартовой позиции
 	var start_point_separator = HSeparator.new()
 	start_point_separator.custom_minimum_size = Vector2(400, 5)
+	
 	var start_point_label = Label.new()
 	start_point_label.text = "=== СТАРТОВАЯ ТОЧКА ДРОНА ==="
 	start_point_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	start_point_label.add_theme_color_override("font_color", Color.YELLOW)
+	
+	# Настройки стартовой позиции X
 	var start_x_container = HBoxContainer.new()
 	var start_x_label = Label.new()
 	start_x_label.text = "Стартовая позиция X:"
 	start_x_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var start_x_slider = HSlider.new()
-	start_x_slider.min_value = -2 * GRID_SIZE
-	start_x_slider.max_value = 2 * GRID_SIZE
+	start_x_slider.min_value = -GRID_CELLS_COUNT/2 * GRID_SIZE
+	start_x_slider.max_value = GRID_CELLS_COUNT/2 * GRID_SIZE
 	start_x_slider.step = GRID_SIZE
 	start_x_slider.value = start_point_x
 	start_x_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -978,13 +1192,15 @@ func create_settings_menu():
 	start_x_container.add_child(start_x_label)
 	start_x_container.add_child(start_x_slider)
 	start_x_container.add_child(start_x_value)
+	
+	# Настройки стартовой позиции Z
 	var start_z_container = HBoxContainer.new()
 	var start_z_label = Label.new()
 	start_z_label.text = "Стартовая позиция Z:"
 	start_z_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var start_z_slider = HSlider.new()
-	start_z_slider.min_value = -2 * GRID_SIZE
-	start_z_slider.max_value = 2 * GRID_SIZE
+	start_z_slider.min_value = -GRID_CELLS_COUNT/2 * GRID_SIZE
+	start_z_slider.max_value = GRID_CELLS_COUNT/2 * GRID_SIZE
 	start_z_slider.step = GRID_SIZE
 	start_z_slider.value = start_point_z
 	start_z_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -995,6 +1211,8 @@ func create_settings_menu():
 	start_z_container.add_child(start_z_label)
 	start_z_container.add_child(start_z_slider)
 	start_z_container.add_child(start_z_value)
+	
+	# Настройки стартовой высоты Y
 	var start_y_container = HBoxContainer.new()
 	var start_y_label = Label.new()
 	start_y_label.text = "Стартовая высота Y:"
@@ -1012,14 +1230,20 @@ func create_settings_menu():
 	start_y_container.add_child(start_y_label)
 	start_y_container.add_child(start_y_slider)
 	start_y_container.add_child(start_y_value)
+	
+	# Кнопка применения стартовой позиции
 	var apply_start_btn = Button.new()
 	apply_start_btn.text = "Применить стартовую позицию"
 	apply_start_btn.custom_minimum_size = Vector2(300, 40)
 	apply_start_btn.pressed.connect(_on_apply_start_position)
+	
+	# Кнопка назад
 	var back_btn = Button.new()
 	back_btn.text = "Назад"
 	back_btn.custom_minimum_size = Vector2(300, 50)
 	back_btn.pressed.connect(close_settings)
+	
+	# Добавляем все элементы в контейнер
 	container.add_child(title)
 	container.add_child(mouse_sens_container)
 	container.add_child(fov_container)
@@ -1033,6 +1257,7 @@ func create_settings_menu():
 	container.add_child(start_y_container)
 	container.add_child(apply_start_btn)
 	container.add_child(back_btn)
+	
 	settings_menu.add_child(container)
 	add_child(settings_menu)
 
@@ -1108,11 +1333,12 @@ func _on_start_y_changed(value: float):
 func _on_apply_start_position():
 	print("🎯 Применяем новую стартовую позицию: ", start_point_x, ", ", start_point_y, ", ", start_point_z)
 	if current_drone:
-		@warning_ignore("integer_division")
-		var aligned_x = round((start_point_x + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
-		@warning_ignore("integer_division")
-		var aligned_z = round((start_point_z + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
-		current_drone.global_position = Vector3(aligned_x, start_point_y, aligned_z)
+		var start_pos = calculate_start_position()
+		if not is_position_within_bounds(start_pos):
+			start_pos = clamp_position_to_bounds(start_pos)
+			print("⚠️ Стартовая позиция скорректирована: ", start_pos)
+		
+		current_drone.global_position = start_pos
 		on_drone_moved()
 	save_settings()
 

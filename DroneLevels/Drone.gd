@@ -7,6 +7,10 @@ var is_executing = false
 var current_tween: Tween
 var start_position: Vector3
 
+# Границы сетки
+var boundary_min: Vector3
+var boundary_max: Vector3
+
 signal program_finished(success: bool)
 signal drone_moved
 
@@ -16,6 +20,18 @@ func _ready():
 	# Сохраняем ТЕКУЩУЮ позицию как стартовую (уже отцентрованную)
 	start_position = global_position
 	print("🚁 Дрон готов, стартовая позиция: ", vector3_to_str(start_position))
+
+# Функция для установки границ из DroneScene
+func set_boundaries(min_bound: Vector3, max_bound: Vector3):
+	boundary_min = min_bound
+	boundary_max = max_bound
+	print("🚁 Границы дрона установлены: от ", vector3_to_str(boundary_min), " до ", vector3_to_str(boundary_max))
+
+# Проверка возможности движения в указанную позицию
+func can_move_to(position: Vector3) -> bool:
+	return (position.x >= boundary_min.x and position.x <= boundary_max.x and
+			position.z >= boundary_min.z and position.z <= boundary_max.z and
+			position.y >= boundary_min.y and position.y <= boundary_max.y)
 
 func return_to_start():
 	print("🔄 Возвращаю дрона на стартовую позицию...")
@@ -66,7 +82,11 @@ func execute_actions(sequence: Array) -> bool:
 	for i in range(sequence.size()):
 		var action = sequence[i]
 		print("🎯 Выполняю команду ", i + 1, "/", sequence.size(), ": ", get_direction_name(action))
-		await perform_grid_movement(action)
+		
+		var move_success = await perform_grid_movement(action)
+		if not move_success:
+			print("❌ Движение невозможно - достигнут предел сетки!")
+			return false
 	
 	# Даем время на обработку коллизий после последнего движения
 	await get_tree().create_timer(0.5).timeout
@@ -85,7 +105,7 @@ func get_direction_name(direction: int) -> String:
 		5: return "Вниз"
 		_: return "Неизвестно"
 
-func perform_grid_movement(direction: int):
+func perform_grid_movement(direction: int) -> bool:
 	var start_pos = global_position
 	var target_position = global_position
 	
@@ -96,7 +116,12 @@ func perform_grid_movement(direction: int):
 		2: target_position.x -= GRID_SIZE  # Влево
 		3: target_position.x += GRID_SIZE  # Вправо
 		4: target_position.y += GRID_SIZE  # Вверх
-		5: target_position.y = max(target_position.y - GRID_SIZE, 0)  # Вниз
+		5: target_position.y = max(target_position.y - GRID_SIZE, boundary_min.y)  # Вниз (не ниже минимальной границы)
+	
+	# Проверяем, можно ли двигаться в целевую позицию
+	if not can_move_to(target_position):
+		print("❌ Движение невозможно: позиция ", vector3_to_str(target_position), " за пределами сетки")
+		return false
 	
 	print("📍 Двигаюсь из ", vector3_to_str(start_pos), " в ", vector3_to_str(target_position))
 	
@@ -109,6 +134,7 @@ func perform_grid_movement(direction: int):
 	
 	# Короткая пауза между движениями
 	await get_tree().create_timer(0.1).timeout
+	return true
 
 func vector3_to_str(vec: Vector3) -> String:
 	return "(%d, %d, %d)" % [vec.x, vec.y, vec.z]
