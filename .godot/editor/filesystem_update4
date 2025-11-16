@@ -1,5 +1,2 @@
 res://create_drone/create_dron.tscn
-res://DroneScene.gd
-res://create_drone/components/DroneScene (1).tscn
-res://DroneLevels/levels/Level4.tscn
 res://create_drone/create_dron.gd
