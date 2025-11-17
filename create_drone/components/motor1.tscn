@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3 uid="uid://dhmk11awbqcaj"]
+
+[ext_resource type="Script" uid="uid://bvfmba7s51c35" path="res://component.gd" id="1_frass"]
+
+[node name="Node3D" type="Node3D"]
+script = ExtResource("1_frass")
+component_name = "мотор"
+component_type = "motor"

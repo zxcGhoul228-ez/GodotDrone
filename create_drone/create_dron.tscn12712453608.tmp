@@ -1,0 +1,58 @@
+[gd_scene load_steps=3 format=3 uid="uid://drx1viol8ntcc"]
+
+[ext_resource type="Script" uid="uid://dbrcvb058nfje" path="res://create_drone/create_dron.gd" id="1_22kpt"]
+[ext_resource type="Script" uid="uid://bxjqfxylx2xxc" path="res://create_drone/back_butt.gd" id="1_caali"]
+
+[node name="create_dron" type="Node3D"]
+script = ExtResource("1_22kpt")
+
+[node name="Grid" type="GridMap" parent="."]
+
+[node name="Components" type="Node3D" parent="."]
+
+[node name="CameraPivot" type="Node3D" parent="."]
+
+[node name="Camera3D" type="Camera3D" parent="CameraPivot"]
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="OpenClose" type="Button" parent="UI"]
+offset_left = 1620.0
+offset_right = 1920.0
+offset_bottom = 112.0
+text = "Показать список"
+
+[node name="Hierarchy" type="Panel" parent="UI"]
+offset_left = 1620.0
+offset_top = 111.0
+offset_right = 1920.0
+offset_bottom = 511.0
+
+[node name="Complist" type="ItemList" parent="UI/Hierarchy"]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 91.0
+offset_right = 290.0
+offset_bottom = 391.0
+
+[node name="Label" type="Label" parent="UI/Hierarchy"]
+layout_mode = 0
+offset_top = 4.0
+offset_right = 300.0
+offset_bottom = 84.0
+theme_override_font_sizes/font_size = 56
+text = "Иерархия"
+horizontal_alignment = 1
+
+[node name="Control" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("1_caali")
+
+[node name="back_butt" type="Button" parent="UI/Control"]
+layout_mode = 0
+offset_right = 256.0
+offset_bottom = 144.0
+text = "вернуться"
