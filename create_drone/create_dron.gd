@@ -84,6 +84,9 @@ var child_offsets = {}
 var is_dragging_from_list = false
 var component_to_create_from_list = null
 
+# Для перетаскивания после создания кнопкой
+var component_created_by_button = null
+
 # Задержка для корректного позиционирования
 const DRAG_DELAY = 0.05
 
@@ -209,6 +212,8 @@ func create_component_selectors_ui():
 	create_propeller_section(component_selectors)
 	
 	$UI.add_child(component_selectors)
+	
+	add_debug_style(component_selectors, Color(0, 0.5, 1, 0.3))
 
 func create_frame_section(parent: VBoxContainer):
 	var frame_section = HBoxContainer.new()
@@ -235,6 +240,8 @@ func create_frame_section(parent: VBoxContainer):
 	frame_section.add_child(frame_label)
 	frame_section.add_child(frame_container)
 	parent.add_child(frame_section)
+	
+	add_debug_style(frame_section, Color(1, 0, 0, 0.2))
 
 func create_board_section(parent: VBoxContainer):
 	var board_section = HBoxContainer.new()
@@ -261,6 +268,8 @@ func create_board_section(parent: VBoxContainer):
 	board_section.add_child(board_label)
 	board_section.add_child(board_container)
 	parent.add_child(board_section)
+	
+	add_debug_style(board_section, Color(0, 1, 0, 0.2))
 
 func create_motor_section(parent: VBoxContainer):
 	var motor_section = HBoxContainer.new()
@@ -287,6 +296,8 @@ func create_motor_section(parent: VBoxContainer):
 	motor_section.add_child(motor_label)
 	motor_section.add_child(motor_container)
 	parent.add_child(motor_section)
+	
+	add_debug_style(motor_section, Color(1, 1, 0, 0.2))
 
 func create_propeller_section(parent: VBoxContainer):
 	var propeller_section = HBoxContainer.new()
@@ -313,6 +324,18 @@ func create_propeller_section(parent: VBoxContainer):
 	propeller_section.add_child(propeller_label)
 	propeller_section.add_child(propeller_container)
 	parent.add_child(propeller_section)
+	
+	add_debug_style(propeller_section, Color(0.5, 0, 1, 0.2))
+
+func add_debug_style(control: Control, color: Color):
+	var stylebox = StyleBoxFlat.new()
+	stylebox.bg_color = color
+	stylebox.border_width_bottom = 1
+	stylebox.border_width_left = 1
+	stylebox.border_width_right = 1
+	stylebox.border_width_top = 1
+	stylebox.border_color = Color(1, 1, 1, 0.5)
+	control.add_theme_stylebox_override("panel", stylebox)
 
 func create_component_buttons():
 	create_frame_buttons()
@@ -486,6 +509,7 @@ func connect_buttons():
 		if not component_list.is_connected("item_clicked", _on_component_list_item_clicked):
 			component_list.connect("item_clicked", _on_component_list_item_clicked)
 		
+		# Добавляем обработку перетаскивания из списка
 		if not component_list.is_connected("item_selected", _on_component_list_item_selected):
 			component_list.connect("item_selected", _on_component_list_item_selected)
 
@@ -522,11 +546,13 @@ func create_floor_line():
 	line_mesh.mesh = immediate_mesh
 	add_child(line_mesh)
 
+# Функция для проверки границ
 func is_position_within_bounds(position: Vector3) -> bool:
 	return (position.x >= BOUNDS_MIN.x and position.x <= BOUNDS_MAX.x and
 			position.y >= BOUNDS_MIN.y and position.y <= BOUNDS_MAX.y and
 			position.z >= BOUNDS_MIN.z and position.z <= BOUNDS_MAX.z)
 
+# Функция для ограничения позиции в пределах границ
 func clamp_position(position: Vector3) -> Vector3:
 	return Vector3(
 		clamp(position.x, BOUNDS_MIN.x, BOUNDS_MAX.x),
@@ -828,6 +854,7 @@ func is_drone_complete():
 # ========== СИСТЕМА ПЕРЕТАСКИВАНИЯ КОМПОНЕНТОВ ==========
 
 func _input(event):
+	# Вращение камеры
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
 		if event.pressed:
 			is_rotating = true
@@ -838,6 +865,7 @@ func _input(event):
 			is_rotating = false
 			is_dragging_camera = false
 	
+	# Вращение камеры
 	if event is InputEventMouseMotion and is_rotating:
 		var mouse_delta = event.position - last_mouse_pos
 		rotation_velocity = Vector2(
@@ -850,6 +878,7 @@ func _input(event):
 		last_mouse_pos = event.position
 		update_camera_position()
 	
+	# Зум колесиком
 	if event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			camera_distance = clamp(camera_distance - ZOOM_SPEED, MIN_DISTANCE, MAX_DISTANCE)
@@ -858,11 +887,14 @@ func _input(event):
 			camera_distance = clamp(camera_distance + ZOOM_SPEED, MIN_DISTANCE, MAX_DISTANCE)
 			update_camera_position()
 	
+	# Перетаскивание компонентов ЛЕВОЙ кнопкой
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
+			# Если перетаскиваем из списка
 			if is_dragging_from_list and component_to_create_from_list:
 				create_component_from_list_drag(event.position)
 			else:
+				# Обычное перетаскивание существующего компонента
 				var component = get_component_under_mouse(event.position)
 				if component and is_component_draggable(component):
 					start_component_dragging(component, event.position)
@@ -872,13 +904,35 @@ func _input(event):
 			is_dragging_from_list = false
 			component_to_create_from_list = null
 	
+	# Движение при перетаскивании
 	if event is InputEventMouseMotion and is_dragging_component and dragged_component:
 		update_component_dragging(event.position)
 
+# Функция для центрирования мыши на элементе
+func center_mouse_on_component(component):
+	if not component or not is_instance_valid(component):
+		return
+	
+	var viewport = get_viewport()
+	var camera = $CameraPivot/Camera3D
+	
+	# Получаем позицию компонента в экранных координатах
+	var screen_pos = camera.unproject_position(component.global_position)
+	
+	# Устанавливаем позицию мыши точно в центр компонента
+	Input.warp_mouse(screen_pos)
+	
+	# Обновляем last_mouse_pos для корректной работы перетаскивания
+	last_mouse_pos = screen_pos
+	
+	print("Мышь центрирована на компоненте: ", get_component_name(component), " позиция: ", screen_pos)
+
+# Обработка выбора в списке компонентов (для перетаскивания)
 func _on_component_list_item_selected(index: int):
 	var item_text = component_list.get_item_text(index)
 	print("Выбран элемент списка: ", item_text)
 	
+	# Определяем тип компонента по тексту
 	if item_text.begins_with("Рама:"):
 		component_to_create_from_list = "frame"
 	elif item_text.begins_with("Плата:"):
@@ -892,6 +946,7 @@ func _on_component_list_item_selected(index: int):
 		is_dragging_from_list = true
 		print("Начато перетаскивание из списка: ", component_to_create_from_list)
 
+# Создание компонента при перетаскивании из списка
 func create_component_from_list_drag(mouse_position):
 	var component_type = component_to_create_from_list
 	
@@ -900,6 +955,7 @@ func create_component_from_list_drag(mouse_position):
 			if not drone_frame:
 				add_frame()
 				if drone_frame:
+					# Для списка используем текущую позицию мыши, а не центрирование
 					start_component_dragging(drone_frame, mouse_position)
 		"board":
 			if not drone_board and drone_frame:
@@ -922,27 +978,64 @@ func create_component_from_list_drag(mouse_position):
 	is_dragging_from_list = false
 	component_to_create_from_list = null
 
+# Находим компонент под мышью
+# Примерный радиус компонента
+func get_component_radius(component) -> float:
+	var component_type = get_component_type(component)
+	match component_type:
+		"frame": return 2.0
+		"board": return 0.5
+		"motor": return 0.3
+		"propeller": return 0.4
+		_: return 0.5
+
+# Проверяем, можно ли перетаскивать компонент
+func is_component_draggable(component):
+	if component == null or not is_instance_valid(component):
+		return false
+	return (component == drone_frame or 
+			component == drone_board or 
+			motors.has(component) or 
+			propellers.has(component))
+
+# Начинаем перетаскивание
+# Автоматическая привязка к раме
+# Находим компонент под мышью - ПРОСТАЯ И РАБОЧАЯ ВЕРСИЯ
 func get_component_under_mouse(mouse_position: Vector2) -> Node3D:
 	var camera = $CameraPivot/Camera3D
 	var from = camera.project_ray_origin(mouse_position)
 	var ray_dir = camera.project_ray_normal(mouse_position)
 	
-	var space_state = get_world_3d().direct_space_state
-	var query = PhysicsRayQueryParameters3D.create(from, from + ray_dir * 1000)
-	var result = space_state.intersect_ray(query)
+	var all_components = get_all_drone_components()
+	var closest_component = null
+	var closest_distance = INF
 	
-	if result:
-		var collider = result.collider
-		var component = collider
-		while component and component != self:
-			if is_component_draggable(component):
-				return component
-			component = component.get_parent()
+	for component in all_components:
+		if not is_instance_valid(component):
+			continue
+		
+		# Используем простой расчет расстояния до центра компонента
+		var component_pos = component.global_position
+		var to_comp = component_pos - from
+		var projection = to_comp.dot(ray_dir)
+		
+		if projection > 0:
+			var closest_point = from + ray_dir * projection
+			var distance = closest_point.distance_to(component_pos)
+			
+			# Увеличиваем радиус для лучшего обнаружения
+			var component_radius = 1.5  # Большой радиус для надежности
+			
+			if distance < component_radius and distance < closest_distance:
+				closest_distance = distance
+				closest_component = component
 	
-	return null
+	return closest_component
 
+# Получаем все компоненты дрона - УПРОЩЕННАЯ ВЕРСИЯ
 func get_all_drone_components() -> Array:
 	var components = []
+	
 	if drone_frame and is_instance_valid(drone_frame):
 		components.append(drone_frame)
 	if drone_board and is_instance_valid(drone_board):
@@ -958,14 +1051,7 @@ func get_all_drone_components() -> Array:
 	
 	return components
 
-func is_component_draggable(component):
-	if component == null or not is_instance_valid(component):
-		return false
-	return (component == drone_frame or 
-			component == drone_board or 
-			motors.has(component) or 
-			propellers.has(component))
-
+# Начинаем перетаскивание - УПРОЩЕННАЯ И РАБОЧАЯ ВЕРСИЯ
 func start_component_dragging(component, mouse_position):
 	if not is_instance_valid(component):
 		return
@@ -974,8 +1060,10 @@ func start_component_dragging(component, mouse_position):
 	original_component_position = component.global_position
 	is_dragging_component = true
 	
+	# Очищаем старые смещения
 	child_offsets.clear()
 	
+	# Если перетаскиваем раму - сохраняем смещения всех прикрепленных компонентов
 	if component == drone_frame:
 		if drone_board and is_instance_valid(drone_board):
 			child_offsets[drone_board] = drone_board.global_position - component.global_position
@@ -988,6 +1076,7 @@ func start_component_dragging(component, mouse_position):
 			if is_instance_valid(propeller):
 				child_offsets[propeller] = propeller.global_position - component.global_position
 	
+	# Вычисляем смещение для точного перетаскивания
 	var camera = $CameraPivot/Camera3D
 	var from = camera.project_ray_origin(mouse_position)
 	var ray_dir = camera.project_ray_normal(mouse_position)
@@ -1002,6 +1091,7 @@ func start_component_dragging(component, mouse_position):
 	
 	print("🚀 Начато перетаскивание: ", get_component_name(component))
 
+# Обновляем перетаскивание - УПРОЩЕННАЯ ВЕРСИЯ
 func update_component_dragging(mouse_position):
 	if not dragged_component or not is_instance_valid(dragged_component):
 		stop_component_dragging()
@@ -1016,170 +1106,126 @@ func update_component_dragging(mouse_position):
 	
 	if intersection:
 		var new_position = intersection + drag_offset
+		new_position.y = original_component_position.y  # Сохраняем высоту
 		
+		# Ограничиваем в пределах границ
 		new_position = clamp_position(new_position)
 		
+		# Вычисляем дельту перемещения
+		var delta = new_position - dragged_component.global_position
+		
+		# Перемещаем основной компонент
 		dragged_component.global_position = new_position
 		
+		# Перемещаем все дочерние компоненты (если перетаскиваем раму)
 		for child in child_offsets:
 			if is_instance_valid(child):
-				var child_new_position = child.global_position + (new_position - dragged_component.global_position)
+				var child_new_position = child.global_position + delta
 				child_new_position = clamp_position(child_new_position)
 				child.global_position = child_new_position
 		
-		if get_component_type(dragged_component) == "propeller":
-			preview_propeller_snap()
+		# Для отдельных компонентов (не рамы) делаем автопривязку во время перетаскивания
+		if dragged_component != drone_frame:
+			preview_auto_snap()
 
-func preview_propeller_snap():
-	if not dragged_component or not is_instance_valid(dragged_component):
-		return
-	
-	for i in range(motors.size()):
-		var motor = motors[i]
-		if is_instance_valid(motor):
-			var target_pos = motor.global_position + Vector3(0, 0.5, 0)
-			var current_pos = dragged_component.global_position
-			var distance = current_pos.distance_to(target_pos)
-			
-			if distance < 1.0:
-				print("🎯 Близко к мотору ", i+1, " (расстояние: ", distance, ")")
-				break
-
-func auto_snap_to_frame():
+# Предварительная автопривязка при перетаскивании
+func preview_auto_snap():
 	if not dragged_component or not is_instance_valid(dragged_component):
 		return
 	
 	var component_type = get_component_type(dragged_component)
 	
-	if component_type == "board":
-		if drone_frame and is_instance_valid(drone_frame):
-			var target_pos = drone_frame.global_position + Vector3(0, 0.2, 0)
-			var current_pos = dragged_component.global_position
-			if current_pos.distance_to(target_pos) < 1.0:
-				dragged_component.global_position = target_pos
-				print("✅ Плата прикреплена к раме")
-	
-	elif component_type == "motor":
-		if drone_frame and is_instance_valid(drone_frame):
-			var motor_points = [
-				drone_frame.global_position + Vector3(1, 0.2, 1),
-				drone_frame.global_position + Vector3(-1, 0.2, 1),
-				drone_frame.global_position + Vector3(1, 0.2, -1),
-				drone_frame.global_position + Vector3(-1, 0.2, -1)
-			]
-			
-			var current_pos = dragged_component.global_position
-			var closest_point = null
-			var closest_distance = INF
-			
-			for point in motor_points:
-				var distance = current_pos.distance_to(point)
-				if distance < closest_distance and distance < 1.5:
-					var position_free = true
-					for motor in motors:
-						if motor != dragged_component and is_instance_valid(motor) and motor.global_position.distance_to(point) < 0.5:
-							position_free = false
-							break
-					
-					if position_free:
-						closest_distance = distance
-						closest_point = point
-			
-			if closest_point:
-				dragged_component.global_position = closest_point
-				print("✅ Двигатель прикреплен к раме")
-	
-	elif component_type == "propeller":
-		var closest_motor = null
-		var closest_distance = INF
-		
-		for i in range(motors.size()):
-			var motor = motors[i]
-			if is_instance_valid(motor):
-				var target_pos = motor.global_position + Vector3(0, 0.5, 0)
-				var current_pos = dragged_component.global_position
-				var distance = current_pos.distance_to(target_pos)
-				
-				if distance < closest_distance and distance < 1.5:
-					var position_free = true
-					for propeller in propellers:
-						if propeller != dragged_component and is_instance_valid(propeller) and propeller.global_position.distance_to(target_pos) < 0.5:
-							position_free = false
-							break
-					
-					if position_free:
-						closest_distance = distance
-						closest_motor = motor
-		
-		if closest_motor:
-			var target_pos = closest_motor.global_position + Vector3(0, 0.5, 0)
-			dragged_component.global_position = target_pos
-			dragged_component.rotation = closest_motor.rotation
-			print("✅ Пропеллер прикреплен к двигателю, расстояние: ", closest_distance)
-		else:
-			print("⚠️ Пропеллер не прикреплен к двигателю, минимальное расстояние: ", closest_distance)
+	if component_type == "board" and drone_frame:
+		var target_pos = drone_frame.global_position + Vector3(0, 0.2, 0)
+		var current_pos = dragged_component.global_position
+		if current_pos.distance_to(target_pos) < 1.0:
+			# Визуальная обратная связь - можно добавить свечение
+			print("Близко к центру рамы - отпустите для прикрепления")
 
+# Заканчиваем перетаскивание - УПРОЩЕННАЯ ВЕРСИЯ
 func stop_component_dragging():
 	if dragged_component and is_instance_valid(dragged_component):
+		# Финальная автопривязка
 		auto_snap_to_frame()
 		
+		# Обновляем структуру данных
 		var component_type = get_component_type(dragged_component)
 		
+		# Для пропеллеров - усиленная проверка прикрепления
 		if component_type == "propeller":
-			var closest_motor = null
-			var closest_distance = INF
-			
-			for i in range(motors.size()):
-				var motor = motors[i]
+			var attached_to_motor = false
+			for motor in motors:
 				if is_instance_valid(motor):
-					var target_pos = motor.global_position + Vector3(0, 0.5, 0)
+					var target_pos = motor.global_position + Vector3(0, 0.3, 0)
 					var current_pos = dragged_component.global_position
-					var distance = current_pos.distance_to(target_pos)
 					
-					print("🔧 Позиционирование пропеллера: текущая=", current_pos, ", целевая=", target_pos, ", расстояние=", distance)
-					
-					if distance < closest_distance and distance < 1.5:
-						var position_free = true
-						for propeller in propellers:
-							if propeller != dragged_component and is_instance_valid(propeller) and propeller.global_position.distance_to(target_pos) < 0.5:
-								position_free = false
-								break
-						
-						if position_free:
-							closest_distance = distance
-							closest_motor = motor
+					if current_pos.distance_to(target_pos) < 0.8:
+						dragged_component.global_position = target_pos
+						dragged_component.rotation = motor.rotation
+						attached_to_motor = true
+						print("✅ Пропеллер прикреплен к двигателю")
+						break
 			
-			if closest_motor:
-				var target_pos = closest_motor.global_position + Vector3(0, 0.5, 0)
-				dragged_component.global_position = target_pos
-				dragged_component.rotation = closest_motor.rotation
-				print("✅ Пропеллер прикреплен к двигателю")
-			else:
-				print("⚠️ Пропеллер не прикреплен к двигателю (минимальное расстояние: ", closest_distance, ")")
+			if not attached_to_motor:
+				print("⚠️ Пропеллер не прикреплен к двигателю")
 		
+		# Обновляем списки компонентов
 		match component_type:
 			"board":
 				drone_board = dragged_component
 				print("✅ Плата установлена")
-			
 			"motor":
 				if not motors.has(dragged_component):
 					motors.append(dragged_component)
 					print("✅ Двигатель добавлен")
-			
 			"propeller":
 				if not propellers.has(dragged_component):
 					propellers.append(dragged_component)
 					print("✅ Пропеллер добавлен")
 		
 		update_component_list()
-		
 		print("🏁 Завершено перетаскивание: ", get_component_name(dragged_component))
 	
 	is_dragging_component = false
 	dragged_component = null
 	child_offsets.clear()
 
+# Упрощенная автопривязка
+func auto_snap_to_frame():
+	if not dragged_component or not is_instance_valid(dragged_component):
+		return
+	
+	var component_type = get_component_type(dragged_component)
+	
+	if component_type == "board" and drone_frame:
+		var target_pos = drone_frame.global_position + Vector3(0, 0.2, 0)
+		var current_pos = dragged_component.global_position
+		if current_pos.distance_to(target_pos) < 1.0:
+			dragged_component.global_position = target_pos
+	
+	elif component_type == "motor" and drone_frame:
+		var motor_points = [
+			drone_frame.global_position + Vector3(1, 0.2, 1),
+			drone_frame.global_position + Vector3(-1, 0.2, 1),
+			drone_frame.global_position + Vector3(1, 0.2, -1),
+			drone_frame.global_position + Vector3(-1, 0.2, -1)
+		]
+		
+		var current_pos = dragged_component.global_position
+		for point in motor_points:
+			if current_pos.distance_to(point) < 1.0:
+				var position_free = true
+				for motor in motors:
+					if motor != dragged_component and is_instance_valid(motor) and motor.global_position.distance_to(point) < 0.5:
+						position_free = false
+						break
+				
+				if position_free:
+					dragged_component.global_position = point
+					break
+# Заканчиваем перетаскивание
+
+# Получаем тип компонента
 func get_component_type(component):
 	if component == drone_frame:
 		return "frame"
@@ -1192,6 +1238,7 @@ func get_component_type(component):
 	else:
 		return "unknown"
 
+# Получаем имя компонента
 func get_component_name(component):
 	if component == drone_frame:
 		return "Рама"
@@ -1209,6 +1256,7 @@ func get_component_name(component):
 # ========== ОСТАЛЬНЫЕ ФУНКЦИИ ==========
 
 func _process(delta):
+	# Обновляем инерцию камеры
 	if not is_dragging_camera and (rotation_velocity.x != 0 or rotation_velocity.y != 0):
 		camera_rotation.x += rotation_velocity.x
 		camera_rotation.y += rotation_velocity.y
@@ -1311,9 +1359,6 @@ func delete_frame():
 		while motors.size() > 0:
 			delete_motor(0)
 		
-		while propellers.size() > 0:
-			delete_propeller(0)
-		
 		drone_frame.queue_free()
 		drone_frame = null
 		update_component_list()
@@ -1334,7 +1379,7 @@ func delete_board():
 func delete_motor(index: int):
 	if index >= 0 and index < motors.size() and is_instance_valid(motors[index]):
 		print("Удаляем двигатель ", index + 1)
-		if index < propellers.size() and is_instance_valid(propellers[index]):
+		if index < propellers.size():
 			delete_propeller(index)
 		
 		motors[index].queue_free()
@@ -1354,6 +1399,9 @@ func delete_propeller(index: int):
 	else:
 		print("Неверный индекс пропеллера: ", index)
 
+
+# ... (весь предыдущий код остается без изменений до функций создания компонентов)
+
 func add_frame():
 	if not Global.is_component_available("frame", current_frame_type):
 		print("Рама '", current_frame_type, "' не доступна! Купите в магазине.")
@@ -1365,14 +1413,16 @@ func add_frame():
 			var new_frame = frame_prefab.instantiate()
 			components_container.add_child(new_frame)
 			
+			# Устанавливаем позицию под курсором без ограничений
 			var mouse_pos = get_viewport().get_mouse_position()
-			var world_pos = screen_to_world_position(mouse_pos)
+			var world_pos = screen_to_world_position_unbounded(mouse_pos)
 			new_frame.position = world_pos
 			
 			drone_frame = new_frame
 			print("Рама создана, тип: ", current_frame_type, " позиция: ", new_frame.position)
 			update_component_list()
 			
+			# Немедленно начинаем перетаскивание
 			start_component_dragging(drone_frame, mouse_pos)
 		else:
 			print("Ошибка: префаб для рамы ", current_frame_type, " не найден!")
@@ -1390,14 +1440,16 @@ func add_board():
 			var new_board = board_prefab.instantiate()
 			components_container.add_child(new_board)
 			
+			# Устанавливаем позицию под курсором без ограничений
 			var mouse_pos = get_viewport().get_mouse_position()
-			var world_pos = screen_to_world_position(mouse_pos)
+			var world_pos = screen_to_world_position_unbounded(mouse_pos)
 			new_board.position = world_pos
 			
 			drone_board = new_board
 			print("Плата создана, тип: ", current_board_type, " позиция: ", new_board.position)
 			update_component_list()
 			
+			# Немедленно начинаем перетаскивание
 			start_component_dragging(drone_board, mouse_pos)
 		else:
 			print("Ошибка: префаб для платы ", current_board_type, " не найден!")
@@ -1415,14 +1467,16 @@ func add_motor():
 			var new_motor = motor_prefab.instantiate()
 			components_container.add_child(new_motor)
 			
+			# Устанавливаем позицию под курсором без ограничений
 			var mouse_pos = get_viewport().get_mouse_position()
-			var world_pos = screen_to_world_position(mouse_pos)
+			var world_pos = screen_to_world_position_unbounded(mouse_pos)
 			new_motor.position = world_pos
 			
 			motors.append(new_motor)
 			print("Двигатель создан, тип: ", current_motor_type, " позиция: ", new_motor.position)
 			update_component_list()
 			
+			# Немедленно начинаем перетаскивание
 			start_component_dragging(new_motor, mouse_pos)
 		else:
 			print("Ошибка: префаб для мотора ", current_motor_type, " не найден!")
@@ -1440,35 +1494,41 @@ func add_propeller():
 			var new_propeller = propeller_prefab.instantiate()
 			components_container.add_child(new_propeller)
 			
+			# Устанавливаем позицию под курсором без ограничений
 			var mouse_pos = get_viewport().get_mouse_position()
-			var world_pos = screen_to_world_position(mouse_pos)
-			
-			# ПРОПЕЛЛЕРЫ: создаем на той же высоте, что и другие компоненты
+			var world_pos = screen_to_world_position_unbounded(mouse_pos)
 			new_propeller.position = world_pos
 			
 			propellers.append(new_propeller)
-			print("🔄 Пропеллер создан, тип: ", current_propeller_type, " позиция: ", new_propeller.position)
+			print("Пропеллер создан, тип: ", current_propeller_type, " позиция: ", new_propeller.position)
 			update_component_list()
 			
+			# Немедленно начинаем перетаскивание
 			start_component_dragging(new_propeller, mouse_pos)
 		else:
 			print("Ошибка: префаб для пропеллера ", current_propeller_type, " не найден!")
 	else:
 		print("Не могу создать пропеллер: ", "нет двигателей" if motors.size() == 0 else "у всех двигателей уже есть пропеллеры")
 	
-func screen_to_world_position(screen_pos: Vector2) -> Vector3:
+# Функция для преобразования экранных координат в мировые БЕЗ ограничений
+func screen_to_world_position_unbounded(screen_pos: Vector2) -> Vector3:
 	var camera = $CameraPivot/Camera3D
 	var from = camera.project_ray_origin(screen_pos)
 	var ray_dir = camera.project_ray_normal(screen_pos)
 	
+	# Используем плоскость на уровне сетки (y=0.5)
 	var drag_plane = Plane(Vector3.UP, 0.5)
 	var intersection = drag_plane.intersects_ray(from, from + ray_dir * 1000)
 	
 	if intersection:
-		return intersection
+		return intersection  # Возвращаем позицию без ограничений
 	else:
 		return Vector3(0, 0.5, 0)
 
+
+# Функция для проверки, находится ли позиция за границами
 func is_out_of_bounds(position: Vector3) -> bool:
 	return (position.x < BOUNDS_MIN.x or position.x > BOUNDS_MAX.x or
 			position.z < BOUNDS_MIN.z or position.z > BOUNDS_MAX.z)
+
+# ... (остальной код остается без изменений)
