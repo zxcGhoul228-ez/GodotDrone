@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3 uid="uid://c2cdbk2ehc4o3"]
+[gd_scene load_steps=3 format=3 uid="uid://c2cdbk2ehc4o3"]
 
 [ext_resource type="Script" uid="uid://dggeif8rq6jwp" path="res://shop/shop.gd" id="1_r2p71"]
+[ext_resource type="Texture2D" uid="uid://c2ifjovbnyubb" path="res://bg/levels.png" id="2_sxvro"]
 
 [node name="Node2D" type="Node2D"]
 
@@ -12,11 +13,11 @@ offset_bottom = 1080.0
 script = ExtResource("1_r2p71")
 score_label = NodePath("HBoxContainer/ScoreLabel")
 
-[node name="ColorRect" type="ColorRect" parent="Control"]
+[node name="TextureRect" type="TextureRect" parent="Control"]
 layout_mode = 0
 offset_right = 1920.0
 offset_bottom = 1080.0
-color = Color(0.03137255, 0.8235294, 1, 1)
+texture = ExtResource("2_sxvro")
 
 [node name="CanvasLayer" type="CanvasLayer" parent="Control"]
 
@@ -38,36 +39,36 @@ alignment = 1
 [node name="HBoxContainer" type="HBoxContainer" parent="Control/CenterContainer/VBoxContainer"]
 custom_minimum_size = Vector2(100.085, 200)
 layout_mode = 2
-theme_override_constants/separation = 100
+theme_override_constants/separation = 130
 alignment = 1
 
-[node name="Button1" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
+[node name="Button1" type="TextureButton" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 
-[node name="Button2" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
+[node name="Button2" type="TextureButton" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 
-[node name="Button3" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
+[node name="Button3" type="TextureButton" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 
 [node name="HBoxContainer2" type="HBoxContainer" parent="Control/CenterContainer/VBoxContainer"]
 custom_minimum_size = Vector2(1100, 200)
 layout_mode = 2
-theme_override_constants/separation = 100
+theme_override_constants/separation = 130
 alignment = 1
 
-[node name="Button4" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer2"]
+[node name="Button4" type="TextureButton" parent="Control/CenterContainer/VBoxContainer/HBoxContainer2"]
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 
-[node name="Button5" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer2"]
+[node name="Button5" type="TextureButton" parent="Control/CenterContainer/VBoxContainer/HBoxContainer2"]
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 
-[node name="Button6" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer2"]
+[node name="Button6" type="TextureButton" parent="Control/CenterContainer/VBoxContainer/HBoxContainer2"]
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 

@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3 uid="uid://dx5pc12i4788v"]
+[gd_scene load_steps=3 format=3 uid="uid://dx5pc12i4788v"]
 
 [ext_resource type="Script" uid="uid://dcgct8adrkkbg" path="res://UI/LevelButton.gd" id="1_ju1u4"]
+[ext_resource type="Texture2D" uid="uid://deem2whvf0dma" path="res://imgs/lvl_frame.png" id="2_dvq7i"]
 
 [node name="LevelButton" type="Button"]
 custom_minimum_size = Vector2(120, 120)
@@ -10,6 +11,12 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_ju1u4")
+
+[node name="TextureRect" type="TextureRect" parent="."]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
+texture = ExtResource("2_dvq7i")
 
 [node name="MarginContainer" type="MarginContainer" parent="."]
 layout_mode = 0

@@ -1,4 +1,6 @@
+TextureButton
 TextureRect
+WorldEnvironment
 StaticBody2D
 CollisionShape2D
 CollisionShape3D
@@ -11,5 +13,3 @@ OptionButton
 MeshInstance3D
 CharacterBody3D
 Area3D
-Panel
-Node3D

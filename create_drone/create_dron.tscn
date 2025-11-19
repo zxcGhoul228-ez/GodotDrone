@@ -1,10 +1,17 @@
-[gd_scene load_steps=3 format=3 uid="uid://drx1viol8ntcc"]
+[gd_scene load_steps=4 format=3 uid="uid://drx1viol8ntcc"]
 
 [ext_resource type="Script" uid="uid://dbrcvb058nfje" path="res://create_drone/create_dron.gd" id="1_22kpt"]
 [ext_resource type="Script" uid="uid://bxjqfxylx2xxc" path="res://create_drone/back_butt.gd" id="1_caali"]
 
+[sub_resource type="Environment" id="Environment_22kpt"]
+background_mode = 1
+background_color = Color(0.7838088, 0.5242139, 0.43237674, 1)
+
 [node name="create_dron" type="Node3D"]
 script = ExtResource("1_22kpt")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_22kpt")
 
 [node name="Grid" type="GridMap" parent="."]
 

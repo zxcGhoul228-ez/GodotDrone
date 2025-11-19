@@ -7,7 +7,6 @@
 
 [sub_resource type="Environment" id="Environment_anata"]
 background_mode = 1
-background_color = Color(0.41025895, 0.82660055, 0.9487414, 1)
 ambient_light_source = 2
 adjustment_enabled = true
 adjustment_contrast = 1.21
@@ -59,7 +58,7 @@ script = ExtResource("2_vq6ct")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 16, 0)
 
 [node name="Camera3D" type="Camera3D" parent="CameraPivot"]
-transform = Transform3D(1, 0, 0, 0, 0.8660254, 0.5, 0, -0.5, 0.8660254, 0, 0, 20)
+transform = Transform3D(0.67349035, -0.66589075, 0.32093668, 0.08057466, 0.49771515, 0.8635898, -0.7347915, -0.55576, 0.38886023, 739.46136, 320.768, 20)
 fov = 70.0
 
 [node name="UI" type="CanvasLayer" parent="."]

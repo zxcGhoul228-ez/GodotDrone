@@ -21,7 +21,7 @@ var best_time_label: Label
 
 # Основные переменные
 var camera_rotation = Vector2(0, 0)
-var camera_distance = 80.0
+var camera_distance = 200.0
 var ROTATION_SPEED = 0.003
 var ZOOM_SPEED = 3.0
 var MIN_DISTANCE = 12.0
@@ -53,7 +53,7 @@ var start_point_z: int = 0
 var start_point_y: int = 0  # ИЗМЕНЕНО: было GRID_SIZE, теперь 0 - старт с земли
 var highlight_color: Color = Color(0, 1, 0, 0.6)
 var trail_color: Color = Color(0, 1, 0, 0.3)
-
+var MIN_CAMERA_HEIGHT = -15.0  # Минимальная высота камеры (чуть выше стола)
 # Границы сетки
 var grid_boundary_min: Vector3
 var grid_boundary_max: Vector3
@@ -64,10 +64,16 @@ var preview_color: Color = Color(0.2, 0.6, 1.0, 0.4)
 var preview_material: StandardMaterial3D
 
 func _ready():
+	var room_scene = load("res://room3d/source/Untitled1.glb")
+	# Корректировка масштаба
+	camera.far = 100000.0  # Вместо стандартных 100
+	var room_instance = room_scene.instantiate()
+	room_instance.scale = Vector3(2000, 2000, 2000)  # Пример
+	add_child(room_instance)
 	print("=== ИНИЦИАЛИЗАЦИЯ СЦЕНЫ ДРОНА ===")
 	print("Размер сетки: ", GRID_SIZE, "x", GRID_SIZE)
 	print("Количество клеток: ", GRID_CELLS_COUNT, "x", GRID_CELLS_COUNT)
-	
+	room_instance.position = Vector3(3200, -1000, -16)  # Центровка
 	# Инициализация границ
 	calculate_grid_boundaries()
 	
@@ -77,6 +83,7 @@ func _ready():
 	load_settings()
 	create_drone()
 	create_grid()
+	create_table()  # ДОБАВЬТЕ ЭТУ СТРОКУ
 	create_grid_highlight()
 	block_ui.hide()
 	update_camera_position()
@@ -709,6 +716,70 @@ func create_grid():
 	
 	print("✅ Сетка создана: ", GRID_CELLS_COUNT, "x", GRID_CELLS_COUNT, " клеток")
 
+func create_table():
+	print("🔧 Создаем стол с длинными ножками...")
+	
+	var table_node = MeshInstance3D.new()
+	table_node.name = "GameTable"
+	
+	var table_width = 1024 + 200
+	var table_depth = 1024 + 200
+	var table_height = 20
+	
+	var table_mesh = BoxMesh.new()
+	table_mesh.size = Vector3(table_width, table_height, table_depth)
+	table_node.mesh = table_mesh
+	
+	table_node.position = Vector3(0, -table_height/2 - 5, 0)
+	
+	var table_material = StandardMaterial3D.new()
+	table_material.albedo_color = Color(0.4, 0.2, 0.1)
+	table_material.roughness = 0.8
+	table_material.metallic = 0.1
+	
+	var wood_texture = load("res://room3d/textures/wood.jpg")
+	if wood_texture:
+		table_material.albedo_texture = wood_texture
+		table_material.uv1_scale = Vector3(8, 1, 8)
+	
+	table_node.material_override = table_material
+	
+	add_child(table_node)
+	table_node.owner = get_tree().edited_scene_root
+	
+	# Вызов функции создания длинных ножек
+	create_table_legs_long(table_width, table_depth, table_height)
+	
+	print("✅ Стол с длинными ножками создан")
+
+func create_table_legs_long(table_width: float, table_depth: float, table_height: float):
+	var leg_size = Vector3(40, 4000, 40)
+	var leg_material = StandardMaterial3D.new()
+	leg_material.albedo_color = Color(0.3, 0.15, 0.05)
+	leg_material.roughness = 0.9
+	
+	var leg_positions = [
+		Vector3(-table_width/2 + leg_size.x, -table_height/2 - leg_size.y/2, -table_depth/2 + leg_size.z),
+		Vector3(table_width/2 - leg_size.x, -table_height/2 - leg_size.y/2, -table_depth/2 + leg_size.z),
+		Vector3(-table_width/2 + leg_size.x, -table_height/2 - leg_size.y/2, table_depth/2 - leg_size.z),
+		Vector3(table_width/2 - leg_size.x, -table_height/2 - leg_size.y/2, table_depth/2 - leg_size.z)
+	]
+	
+	for i in range(4):
+		var leg = MeshInstance3D.new()
+		leg.name = "TableLeg_Long_" + str(i)
+		
+		var leg_mesh = BoxMesh.new()
+		leg_mesh.size = leg_size
+		leg.mesh = leg_mesh
+		leg.material_override = leg_material
+		
+		leg.position = leg_positions[i]
+		
+		add_child(leg)
+		leg.owner = get_tree().edited_scene_root
+	
+	print("✅ Длинные ножки созданы: высота = ", leg_size.y)
 func create_grid_line(from: Vector3, to: Vector3, material: Material, thickness: float):
 	var mesh_instance = MeshInstance3D.new()
 	var immediate_mesh = ImmediateMesh.new()
@@ -1410,6 +1481,7 @@ func load_settings():
 
 func apply_settings():
 	camera.fov = camera_fov
+	camera.far = 100090.0  # Добавьте эту строку
 	var env = get_node_or_null("WorldEnvironment")
 	if env and env.environment:
 		env.environment.adjustment_enabled = true

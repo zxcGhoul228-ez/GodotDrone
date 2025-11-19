@@ -1,16 +1,96 @@
-# LevelButton.gd
 extends Button
 
 @export var level_number: int = 1
+@export var hover_color: Color = Color(0.912, 0.509, 0.499, 1.0)  # Цвет при наведении
+@export var pressed_color: Color = Color(0.9, 0.9, 0.9)  # Цвет при нажатии
+
+# Добавьте эти свойства для настройки шрифта
+@export_group("Font Settings")
+@export var custom_font: Font
+@export var font_size: int = 60
+@export var font_color: Color = Color.WHITE
+@export var font_outline_color: Color = Color.BLACK
+@export var font_outline_size: int = 1
+
 @onready var level_label = $MarginContainer/VBoxContainer/LevelNumber
 @onready var stars_container = $MarginContainer/VBoxContainer/StarsContainer
 @onready var lock_icon = $MarginContainer/VBoxContainer/LockIcon
+@onready var background_texture = $TextureRect
 
 var level_data: Dictionary = {}
+var is_hovered: bool = false
+var base_color: Color = Color(1, 1, 1)
 
 func _ready():
+	# Убираем стандартные стили кнопки
+	remove_standard_styles()
+	
 	set_level_number(level_number)
 	update_appearance()
+	apply_font_settings()  # Применяем настройки шрифта
+	
+	# Подключаем сигналы мыши
+	mouse_entered.connect(_on_mouse_entered)
+	mouse_exited.connect(_on_mouse_exited)
+
+# Новая функция для применения настроек шрифта
+func apply_font_settings():
+	if level_label:
+		# Применяем кастомный шрифт если он задан
+		if custom_font:
+			level_label.add_theme_font_override("font", custom_font)
+		
+		# Устанавливаем размер шрифта
+		level_label.add_theme_font_size_override("font_size", font_size)
+		
+		# Устанавливаем цвет шрифта
+		level_label.add_theme_color_override("font_color", font_color)
+		
+		# Настройка обводки текста (если нужно)
+		if font_outline_size > 0:
+			level_label.add_theme_constant_override("outline_size", font_outline_size)
+			level_label.add_theme_color_override("font_outline_color", font_outline_color)
+
+func remove_standard_styles():
+	# Создаем пустые стили для всех состояний кнопки
+	var empty_style = StyleBoxEmpty.new()
+	
+	# Убираем все стандартные стили
+	add_theme_stylebox_override("normal", empty_style)
+	add_theme_stylebox_override("hover", empty_style)
+	add_theme_stylebox_override("pressed", empty_style)
+	add_theme_stylebox_override("disabled", empty_style)
+	add_theme_stylebox_override("focus", empty_style)
+	
+	# Убираем отступы текста
+	add_theme_constant_override("hseparation", 0)
+	
+	# Убеждаемся, что текст не мешает
+	if level_label:
+		level_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+func _on_mouse_entered():
+	if not disabled:  # Только если кнопка не заблокирована
+		is_hovered = true
+		background_texture.modulate = hover_color
+
+func _on_mouse_exited():
+	is_hovered = false
+	update_appearance()  # Вернем нормальный цвет
+
+func _gui_input(event):
+	if event is InputEventMouseButton:
+		if event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			# При нажатии кнопки мыши
+			if not disabled:
+				background_texture.modulate = pressed_color
+		else:
+			# При отпускании кнопки мыши
+			if not disabled:
+				if is_hovered:
+					background_texture.modulate = hover_color
+				else:
+					update_appearance()
 
 func set_level_data(data: Dictionary):
 	level_data = data
@@ -39,13 +119,15 @@ func update_appearance():
 		update_stars_display(stars)
 		
 		if completed:
-			var style = get_theme_stylebox("normal").duplicate()
-			style.bg_color = Color(0.1, 0.3, 0.1)
-			add_theme_stylebox_override("normal", style)
+			# Для завершенных уровней - зеленый оттенок
+			base_color = Color(0.779, 0.479, 0.461, 1.0)
 		else:
-			var style = get_theme_stylebox("normal").duplicate()
-			style.bg_color = Color(0.1, 0.1, 0.3)
-			add_theme_stylebox_override("normal", style)
+			# Для доступных но не завершенных - нормальный цвет
+			base_color = Color(1, 1, 1)
+		
+		# Применяем базовый цвет (если не наведен)
+		if not is_hovered:
+			background_texture.modulate = base_color
 
 func set_locked(locked: bool):
 	disabled = locked
@@ -53,15 +135,15 @@ func set_locked(locked: bool):
 		lock_icon.visible = locked
 	
 	if locked:
-		var style = get_theme_stylebox("normal").duplicate()
-		style.bg_color = Color(0.1, 0.1, 0.15)
-		add_theme_stylebox_override("normal", style)
+		# Для заблокированных уровней - темный оттенок
+		base_color = Color(0.4, 0.4, 0.4)
+		background_texture.modulate = base_color
 		clear_stars_display()
 		print("🔒 Level ", level_number, " заблокирован")
 	else:
-		var style = get_theme_stylebox("normal").duplicate()
-		style.bg_color = Color(0.1, 0.1, 0.3)
-		add_theme_stylebox_override("normal", style)
+		base_color = Color(1, 1, 1)
+		if not is_hovered:
+			background_texture.modulate = base_color
 		print("🔓 Level ", level_number, " разблокирован")
 
 func update_stars_display(stars_count: int):
