@@ -1,23 +1,26 @@
 63f7b34db8d8cdea90c76aacccf841ec
-::res://::1763530991
+::res://::1763561153
 BlockProgramming.gd::GDScript::6999015654382751004::1763396662::0::1::::<>Panel<><>0<>0<><>::
 C418_-_Key_30921622.mp3::AudioStreamMP3::179322973856051845::1763396662::1763396785::1::::<><><>0<>0<>91f6636e68db95b57dae1af7463785c5<>res://.godot/imported/C418_-_Key_30921622.mp3-ee7bd43215aa46997dbe807bea067340.mp3str::
 component.gd::GDScript::3871438728861876686::1763396663::0::1::::<>Node3D<><>0<>0<><>::
 DroneLoader.gd::GDScript::4779501630267298866::1763396662::0::1::::<>Node<><>0<>0<><>::
-DroneScene.gd::GDScript::231681490677356026::1763396662::0::1::::<>Node3D<><>0<>0<><>::
+DroneScene.gd::GDScript::231681490677356026::1763541804::0::1::::<>Node3D<><>0<>0<><>::
 export_presets.cfg::TextFile::-1::1763396663::0::1::::<><><>0<>0<><>::
 global.gd::GDScript::7037186154891365601::1763396663::0::1::::<>Node<><>0<>0<><>::
-i (1).png::CompressedTexture2D::671633521634088737::1763396663::1763396785::1::::<><><>0<>0<>b5c752c8d65c030614b9e1b3c6fbed32<>res://.godot/imported/i (1).png-82dca73d818db52bed9f4da4b6cfd80f.ctex::
 icon.svg::CompressedTexture2D::4062151496533965238::1763396663::1763396785::1::::<><><>0<>0<>eb0750b38165a9537e9c74106c29fc5e<>res://.godot/imported/icon.svg-218a8f2b3041327d8a5756f3a245f83b.ctex::
-main_scene.tscn::PackedScene::3380358994055269624::1763396663::0::1::::<><><>0<>0<><>::uid://jtlyadvbp034::::res://i (1).png<>uid://c5ysr8nbyv0jp::::res://new_script.gd<>uid://cs4ongwwq0ht::::res://C418_-_Key_30921622.mp3
+main_scene.tscn::PackedScene::3380358994055269624::1763561036::0::1::::<><><>0<>0<><>::uid://c5ysr8nbyv0jp::::res://new_script.gd<>uid://cl438cesrvewg::::res://bg/main_menu.png<>uid://cs4ongwwq0ht::::res://C418_-_Key_30921622.mp3<>uid://cjkejlnbt8pdg::::res://fonts/Zerove/Zerove-Regular.otf
 main_script.gd::GDScript::6907887206185802988::1763396663::0::1::::<>RefCounted<><>0<>0<><>::
-new_script.gd::GDScript::6929176760422162093::1763396663::0::1::::<>Control<><>0<>0<><>::
+new_script.gd::GDScript::6929176760422162093::1763557493::0::1::::<>Control<><>0<>0<><>::
 saved_drone.json::JSON::-1::1763396663::0::1::::<><><>0<>0<><>::
 script_game_level.gd::GDScript::5133831898907433883::1763396663::0::1::::<>Control<><>0<>0<><>::
-::res://create_drone/::1763489993
+::res://bg/::1763560615
+i (1).png::CompressedTexture2D::671633521634088737::1763396663::1763558390::1::::<><><>0<>0<>1dfa00b6bc8d486703ead1b3c65915ce<>res://.godot/imported/i (1).png-820fe265917152a09285432d8eaf4741.ctex::
+levels.png::CompressedTexture2D::6684775592586100067::1763560614::1763560615::1::::<><><>0<>0<>5fc8d864b1955577f36b5342374e8741<>res://.godot/imported/levels.png-d876ed263933c716cf2fe81568e67ff4.ctex::
+main_menu.png::CompressedTexture2D::5606544721335918458::1763559339::1763559358::1::::<><><>0<>0<>6113b4e4bdf1e8ea3bfe0d73dc22a7ec<>res://.godot/imported/main_menu.png-878a63b43ff2fcdd54d9262f42167015.ctex::
+::res://create_drone/::1763538270
 back_butt.gd::GDScript::4020325133652145044::1763396663::0::1::::<>Control<><>0<>0<><>::
-create_dron.gd::GDScript::7264704344745026882::1763487976::0::1::::<>Node3D<><>0<>0<><>::
-create_dron.tscn::PackedScene::8401569667111644138::1763487895::0::1::::<><><>0<>0<><>::uid://dbrcvb058nfje::::res://create_drone/create_dron.gd<>uid://bxjqfxylx2xxc::::res://create_drone/back_butt.gd
+create_dron.gd::GDScript::7264704344745026882::1763538270::0::1::::<>Node3D<><>0<>0<><>::
+create_dron.tscn::PackedScene::8401569667111644138::1763538270::0::1::::<><><>0<>0<><>::uid://dbrcvb058nfje::::res://create_drone/create_dron.gd<>uid://bxjqfxylx2xxc::::res://create_drone/back_butt.gd
 ::res://create_drone/components/::1763491978
 board1.tscn::PackedScene::7266276774775220723::1763396663::0::1::::<><><>0<>0<><>::uid://bvfmba7s51c35::::res://component.gd
 board2.tscn::PackedScene::8699038810717109373::1763396663::0::1::::<><><>0<>0<><>::
@@ -36,12 +39,12 @@ frame1.obj::Mesh::3323492137760798329::1763396663::1763396785::1::::<><><>0<>0<>
 propeller1.obj::Mesh::5580635332787924280::1763487230::1763487261::1::::<><><>0<>0<>32b0cb3199db0712a46c4e9876df8889<>res://.godot/imported/propeller1.obj-b689eed3dc8e622d9b73ffd7ea24b89e.mesh<*>res://.godot/imported/propeller1.obj-b689eed3dc8e622d9b73ffd7ea24b89e.mesh::
 ::res://create_drone/scripts/::1763490046
 propeller_rotation.gd::GDScript::3958390090854838056::1763490046::0::1::::<>MeshInstance3D<><>0<>0<><>::
-::res://DroneLevels/::1763491978
-Drone.gd::GDScript::6876697540890742067::1763491978::0::1::::<>CharacterBody3D<><>0<>0<><>::
-DroneScene.tscn::PackedScene::5469172139486518601::1763490186::0::1::::<><><>0<>0<><>::uid://dkh0356onqtm::::res://DroneScene.gd<>uid://ijlm2h2haei6::::res://DroneLevels/Grid.gd<>uid://c48eg6uf17jgd::::res://DroneLevels/Drone.gd<>uid://c6ym1avy0qeuu::::res://BlockProgramming.gd
+::res://DroneLevels/::1763542292
+Drone.gd::GDScript::6876697540890742067::1763540248::0::1::::<>CharacterBody3D<><>0<>0<><>::
+DroneScene.tscn::PackedScene::5469172139486518601::1763542292::0::1::::<><><>0<>0<><>::uid://dkh0356onqtm::::res://DroneScene.gd<>uid://ijlm2h2haei6::::res://DroneLevels/Grid.gd<>uid://c48eg6uf17jgd::::res://DroneLevels/Drone.gd<>uid://c6ym1avy0qeuu::::res://BlockProgramming.gd
 Grid.gd::GDScript::580780895518287439::1763396662::0::1::::<>Node3D<><>0<>0<><>::
-::res://DroneLevels/levels/::1763396662
-Level1.gd::GDScript::958357612761175697::1763396662::0::1::::<>Node3D<><>0<>0<><>::
+::res://DroneLevels/levels/::1763542292
+Level1.gd::GDScript::958357612761175697::1763542292::0::1::::<>Node3D<><>0<>0<><>::
 Level1.tscn::PackedScene::6213337902871777579::1763396662::0::1::::<><><>0<>0<><>::uid://nwialnyeff7v::::res://DroneLevels/levels/Level1.gd<>uid://cj6kp314hf650::::res://DroneLevels/DroneScene.tscn
 Level2.gd::GDScript::5131509854782493885::1763396662::0::1::::<>Node3D<><>0<>0<><>::
 Level2.tscn::PackedScene::4084797625056129564::1763396662::0::1::::<><><>0<>0<><>::uid://cfd0hnr8cey66::::res://DroneLevels/levels/Level2.gd<>uid://cj6kp314hf650::::res://DroneLevels/DroneScene.tscn
@@ -54,10 +57,16 @@ Level5.tscn::PackedScene::1631558512955641652::1763396662::0::1::::<><><>0<>0<><
 Level6.gd::GDScript::8226697933008112170::1763396662::0::1::::<>Node3D<><>0<>0<><>::
 Level6.tscn::PackedScene::6084903096434631298::1763396662::0::1::::<><><>0<>0<><>::uid://dphcrpb1qf3xe::::res://DroneLevels/levels/Level6.gd<>uid://cj6kp314hf650::::res://DroneLevels/DroneScene.tscn
 LevelBase.gd::GDScript::1461130316432830233::1763396662::0::1::::LevelBase<>Node3D<><>0<>0<><>::
+::res://fonts/::1763559471
+::res://fonts/Zerove/::1763559505
+LICENSE.txt::TextFile::-1::1763559469::0::1::::<><><>0<>0<><>::
+License_7.txt::TextFile::-1::1763559469::0::1::::<><><>0<>0<><>::
+Zerove-Italic.otf::FontFile::10255114391783847::1763559469::1763559505::1::::<><><>0<>0<>fd0eaebd2cc8e8bfef065b74a2f02601<>res://.godot/imported/Zerove-Italic.otf-d9b7e3c01dcb478cc97a7fa13d044dc3.fontdata::
+Zerove-Regular.otf::FontFile::5425444275696750528::1763559469::1763559505::1::::<><><>0<>0<>9db68d6176e68655e3fdb06793043c8d<>res://.godot/imported/Zerove-Regular.otf-425fa908d301f05c2ffe44dec850c445.fontdata::
 ::res://shop/::1763396663
 shop.gd::GDScript::7593038848144470775::1763396663::0::1::::<>Control<><>0<>0<><>::
 shop.tscn::PackedScene::6672253405027829676::1763396663::0::1::::<><><>0<>0<><>::uid://dggeif8rq6jwp::::res://shop/shop.gd
-::res://UI/::1763396663
-game_level.tscn::PackedScene::9044445780953246773::1763396663::0::1::::<><><>0<>0<><>::uid://cfe4pxjo4wtnv::::res://script_game_level.gd<>uid://jtlyadvbp034::::res://i (1).png
+::res://UI/::1763561073
+game_level.tscn::PackedScene::9044445780953246773::1763561073::0::1::::<><><>0<>0<><>::uid://cfe4pxjo4wtnv::::res://script_game_level.gd<>uid://c2ifjovbnyubb::::res://bg/levels.png<>uid://cjkejlnbt8pdg::::res://fonts/Zerove/Zerove-Regular.otf
 LevelButton.gd::GDScript::7312183102379435920::1763396663::0::1::::<>Button<><>0<>0<><>::
 LevelButton.tscn::PackedScene::8836452521575505163::1763396663::0::1::::<><><>0<>0<><>::uid://dcgct8adrkkbg::::res://UI/LevelButton.gd

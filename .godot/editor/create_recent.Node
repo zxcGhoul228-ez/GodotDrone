@@ -1,3 +1,6 @@
+TextureRect
+StaticBody2D
+CollisionShape2D
 CollisionShape3D
 HBoxContainer
 ScrollContainer
@@ -10,5 +13,3 @@ CharacterBody3D
 Area3D
 Panel
 Node3D
-TextureRect
-MarginContainer

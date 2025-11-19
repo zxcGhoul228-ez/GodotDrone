@@ -1,6 +1,0 @@
-res://DroneScene.gd
-res://create_drone/create_dron.tscn
-res://create_drone/create_dron.gd
-res://DroneLevels/DroneScene.tscn
-res://DroneLevels/Drone.gd
-res://DroneLevels/levels/Level1.gd

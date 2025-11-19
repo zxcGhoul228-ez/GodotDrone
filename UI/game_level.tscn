@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3 uid="uid://d14gx25p8s3cb"]
+[gd_scene load_steps=4 format=3 uid="uid://d14gx25p8s3cb"]
 
 [ext_resource type="Script" uid="uid://cfe4pxjo4wtnv" path="res://script_game_level.gd" id="1_gjgkl"]
-[ext_resource type="Texture2D" uid="uid://jtlyadvbp034" path="res://i (1).png" id="2_j25ib"]
+[ext_resource type="Texture2D" uid="uid://c2ifjovbnyubb" path="res://bg/levels.png" id="2_j25ib"]
+[ext_resource type="FontFile" uid="uid://cjkejlnbt8pdg" path="res://fonts/Zerove/Zerove-Regular.otf" id="3_d75au"]
 
 [node name="Node2D" type="Node2D"]
 
@@ -27,8 +28,8 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = 460.0
-offset_bottom = -260.0
+offset_top = 200.0
+offset_bottom = -519.9999
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -43,7 +44,7 @@ layout_mode = 2
 theme_override_constants/separation = 105
 alignment = 1
 
-[node name="Level 1" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
+[node name="Level1" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 
@@ -68,8 +69,8 @@ layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = 200.0
-offset_bottom = -519.9999
+offset_top = 460.0
+offset_bottom = -260.0
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -84,7 +85,7 @@ layout_mode = 2
 theme_override_constants/separation = 105
 alignment = 1
 
-[node name="Level1" type="Button" parent="Control/CenterContainer2/VBoxContainer/HBoxContainer"]
+[node name="Level 1" type="Button" parent="Control/CenterContainer2/VBoxContainer/HBoxContainer"]
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 2
 
@@ -151,8 +152,10 @@ offset_bottom = 200.0
 
 [node name="Label" type="Label" parent="Control/CenterContainer4"]
 layout_mode = 2
+theme_override_colors/font_color = Color(0.35014433, 0.22165695, 0.28152654, 1)
+theme_override_fonts/font = ExtResource("3_d75au")
 theme_override_font_sizes/font_size = 136
-text = "ВЫБОР УРОВНЕЙ"
+text = "Levels"
 
 [node name="HBoxContainer" type="HBoxContainer" parent="Control"]
 layout_mode = 1

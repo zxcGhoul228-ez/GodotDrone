@@ -1,8 +1,9 @@
-[gd_scene load_steps=4 format=3 uid="uid://bofqavxfukbhw"]
+[gd_scene load_steps=5 format=3 uid="uid://bofqavxfukbhw"]
 
-[ext_resource type="Texture2D" uid="uid://jtlyadvbp034" path="res://i (1).png" id="1_0f027"]
 [ext_resource type="Script" uid="uid://c5ysr8nbyv0jp" path="res://new_script.gd" id="1_2c62f"]
+[ext_resource type="Texture2D" uid="uid://cl438cesrvewg" path="res://bg/main_menu.png" id="2_gyfs4"]
 [ext_resource type="AudioStream" uid="uid://cs4ongwwq0ht" path="res://C418_-_Key_30921622.mp3" id="3_gyfs4"]
+[ext_resource type="FontFile" uid="uid://cjkejlnbt8pdg" path="res://fonts/Zerove/Zerove-Regular.otf" id="4_d5x1h"]
 
 [node name="Node2D" type="Node2D"]
 
@@ -17,7 +18,7 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_2c62f")
 audio_player = NodePath("AudioStreamPlayer")
-score_label = NodePath("CenterContainer2/VBoxContainer/HBoxContainer/ScoreLabel")
+score_label = NodePath("VBoxContainer/HBoxContainer/ScoreLabel")
 
 [node name="TextureRect" type="TextureRect" parent="Control"]
 custom_minimum_size = Vector2(1920, 1080)
@@ -27,68 +28,79 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-texture = ExtResource("1_0f027")
-
-[node name="CenterContainer" type="CenterContainer" parent="Control"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-
-[node name="VBoxContainer" type="VBoxContainer" parent="Control/CenterContainer"]
-custom_minimum_size = Vector2(1000, 200)
-layout_mode = 2
-alignment = 2
-
-[node name="HBoxContainer" type="HBoxContainer" parent="Control/CenterContainer/VBoxContainer"]
-custom_minimum_size = Vector2(300, 200)
-layout_mode = 2
-theme_override_constants/separation = 149
-alignment = 1
-
-[node name="InvButt" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
-custom_minimum_size = Vector2(200, 0)
-layout_mode = 2
-text = "Сборка дрона"
-
-[node name="GameButt" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
-custom_minimum_size = Vector2(200, 0)
-layout_mode = 2
-text = "Выбор уровня"
-
-[node name="ShopButt" type="Button" parent="Control/CenterContainer/VBoxContainer/HBoxContainer"]
-custom_minimum_size = Vector2(200, 0)
-layout_mode = 2
-text = "Магазин"
-
-[node name="CenterContainer2" type="CenterContainer" parent="Control"]
-layout_mode = 0
-offset_right = 1920.0
-offset_bottom = 104.0
-
-[node name="VBoxContainer" type="VBoxContainer" parent="Control/CenterContainer2"]
-custom_minimum_size = Vector2(0, 100)
-layout_mode = 2
-
-[node name="HBoxContainer" type="HBoxContainer" parent="Control/CenterContainer2/VBoxContainer"]
-layout_mode = 2
-theme_override_constants/separation = 243
-
-[node name="ScoreLabel" type="Label" parent="Control/CenterContainer2/VBoxContainer/HBoxContainer"]
-modulate = Color(0.7480249, 0.1217471, 0.70589036, 1)
-layout_mode = 2
-theme_override_font_sizes/font_size = 20
-
-[node name="Label" type="Label" parent="Control/CenterContainer2/VBoxContainer/HBoxContainer"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 99
-text = "ДРОНЧИЧА"
-
-[node name="Button" type="Button" parent="Control/CenterContainer2/VBoxContainer/HBoxContainer"]
-custom_minimum_size = Vector2(80, 80)
-layout_mode = 2
+texture = ExtResource("2_gyfs4")
 
 [node name="AudioStreamPlayer" type="AudioStreamPlayer" parent="Control"]
 stream = ExtResource("3_gyfs4")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Control"]
+custom_minimum_size = Vector2(300, 200)
+layout_mode = 0
+offset_left = 83.0
+offset_top = 321.0
+offset_right = 657.0
+offset_bottom = 985.0
+theme_override_constants/separation = 149
+alignment = 1
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Control/HBoxContainer"]
+custom_minimum_size = Vector2(500, 292.595)
+layout_mode = 2
+theme_override_constants/separation = 49
+alignment = 2
+
+[node name="InvButt" type="Button" parent="Control/HBoxContainer/VBoxContainer"]
+custom_minimum_size = Vector2(200, 80)
+layout_mode = 2
+theme_override_font_sizes/font_size = 51
+text = "Сборка дрона"
+
+[node name="GameButt" type="Button" parent="Control/HBoxContainer/VBoxContainer"]
+custom_minimum_size = Vector2(200, 80)
+layout_mode = 2
+theme_override_font_sizes/font_size = 51
+text = "Выбор уровня"
+
+[node name="ShopButt" type="Button" parent="Control/HBoxContainer/VBoxContainer"]
+custom_minimum_size = Vector2(200, 80)
+layout_mode = 2
+theme_override_font_sizes/font_size = 51
+text = "Магазин"
+
+[node name="Button" type="Button" parent="Control/HBoxContainer/VBoxContainer"]
+custom_minimum_size = Vector2(80, 80)
+layout_mode = 2
+theme_override_font_sizes/font_size = 51
+text = "Выйти"
+
+[node name="Label" type="Label" parent="Control"]
+layout_mode = 0
+offset_left = 137.0
+offset_top = 175.0
+offset_right = 609.0
+offset_bottom = 318.0
+theme_override_colors/font_color = Color(0.4453163, 0.21852967, 0.15275705, 1)
+theme_override_fonts/font = ExtResource("4_d5x1h")
+theme_override_font_sizes/font_size = 104
+text = "DronGame"
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Control"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 0
+offset_left = 959.0
+offset_top = 22.0
+offset_right = 1862.0
+offset_bottom = 122.0
+theme_override_constants/separation = 0
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Control/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 0
+alignment = 2
+
+[node name="ScoreLabel" type="Label" parent="Control/VBoxContainer/HBoxContainer"]
+modulate = Color(0.38132483, 0.07025131, 0.09621968, 1)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.49883658, 0, 0.05585517, 1)
+theme_override_fonts/font = ExtResource("4_d5x1h")
+theme_override_font_sizes/font_size = 65

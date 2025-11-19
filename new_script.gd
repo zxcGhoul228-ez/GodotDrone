@@ -6,9 +6,9 @@ extends Control
 
 func _ready():
 	# Подключаем сигналы кнопок
-	$CenterContainer/VBoxContainer/HBoxContainer/GameButt.pressed.connect(_on_start_pressed)
-	$CenterContainer/VBoxContainer/HBoxContainer/InvButt.pressed.connect(_on_CreateDron_pressed)
-	$CenterContainer/VBoxContainer/HBoxContainer/ShopButt.pressed.connect(_on_shop_pressed)
+	$HBoxContainer/VBoxContainer/GameButt.pressed.connect(_on_start_pressed)
+	$HBoxContainer/VBoxContainer/InvButt.pressed.connect(_on_CreateDron_pressed)
+	$HBoxContainer/VBoxContainer/ShopButt.pressed.connect(_on_shop_pressed)
 	if score_label:
 		update_score_display()
 	else:
