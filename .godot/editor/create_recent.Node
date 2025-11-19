@@ -1,3 +1,4 @@
+CollisionShape3D
 HBoxContainer
 ScrollContainer
 Label
@@ -6,7 +7,6 @@ Button
 OptionButton
 MeshInstance3D
 CharacterBody3D
-CollisionShape3D
 Area3D
 Panel
 Node3D

@@ -50,7 +50,7 @@ var max_trail_length = 20
 var trail_fade_time = 2.0
 var start_point_x: int = 0
 var start_point_z: int = 0
-var start_point_y: int = GRID_SIZE
+var start_point_y: int = 0  # ИЗМЕНЕНО: было GRID_SIZE, теперь 0 - старт с земли
 var highlight_color: Color = Color(0, 1, 0, 0.6)
 var trail_color: Color = Color(0, 1, 0, 0.3)
 
@@ -160,7 +160,7 @@ func calculate_next_position(current_pos: Vector3, direction: int) -> Vector3:
 		2: next_pos.x -= GRID_SIZE  # Влево
 		3: next_pos.x += GRID_SIZE  # Вправо
 		4: next_pos.y += GRID_SIZE  # Вверх
-		5: next_pos.y = max(next_pos.y - GRID_SIZE, grid_boundary_min.y)  # Вниз - ИСПРАВЛЕНО: boundary_min -> grid_boundary_min
+		5: next_pos.y = max(next_pos.y - GRID_SIZE, grid_boundary_min.y)  # Вниз
 	
 	return next_pos
 
@@ -202,6 +202,7 @@ func clear_trajectory_preview():
 
 func vector2_to_key(x: float, z: float) -> String:
 	return "%.1f_%.1f" % [x, z]
+
 # ================== ТАЙМЕР ==================
 func setup_timer():
 	timer = Timer.new()
@@ -573,17 +574,37 @@ func calculate_start_position() -> Vector3:
 	var aligned_x = round((start_point_x + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
 	@warning_ignore("integer_division")
 	var aligned_z = round((start_point_z + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
-	return Vector3(aligned_x, start_point_y, aligned_z)
+	return Vector3(aligned_x, start_point_y, aligned_z)  # ИСПОЛЬЗУЕМ start_point_y (теперь 0)
+# ================== УПРАВЛЕНИЕ ВЫСОТОЙ ДРОНА ==================
+func set_drone_height(height: float):
+	print("🔄 Устанавливаем высоту дрона: ", height)
+	start_point_y = height
+	
+	if current_drone:
+		var new_pos = current_drone.global_position
+		new_pos.y = height
+		current_drone.global_position = new_pos
+		print("✅ Высота дрона установлена: ", new_pos)
+	
+	# Сохраняем настройки
+	save_settings()
 
+func get_drone_height() -> float:
+	return start_point_y
+
+# Функция для внешнего управления высотой (например из Level1)
+func adjust_drone_height(relative_change: float):
+	var new_height = start_point_y + relative_change
+	set_drone_height(new_height)
 func setup_drone(drone_node: CharacterBody3D):
 	print("🔧 Настраиваем дрон...")
-	
+	start_point_y = 0
 	# Устанавливаем позицию с проверкой границ
 	var start_pos = calculate_start_position()
 	if not is_position_within_bounds(start_pos):
 		start_pos = clamp_position_to_bounds(start_pos)
 		print("⚠️ Стартовая позиция скорректирована: ", start_pos)
-	
+	start_pos.y = 0
 	drone_node.global_position = start_pos
 	drone_node.scale = Vector3(3, 3, 3)
 	
@@ -1212,13 +1233,13 @@ func create_settings_menu():
 	start_z_container.add_child(start_z_slider)
 	start_z_container.add_child(start_z_value)
 	
-	# Настройки стартовой высоты Y
+	# Настройки стартовой высоты Y - ИЗМЕНЕНО: теперь минимум 0
 	var start_y_container = HBoxContainer.new()
 	var start_y_label = Label.new()
 	start_y_label.text = "Стартовая высота Y:"
 	start_y_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var start_y_slider = HSlider.new()
-	start_y_slider.min_value = GRID_SIZE
+	start_y_slider.min_value = 0  # ИЗМЕНЕНО: было GRID_SIZE
 	start_y_slider.max_value = 3 * GRID_SIZE
 	start_y_slider.step = GRID_SIZE
 	start_y_slider.value = start_point_y
@@ -1379,7 +1400,7 @@ func load_settings():
 		sfx_volume = config.get_value("settings", "sfx_volume", 50.0)
 		start_point_x = config.get_value("start_position", "x", 0)
 		start_point_z = config.get_value("start_position", "z", 0)
-		start_point_y = config.get_value("start_position", "y", GRID_SIZE)
+		start_point_y = config.get_value("start_position", "y", 0)  # ИЗМЕНЕНО: было GRID_SIZE, теперь 0
 		highlight_color = config.get_value("colors", "highlight_color", Color(0, 1, 0, 0.6))
 		trail_color = config.get_value("colors", "trail_color", Color(0, 1, 0, 0.3))
 		apply_settings()

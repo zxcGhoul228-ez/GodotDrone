@@ -7,10 +7,14 @@ var is_executing = false
 var current_tween: Tween
 var start_position: Vector3
 
-# ПРОПЕЛЛЕРЫ - ТОЧЕЧНЫЙ ПОИСК
-var propellers: Array[Node3D] = []
+# ПРОПЕЛЛЕРЫ - ТОЧНЫЙ ПОИСК ДЛЯ КВАДРОКОПТЕРА
+var propellers: Array[MeshInstance3D] = []
 var is_propellers_rotating: bool = false
-var propeller_rotation_speed: float = 360.0
+var current_propeller_speed: float = 0.0
+var target_propeller_speed: float = 0.0
+var propeller_acceleration: float = 180.0
+var propeller_deceleration: float = 360.0
+var max_propeller_speed: float = 720.0
 
 # Границы сетки
 var boundary_min: Vector3
@@ -24,146 +28,308 @@ func _ready():
 	await get_tree().process_frame
 	start_position = global_position
 	
-	# ТОЧЕЧНЫЙ ПОИСК ПРОПЕЛЛЕРОВ
-	find_propellers_precise()
+	# ДОБАВЛЯЕМ КОЛЛИЗИЮ ЕСЛИ ЕЁ НЕТ
+	add_collision_shape()
+	
+	# ТОЧНЫЙ ПОИСК ПРОПЕЛЛЕРОВ ДЛЯ КВАДРОКОПТЕРА
+	find_propellers_for_quadcopter()
 	print("🚁 Дрон готов, стартовая позиция: ", vector3_to_str(start_position))
 	print("🌀 Найдено пропеллеров: ", propellers.size())
 
-# ТОЧЕЧНЫЙ ПОИСК ТОЛЬКО РЕАЛЬНЫХ ПРОПЕЛЛЕРОВ
-func find_propellers_precise():
-	propellers.clear()
+# ФУНКЦИЯ ДОБАВЛЕНИЯ КОЛЛИЗИИ
+func add_collision_shape():
+	if has_collision():
+		print("✅ Коллизия дрона уже существует")
+		return
 	
-	# Даем время на полную инициализацию сцены
-	await get_tree().create_timer(0.2).timeout
+	print("🛡️ Добавляем коллизию дрону...")
 	
-	print("🎯 Точечный поиск пропеллеров...")
+	var collision = CollisionShape3D.new()
+	var shape = CapsuleShape3D.new()
+	shape.radius = 1.5
+	shape.height = 1.0
 	
-	# Метод 1: Поиск по именам мешей (самый надежный)
-	find_propellers_by_mesh_name(self)
+	collision.shape = shape
+	collision.name = "DroneCollision"
 	
-	# Метод 2: Поиск по именам узлов (резервный)
-	if propellers.is_empty():
-		find_propellers_by_node_name(self)
+	add_child(collision)
 	
-	# Метод 3: Поиск по структуре (очень осторожный)
-	if propellers.is_empty():
-		find_propellers_by_careful_structure()
+	if get_tree().edited_scene_root:
+		collision.owner = get_tree().edited_scene_root
 	
-	print("✅ Финальный результат: ", propellers.size(), " пропеллеров")
+	print("✅ Коллизия добавлена")
 
-# ПОИСК ПО ИМЕНАМ МЕШЕЙ - САМЫЙ ТОЧНЫЙ
-func find_propellers_by_mesh_name(node: Node):
-	for child in node.get_children():
-		if child is Node3D:
-			# Проверяем всех детей этого узла на наличие мешей пропеллеров
-			check_node_for_propeller_meshes(child)
-			
-			# Рекурсивно проверяем детей
-			find_propellers_by_mesh_name(child)
-
-func check_node_for_propeller_meshes(node: Node3D):
-	var has_propeller_mesh = false
-	
-	for child in node.get_children():
-		if child is MeshInstance3D:
-			var mesh_instance = child as MeshInstance3D
-			if mesh_instance.mesh:
-				var mesh_name = mesh_instance.mesh.resource_name.to_lower()
-				
-				# ТОЛЬКО если имя меша содержит "propeller"
-				if "propeller" in mesh_name:
-					has_propeller_mesh = true
-					break
-	
-	# Если у узла есть меш пропеллера, добавляем сам узел
-	if has_propeller_mesh:
-		if not propellers.has(node):
-			propellers.append(node)
-			print("✅ Найден пропеллер по мешу: ", node.name)
-
-# ПОИСК ПО ИМЕНАМ УЗЛОВ - РЕЗЕРВНЫЙ
-func find_propellers_by_node_name(node: Node):
-	for child in node.get_children():
-		if child is Node3D:
-			var node_name = child.name.to_lower()
-			
-			# Ищем узлы с именами содержащими propeller
-			if "propeller" in node_name:
-				if not propellers.has(child):
-					propellers.append(child)
-					print("✅ Найден пропеллер по имени узла: ", child.name)
-			
-			# Рекурсивно проверяем детей
-			find_propellers_by_node_name(child)
-
-# ОСТОРОЖНЫЙ ПОИСК ПО СТРУКТУРЕ
-func find_propellers_by_careful_structure():
-	print("🔍 Осторожный поиск по структуре...")
-	
-	# Собираем только Node3D с мешами
-	var nodes_with_meshes = []
-	find_nodes_with_meshes(self, nodes_with_meshes)
-	
-	# Фильтруем по характерным признакам пропеллеров
-	for node in nodes_with_meshes:
-		if is_likely_propeller(node):
-			if not propellers.has(node):
-				propellers.append(node)
-				print("✅ Найден вероятный пропеллер: ", node.name)
-
-func find_nodes_with_meshes(node: Node, collection: Array):
-	for child in node.get_children():
-		if child is Node3D:
-			# Проверяем, есть ли у этого Node3D меши
-			if has_mesh_children(child):
-				collection.append(child)
-			find_nodes_with_meshes(child, collection)
-
-func has_mesh_children(node: Node3D) -> bool:
-	for child in node.get_children():
-		if child is MeshInstance3D:
+# ПРОВЕРКА НАЛИЧИЯ КОЛЛИЗИИ
+func has_collision() -> bool:
+	for child in get_children():
+		if child is CollisionShape3D:
 			return true
 	return false
 
-func is_likely_propeller(node: Node3D) -> bool:
-	# Пропеллеры обычно маленькие
-	if node.scale.length() > 2.0:
-		return false
+# СПЕЦИАЛЬНЫЙ ПОИСК ДЛЯ КВАДРОКОПТЕРА (4 ПРОПЕЛЛЕРА)
+func find_propellers_for_quadcopter():
+	propellers.clear()
+	await get_tree().create_timer(0.2).timeout
 	
-	# Пропеллеры обычно расположены на некотором расстоянии от центра
-	var distance_from_center = node.global_position.distance_to(global_position)
-	if distance_from_center < 0.5 or distance_from_center > 10.0:
-		return false
+	print("🎯 Специальный поиск пропеллеров для квадрокоптера...")
 	
-	# Пропеллеры обычно имеют вращательную симметрию
-	# (это сложно проверить, поэтому пропускаем)
+	# Метод 1: Поиск по именам и структуре
+	find_propellers_by_quadcopter_structure(self)
 	
-	return true
+	# Метод 2: Если нашли не 4 пропеллера, используем альтернативный метод
+	if propellers.size() != 4:
+		print("⚠️ Найдено ", propellers.size(), " пропеллеров вместо 4, используем альтернативный поиск")
+		find_propellers_alternative_quadcopter()
+	
+	# Метод 3: Если все еще не 4, ищем по характерным признакам
+	if propellers.size() != 4:
+		print("⚠️ Все еще не 4 пропеллера, используем точный поиск по характеристикам")
+		find_propellers_by_exact_characteristics()
+	
+	print("✅ Финальный результат: ", propellers.size(), " пропеллеров")
+	
+	# Отладочная информация
+	for i in range(propellers.size()):
+		var prop = propellers[i]
+		print("   Пропеллер ", i + 1, ": ", prop.name, " (расстояние: ", prop.global_position.distance_to(global_position), ")")
 
-# ЗАПУСК ПРОПЕЛЛЕРОВ
+# ПОИСК ПО СТРУКТУРЕ КВАДРОКОПТЕРА
+func find_propellers_by_quadcopter_structure(node: Node):
+	for child in node.get_children():
+		if child is Node3D:
+			# Проверяем, является ли этот узел пропеллером квадрокоптера
+			if is_quadcopter_propeller(child):
+				var meshes = find_propeller_meshes(child)
+				for mesh in meshes:
+					if not propellers.has(mesh):
+						propellers.append(mesh)
+						print("✅ Найден пропеллер квадрокоптера: ", child.name, " -> ", mesh.name)
+			
+			# Рекурсивный поиск
+			find_propellers_by_quadcopter_structure(child)
+
+# ХАРАКТЕРНЫЕ ПРИЗНАКИ ПРОПЕЛЛЕРА КВАДРОКОПТЕРА
+func is_quadcopter_propeller(node: Node3D) -> bool:
+	var node_name = node.name.to_lower()
+	
+	# Признак 1: Имя содержит propeller, rotor, blade или винт
+	var has_propeller_name = (
+		"propeller" in node_name or 
+		"rotor" in node_name or 
+		"blade" in node_name or
+		"винт" in node_name or
+		"пропеллер" in node_name
+	)
+	
+	# Признак 2: Расположение на характерных позициях квадрокоптера
+	var is_on_quadcopter_position = is_on_quadcopter_arm(node.global_position)
+	
+	# Признак 3: Расстояние от центра - пропеллеры на периферии
+	var distance_from_center = node.global_position.distance_to(global_position)
+	var is_on_periphery = distance_from_center > 5.0 and distance_from_center < 15.0
+	
+	# Признак 4: Высота - пропеллеры обычно выше центра
+	var is_above_center = node.global_position.y > global_position.y + 0.5
+	
+	# Для квадрокоптера должны выполняться минимум 3 признака
+	var score = 0
+	if has_propeller_name: score += 2
+	if is_on_quadcopter_position: score += 2
+	if is_on_periphery: score += 1
+	if is_above_center: score += 1
+	
+	return score >= 3
+
+# ПРОВЕРКА РАСПОЛОЖЕНИЯ НА ЛУЧАХ КВАДРОКОПТЕРА
+func is_on_quadcopter_arm(position: Vector3) -> bool:
+	var local_pos = position - global_position
+	local_pos.y = 0  # Игнорируем высоту
+	
+	var angle = atan2(local_pos.z, local_pos.x)
+	var distance = local_pos.length()
+	
+	# Квадрокоптер имеет 4 луча под углами 45°, 135°, 225°, 315°
+	var quadcopter_angles = [PI/4, 3*PI/4, 5*PI/4, 7*PI/4]
+	
+	for target_angle in quadcopter_angles:
+		var angle_diff = abs(angle - target_angle)
+		angle_diff = min(angle_diff, 2*PI - angle_diff)
+		
+		# Допуск ±15 градусов
+		if angle_diff < PI/12 and distance > 6.0 and distance < 12.0:
+			return true
+	
+	return false
+
+# ПОИСК МЕШЕЙ ПРОПЕЛЛЕРОВ В УЗЛЕ
+func find_propeller_meshes(node: Node3D) -> Array[MeshInstance3D]:
+	var meshes: Array[MeshInstance3D] = []
+	
+	for child in node.get_children():
+		if child is MeshInstance3D:
+			# Проверяем, что это именно пропеллер (а не двигатель или рама)
+			if is_propeller_mesh(child):
+				meshes.append(child)
+	
+	return meshes
+
+# ПРИЗНАКИ МЕША ПРОПЕЛЛЕРА
+func is_propeller_mesh(mesh: MeshInstance3D) -> bool:
+	# Пропеллеры обычно:
+	# - Имеют тонкую плоскую форму
+	# - Расположены выше других деталей
+	# - Имеют характерную форму лопастей
+	
+	# Проверяем масштаб - пропеллеры обычно плоские (маленький scale.y)
+	var is_flat = mesh.scale.y < 0.5
+	
+	# Проверяем положение - пропеллеры обычно выше других деталей двигателя
+	var is_high = mesh.global_position.y > global_position.y + 1.0
+	
+	# Проверяем имя меша
+	var mesh_name = ""
+	if mesh.mesh:
+		mesh_name = mesh.mesh.resource_name.to_lower()
+	var has_propeller_mesh_name = (
+		"propeller" in mesh_name or 
+		"blade" in mesh_name or
+		"винт" in mesh_name
+	)
+	
+	return (is_flat and is_high) or has_propeller_mesh_name
+
+# АЛЬТЕРНАТИВНЫЙ ПОИСК ДЛЯ КВАДРОКОПТЕРА
+func find_propellers_alternative_quadcopter():
+	print("🔍 Альтернативный поиск для квадрокоптера...")
+	
+	# Ищем все меши в сцене
+	var all_meshes: Array[MeshInstance3D] = []
+	find_all_mesh_instances(self, all_meshes)
+	
+	# Фильтруем по характерным признакам пропеллеров квадрокоптера
+	var candidate_propellers: Array[MeshInstance3D] = []
+	
+	for mesh in all_meshes:
+		if is_quadcopter_propeller_mesh(mesh):
+			candidate_propellers.append(mesh)
+	
+	# Если нашли 4 кандидата - отлично!
+	if candidate_propellers.size() == 4:
+		propellers = candidate_propellers
+		print("✅ Найдено 4 пропеллера альтернативным методом")
+	else:
+		# Иначе берем 4 самых подходящих
+		candidate_propellers.sort_custom(sort_propellers_by_suitability)
+		propellers = candidate_propellers.slice(0, min(4, candidate_propellers.size()))
+		print("✅ Выбрано ", propellers.size(), " наиболее подходящих пропеллеров")
+
+# ХАРАКТЕРНЫЕ ПРИЗНАКИ МЕША ПРОПЕЛЛЕРА КВАДРОКОПТЕРА
+func is_quadcopter_propeller_mesh(mesh: MeshInstance3D) -> bool:
+	var distance = mesh.global_position.distance_to(global_position)
+	var is_on_periphery = distance > 6.0 and distance < 12.0
+	
+	var is_flat = mesh.scale.y < 0.3  # Очень плоский
+	var is_high = mesh.global_position.y > global_position.y + 1.5  # Высоко расположен
+	
+	var is_on_arm = is_on_quadcopter_arm(mesh.global_position)
+	
+	return is_on_periphery and is_flat and is_high and is_on_arm
+
+# СОРТИРОВКА ПРОПЕЛЛЕРОВ ПО ПОДХОДЯЩЕСТИ
+func sort_propellers_by_suitability(a: MeshInstance3D, b: MeshInstance3D) -> bool:
+	# Более подходящие пропеллеры: более плоские, выше, на правильных позициях
+	var score_a = calculate_propeller_score(a)
+	var score_b = calculate_propeller_score(b)
+	return score_a > score_b
+
+func calculate_propeller_score(mesh: MeshInstance3D) -> float:
+	var score = 0.0
+	
+	# Плоскость (чем более плоский, тем лучше)
+	score += (1.0 - min(mesh.scale.y, 1.0)) * 10
+	
+	# Высота (чем выше, тем лучше)
+	score += max(0, mesh.global_position.y - global_position.y) * 5
+	
+	# Положение на луче (чем ближе к идеальной позиции, тем лучше)
+	if is_on_quadcopter_arm(mesh.global_position):
+		score += 20
+	
+	# Расстояние (оптимальное расстояние 8-10 единиц)
+	var distance = mesh.global_position.distance_to(global_position)
+	var distance_score = 1.0 - abs(distance - 9.0) / 9.0  # 9.0 - идеальное расстояние
+	score += distance_score * 10
+	
+	return score
+
+# ТОЧНЫЙ ПОИСК ПО ХАРАКТЕРИСТИКАМ
+func find_propellers_by_exact_characteristics():
+	print("🎯 Точный поиск по характеристикам...")
+	
+	# Создаем список всех мешей
+	var all_meshes: Array[MeshInstance3D] = []
+	find_all_mesh_instances(self, all_meshes)
+	
+	# Ищем 4 меша, которые наиболее соответствуют пропеллерам квадрокоптера
+	var best_propellers: Array[MeshInstance3D] = []
+	
+	for mesh in all_meshes:
+		var score = calculate_propeller_score(mesh)
+		
+		# Если счет высокий, добавляем в кандидаты
+		if score > 15.0:
+			best_propellers.append(mesh)
+	
+	# Сортируем по убыванию счета
+	best_propellers.sort_custom(sort_propellers_by_suitability)
+	
+	# Берем только 4 лучших
+	propellers = best_propellers.slice(0, min(4, best_propellers.size()))
+	
+	print("✅ Найдено ", propellers.size(), " пропеллеров точным поиском")
+
+# ПОИСК ВСЕХ MESHINSTANCE3D В СЦЕНЕ
+func find_all_mesh_instances(node: Node, collection: Array[MeshInstance3D]):
+	for child in node.get_children():
+		if child is MeshInstance3D:
+			collection.append(child)
+		find_all_mesh_instances(child, collection)
+
+# ЗАПУСК ПРОПЕЛЛЕРОВ С ПЛАВНЫМ РАЗГОНОМ
 func start_propellers():
 	if is_propellers_rotating:
 		return
 	
 	is_propellers_rotating = true
-	propeller_rotation_speed = 360.0
+	target_propeller_speed = max_propeller_speed
 	print("🌀 Запуск вращения ", propellers.size(), " пропеллеров")
 
-# ОСТАНОВКА ПРОПЕЛЛЕРОВ
+# ОСТАНОВКА ПРОПЕЛЛЕРОВ С ПЛАВНЫМ ЗАМЕДЛЕНИЕМ
 func stop_propellers():
 	if not is_propellers_rotating:
 		return
 	
 	is_propellers_rotating = false
-	propeller_rotation_speed = 0.0
+	target_propeller_speed = 0.0
 	print("🛑 Остановка вращения пропеллеров")
 
-# ВРАЩЕНИЕ ПРОПЕЛЛЕРОВ
+# ВРАЩЕНИЕ ПРОПЕЛЛЕРОВ С ПЛАВНЫМ ИЗМЕНЕНИЕМ СКОРОСТИ
 func _process(delta):
-	if is_propellers_rotating:
+	# Плавное изменение скорости пропеллеров
+	if current_propeller_speed < target_propeller_speed:
+		# Разгон
+		current_propeller_speed += propeller_acceleration * delta
+		current_propeller_speed = min(current_propeller_speed, target_propeller_speed)
+	elif current_propeller_speed > target_propeller_speed:
+		# Замедление
+		current_propeller_speed -= propeller_deceleration * delta
+		current_propeller_speed = max(current_propeller_speed, target_propeller_speed)
+	
+	# Вращаем пропеллеры с текущей скоростью
+	if current_propeller_speed > 0:
 		for propeller in propellers:
 			if is_instance_valid(propeller):
-				propeller.rotate_y(deg_to_rad(propeller_rotation_speed * delta))
+				propeller.rotate_y(deg_to_rad(current_propeller_speed * delta))
 
 # ОСТАЛЬНЫЕ ФУНКЦИИ БЕЗ ИЗМЕНЕНИЙ
 func set_boundaries(min_bound: Vector3, max_bound: Vector3):
@@ -203,14 +369,14 @@ func execute_sequence(sequence: Array):
 	print("🚀 Запуск программы дрона из ", sequence.size(), " команд")
 	is_executing = true
 	
-	# ЗАПУСКАЕМ ПРОПЕЛЛЕРЫ
+	# ЗАПУСКАЕМ ПРОПЕЛЛЕРЫ С ПЛАВНЫМ РАЗГОНОМ
 	start_propellers()
 	start_position = global_position
 	
 	var success = await execute_actions(sequence)
 	is_executing = false
 	
-	# ОСТАНАВЛИВАЕМ ПРОПЕЛЛЕРЫ
+	# ОСТАНАВЛИВАЕМ ПРОПЕЛЛЕРЫ С ПЛАВНЫМ ЗАМЕДЛЕНИЕМ
 	stop_propellers()
 	
 	if not success:

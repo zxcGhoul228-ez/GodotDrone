@@ -1,8 +1,6 @@
-res://create_drone/create_dron.gd
+res://DroneScene.gd
 res://create_drone/create_dron.tscn
+res://create_drone/create_dron.gd
 res://DroneLevels/DroneScene.tscn
 res://DroneLevels/Drone.gd
-res://materials/propeller_material.tres
-res://create_drone/scripts/propeller_rotation.gd
-res://create_drone/components/propeller1.tscn
-res://create_drone/components/motor1.tscn
+res://DroneLevels/levels/Level1.gd
