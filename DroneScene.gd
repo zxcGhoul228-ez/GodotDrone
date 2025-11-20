@@ -9,6 +9,7 @@ const GRID_CELLS_COUNT = 32
 @onready var block_ui = $UI/BlockProgramming
 @onready var programming_button = $UI/Control/ProgrammingButton
 
+
 # Таймер переменные
 var timer_ui: CanvasLayer
 var timer_label: Label
@@ -64,6 +65,7 @@ var preview_color: Color = Color(0.2, 0.6, 1.0, 0.4)
 var preview_material: StandardMaterial3D
 
 func _ready():
+	create_wooden_floor()
 	var room_scene = load("res://room3d/source/Untitled1.glb")
 	# Корректировка масштаба
 	camera.far = 100000.0  # Вместо стандартных 100
@@ -716,41 +718,79 @@ func create_grid():
 	
 	print("✅ Сетка создана: ", GRID_CELLS_COUNT, "x", GRID_CELLS_COUNT, " клеток")
 
+# Замени функцию create_table():
 func create_table():
-	print("🔧 Создаем стол с длинными ножками...")
+	print("🔧 Создаем красивый игровой стол...")
 	
 	var table_node = MeshInstance3D.new()
 	table_node.name = "GameTable"
 	
-	var table_width = 1024 + 200
-	var table_depth = 1024 + 200
-	var table_height = 20
+	# Размеры стола
+	var table_width = GRID_CELLS_COUNT * GRID_SIZE + 100
+	var table_depth = GRID_CELLS_COUNT * GRID_SIZE + 100
+	var table_height = 15
 	
 	var table_mesh = BoxMesh.new()
 	table_mesh.size = Vector3(table_width, table_height, table_depth)
 	table_node.mesh = table_mesh
 	
-	table_node.position = Vector3(0, -table_height/2 - 5, 0)
+	table_node.position = Vector3(0, -table_height/2 - 2, 0)
 	
+	# Создаем красивый материал для стола
 	var table_material = StandardMaterial3D.new()
-	table_material.albedo_color = Color(0.4, 0.2, 0.1)
-	table_material.roughness = 0.8
+	table_material.albedo_color = Color(0.3, 0.2, 0.1)
+	table_material.roughness = 0.7
 	table_material.metallic = 0.1
 	
+	# Пробуем загрузить деревянную текстуру
 	var wood_texture = load("res://room3d/textures/wood.jpg")
 	if wood_texture:
 		table_material.albedo_texture = wood_texture
-		table_material.uv1_scale = Vector3(8, 1, 8)
+		table_material.uv1_scale = Vector3(4, 4, 4)
+		table_material.roughness_texture = wood_texture
+		table_material.metallic_texture = wood_texture
 	
 	table_node.material_override = table_material
 	
 	add_child(table_node)
 	table_node.owner = get_tree().edited_scene_root
 	
-	# Вызов функции создания длинных ножек
-	create_table_legs_long(table_width, table_depth, table_height)
+	# Создаем стильные ножки
+	create_modern_table_legs(table_width, table_depth, table_height)
 	
-	print("✅ Стол с длинными ножками создан")
+	print("✅ Красивый стол создан")
+
+func create_modern_table_legs(table_width: float, table_depth: float, table_height: float):
+	var leg_height = 80
+	var leg_thickness = 12
+	
+	var leg_material = StandardMaterial3D.new()
+	leg_material.albedo_color = Color(0.15, 0.15, 0.15)
+	leg_material.roughness = 0.8
+	leg_material.metallic = 0.3
+	
+	var leg_positions = [
+		Vector3(-table_width/2 + leg_thickness, -table_height/2 - leg_height/2, -table_depth/2 + leg_thickness),
+		Vector3(table_width/2 - leg_thickness, -table_height/2 - leg_height/2, -table_depth/2 + leg_thickness),
+		Vector3(-table_width/2 + leg_thickness, -table_height/2 - leg_height/2, table_depth/2 - leg_thickness),
+		Vector3(table_width/2 - leg_thickness, -table_height/2 - leg_height/2, table_depth/2 - leg_thickness)
+	]
+	
+	for i in range(4):
+		var leg = MeshInstance3D.new()
+		leg.name = "ModernTableLeg_" + str(i)
+		
+		var leg_mesh = CylinderMesh.new()
+		leg_mesh.top_radius = leg_thickness / 2
+		leg_mesh.bottom_radius = leg_thickness / 2
+		leg_mesh.height = leg_height
+		leg.mesh = leg_mesh
+		leg.material_override = leg_material
+		
+		leg.position = leg_positions[i]
+		
+		add_child(leg)
+		leg.owner = get_tree().edited_scene_root
 
 func create_table_legs_long(table_width: float, table_depth: float, table_height: float):
 	var leg_size = Vector3(40, 4000, 40)
@@ -791,66 +831,143 @@ func create_grid_line(from: Vector3, to: Vector3, material: Material, thickness:
 	$Grid.add_child(mesh_instance)
 	mesh_instance.owner = get_tree().edited_scene_root
 
+
+func create_highlight_shader() -> Shader:
+	var shader_code = """
+	shader_type spatial;
+	render_mode unshaded, blend_add;
+	
+	uniform vec4 highlight_color;
+	uniform float pulse_speed;
+	
+	void fragment() {
+		float time = TIME * pulse_speed;
+		float pulse = (sin(time) + 1.0) * 0.5;
+		float alpha = highlight_color.a * (0.7 + 0.3 * pulse);
+		
+		// Плавное затухание к краям
+		vec2 uv = UV - 0.5;
+		float edge_fade = 1.0 - smoothstep(0.3, 0.5, length(uv));
+		
+		ALBEDO = highlight_color.rgb;
+		ALPHA = alpha * edge_fade;
+	}
+	"""
+	
+	var shader = Shader.new()
+	shader.code = shader_code
+	return shader
+
+# Обнови позицию подсветки в update_grid_highlight():
+
+
+# В # В DroneScene.gd замени функцию create_grid_highlight():
 func create_grid_highlight():
 	var box_mesh = BoxMesh.new()
-	box_mesh.size = Vector3(GRID_SIZE * 0.9, 0.2, GRID_SIZE * 0.9)
+	box_mesh.size = Vector3(GRID_SIZE * 0.9, 0.1, GRID_SIZE * 0.9)
 	highlight_mesh = MeshInstance3D.new()
 	highlight_mesh.mesh = box_mesh
-	highlight_mesh.position = Vector3.ZERO
+	
+	# Создаем красивый материал для подсветки
 	var highlight_material = StandardMaterial3D.new()
-	highlight_material.flags_unshaded = true
 	highlight_material.flags_transparent = true
-	highlight_material.albedo_color = highlight_color
+	highlight_material.albedo_color = HIGHLIGHT_COLOR_NORMAL
+	highlight_material.emission_enabled = true
+	highlight_material.emission = HIGHLIGHT_COLOR_NORMAL * 0.6
+	highlight_material.metallic = 0.2
+	highlight_material.roughness = 0.1
+	
 	highlight_mesh.material_override = highlight_material
 	grid_highlight.add_child(highlight_mesh)
 	highlight_mesh.owner = get_tree().edited_scene_root
-	grid_highlight.position = Vector3.ZERO
 	grid_highlight.visible = false
+	
+	# Плавная анимация пульсации
+	var tween = create_tween()
+	tween.set_loops()
+	tween.tween_property(highlight_mesh.material_override, "albedo_color:a", 0.7, 1.5)
+	tween.tween_property(highlight_mesh.material_override, "emission", HIGHLIGHT_COLOR_NORMAL * 0.8, 0.75)
+	tween.tween_property(highlight_mesh.material_override, "albedo_color:a", 0.3, 1.5)
+	tween.tween_property(highlight_mesh.material_override, "emission", HIGHLIGHT_COLOR_NORMAL * 0.3, 0.75)
 
+# Обнови константы цветов:
+const HIGHLIGHT_COLOR_NORMAL = Color(0.2, 0.6, 1.0, 0.5)
+const HIGHLIGHT_COLOR_WARNING = Color(1.0, 0.2, 0.2, 0.6)
+const TRAIL_COLOR = Color(0.2, 0.5, 0.9, 0.4)
+
+# В update_grid_highlight() обнови позицию:
 func update_grid_highlight():
 	if not current_drone or not grid_highlight:
 		return
+	
 	var drone_pos = current_drone.global_position
 	
-	# Проверяем, находится ли дрон в пределах сетки
 	if is_position_within_bounds(drone_pos):
-		grid_highlight.global_position = Vector3(drone_pos.x, 0.1, drone_pos.z)
+		grid_highlight.global_position = Vector3(drone_pos.x, 0.15, drone_pos.z)
 		grid_highlight.visible = true
-		highlight_mesh.material_override.albedo_color = highlight_color
+		highlight_mesh.material_override.albedo_color = HIGHLIGHT_COLOR_NORMAL
+		highlight_mesh.material_override.emission = HIGHLIGHT_COLOR_NORMAL * 0.6
 	else:
-		# Подсветка красным, если дрон за пределами
-		grid_highlight.global_position = Vector3(drone_pos.x, 0.1, drone_pos.z)
+		grid_highlight.global_position = Vector3(drone_pos.x, 0.15, drone_pos.z)
 		grid_highlight.visible = true
-		highlight_mesh.material_override.albedo_color = Color(1, 0, 0, 0.6)
+		highlight_mesh.material_override.albedo_color = HIGHLIGHT_COLOR_WARNING
+		highlight_mesh.material_override.emission = HIGHLIGHT_COLOR_WARNING * 0.8
 	
 	var new_cell_position = Vector3(drone_pos.x, 0, drone_pos.z)
 	if new_cell_position != current_cell_position and current_cell_position != Vector3.ZERO:
 		create_trail_marker(current_cell_position)
 	current_cell_position = new_cell_position
-
+func create_wooden_floor():
+	var floor_node = $Floor  # или путь к вашему узлу Floor
+	
+	if floor_node:
+		var mesh_instance = floor_node.get_node("MeshInstance3D")
+		if mesh_instance:
+			# Создаем красивый деревянный материал
+			var floor_material = StandardMaterial3D.new()
+			floor_material.albedo_color = Color(0.35, 0.25, 0.15)
+			floor_material.metallic = 0.1
+			floor_material.roughness = 0.7
+			
+			# Пробуем загрузить деревянную текстуру
+			var wood_texture = load("res://room3d/textures/wood.jpg")
+			if wood_texture:
+				floor_material.albedo_texture = wood_texture
+				# Настраиваем масштаб текстуры для хорошего размера
+				floor_material.uv1_scale = Vector3(16, 16, 16)
+			
+			
+			mesh_instance.material_override = floor_material
+			print("✅ Деревянный пол создан")
+# Улучшенная функция создания следов:
 func create_trail_marker(position: Vector3):
-	# Создаем след только если позиция в пределах сетки
 	if not is_position_within_bounds(position):
 		return
 	
 	var trail_mesh = MeshInstance3D.new()
 	add_child(trail_mesh)
 	trail_mesh.owner = get_tree().edited_scene_root
-	trail_mesh.global_position = Vector3(position.x, 0.05, position.z)
+	trail_mesh.global_position = Vector3(position.x, 0.08, position.z)
+	
 	var box_mesh = BoxMesh.new()
-	box_mesh.size = Vector3(GRID_SIZE * 0.8, 0.1, GRID_SIZE * 0.8)
+	box_mesh.size = Vector3(GRID_SIZE * 0.7, 0.08, GRID_SIZE * 0.7)
 	trail_mesh.mesh = box_mesh
+	
 	var trail_material = StandardMaterial3D.new()
 	trail_material.flags_unshaded = true
 	trail_material.flags_transparent = true
-	trail_material.albedo_color = trail_color
+	trail_material.albedo_color = TRAIL_COLOR
 	trail_mesh.material_override = trail_material
+	
 	trail_meshes.append(trail_mesh)
+	
 	if trail_meshes.size() > max_trail_length:
 		var oldest_trail = trail_meshes.pop_front()
 		if is_instance_valid(oldest_trail):
 			oldest_trail.queue_free()
+	
 	start_trail_fade(trail_mesh)
+
 
 func start_trail_fade(trail_mesh: MeshInstance3D):
 	var trail_index = trail_meshes.find(trail_mesh)

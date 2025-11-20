@@ -224,7 +224,7 @@ func update_buttons_state():
 		
 		if product_name in Global.purchased_items:
 			button.disabled = true
-			button.modulate = Color.GRAY
+			button.modulate = Color(0.779, 0.479, 0.461, 1.0)
 			set_button_text(button, "%s\nКуплено" % product_name)
 		else:
 			button.disabled = false

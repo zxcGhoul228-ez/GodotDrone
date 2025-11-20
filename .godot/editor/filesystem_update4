@@ -1,2 +1,3 @@
-res://shop/shop.gd
-res://shop/shop.tscn
+res://main_scene.tscn
+res://main_script.gd
+res://new_script.gd

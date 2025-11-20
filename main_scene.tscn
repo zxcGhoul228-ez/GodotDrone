@@ -1,6 +1,6 @@
 [gd_scene load_steps=5 format=3 uid="uid://bofqavxfukbhw"]
 
-[ext_resource type="Script" uid="uid://c5ysr8nbyv0jp" path="res://new_script.gd" id="1_2c62f"]
+[ext_resource type="Script" uid="uid://c5oh5mlxm5aeu" path="res://main_script.gd" id="1_d5x1h"]
 [ext_resource type="Texture2D" uid="uid://cl438cesrvewg" path="res://bg/main_menu.png" id="2_gyfs4"]
 [ext_resource type="AudioStream" uid="uid://cs4ongwwq0ht" path="res://C418_-_Key_30921622.mp3" id="3_gyfs4"]
 [ext_resource type="FontFile" uid="uid://cjkejlnbt8pdg" path="res://fonts/Zerove/Zerove-Regular.otf" id="4_d5x1h"]
@@ -16,7 +16,7 @@ offset_right = 1920.0
 offset_bottom = 1080.0
 grow_horizontal = 2
 grow_vertical = 2
-script = ExtResource("1_2c62f")
+script = ExtResource("1_d5x1h")
 audio_player = NodePath("AudioStreamPlayer")
 score_label = NodePath("VBoxContainer/HBoxContainer/ScoreLabel")
 

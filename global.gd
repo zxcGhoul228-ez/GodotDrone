@@ -1,67 +1,112 @@
-# global.gd
+# Global.gd
 extends Node
-var purchased_items = []
+
+# Игровые данные
+var purchased_items = ["Рама1", "Плата1", "Мотор1", "Пропеллер1"]
 var score = 100
 static var drone_data = {}
 var current_level: int = 1
 var levels_unlocked: int = 1
 var levels_data: Dictionary = {}
 
-func has_item(item_name):
-	return item_name in purchased_items
+# Система загрузки
+var loading_screen: Control = null
 
-func get_purchased_items():
-	return purchased_items.duplicate() 
+func _ready():
+	print("=== GLOBAL INIT ===")
+	load_levels_data()
+	print("Уровней разблокировано: ", levels_unlocked)
 
-# Новая функция: проверка доступности детали по типу и названию
+# ФУНКЦИЯ ЗАГРУЗКИ ДЛЯ ИГРОВЫХ УРОВНЕЙ И СОЗДАНИЯ ДРОНА
+func load_scene_with_loading(scene_path: String):
+	print("🌐 Начинаем загрузку: ", scene_path)
+	
+	# Показываем экран загрузки
+	var screen = show_loading_screen()
+	
+	# Ждем один кадр чтобы экран показался
+	await get_tree().process_frame
+	
+	# Медленная имитация прогресса
+	await slow_progress_simulation(scene_path, screen)
+
+func slow_progress_simulation(scene_path: String, screen: Control):
+	var progress = 0.0
+	
+	# Медленно проходим прогресс до 80%
+	while progress < 0.8:
+		progress += 0.04
+		screen.set_progress(progress)
+		await get_tree().create_timer(0.15).timeout
+	
+	# Переходим к быстрой загрузке
+	screen.set_progress(0.9)
+	screen.update_loading_text("Завершение...")
+	
+	# Короткая пауза перед загрузкой
+	await get_tree().create_timer(0.5).timeout
+	
+	# Загружаем сцену
+	_direct_scene_load(scene_path)
+
+func show_loading_screen() -> Control:
+	if not loading_screen:
+		var loading_scene = preload("res://UI/LoadingScreen.tscn")
+		loading_screen = loading_scene.instantiate()
+		get_tree().root.add_child(loading_screen)
+		loading_screen.start_loading()
+	return loading_screen
+
+func hide_loading_screen():
+	if loading_screen:
+		loading_screen.queue_free()
+		loading_screen = null
+
+func _direct_scene_load(scene_path: String):
+	print("🔄 Прямая загрузка сцены...")
+	
+	if FileAccess.file_exists(scene_path):
+		get_tree().change_scene_to_file(scene_path)
+	else:
+		print("❌ Файл не найден: ", scene_path)
+		get_tree().change_scene_to_file("res://DroneLevels/DroneScene.tscn")
+	
+	hide_loading_screen()
+
+# Остальные функции без изменений...
 func is_component_available(component_type: String, component_name: String) -> bool:
-	# Бусты всегда доступны
 	if component_name.begins_with("Буст"):
 		return true
-	
-	# Проверяем, куплена ли деталь
 	return component_name in purchased_items
 
-# Новая функция: получение всех доступных деталей определенного типа
 func get_available_components(component_names: Array) -> Array:
 	var available = []
 	for name in component_names:
-		if is_component_available("", name):  # Тип не важен для базовой проверки
+		if is_component_available("", name):
 			available.append(name)
 	return available
-
-func _ready():
-	print("=== GLOBAL.GD INIT ===")
-	load_levels_data()
-	
-	# Добавляем базовые детали, если их нет
-	if purchased_items.is_empty():
-		purchased_items = ["Рама1", "Плата1", "Мотор1", "Пропеллер1"]
-		print("Добавлены базовые детали: ", purchased_items)
-	
-	print("Данные уровней загружены. Разблокировано уровней: ", levels_unlocked)
 
 func initialize_levels_data():
 	levels_data = {}
 	for i in range(1, 16):
-		levels_data[str(i)] = {  # Сохраняем как СТРОКИ
+		levels_data[str(i)] = {
 			"unlocked": i == 1,
-			"completed": false, 
-			"best_steps": 0, 
+			"completed": false,
+			"best_steps": 0,
 			"stars": 0
 		}
 
 func complete_level(level_number: int, steps: int, stars: int):
-	var level_key = str(level_number)  # Конвертируем в строку
+	var level_key = str(level_number)
 	if level_key in levels_data:
 		levels_data[level_key]["completed"] = true
 		if steps < levels_data[level_key]["best_steps"] or levels_data[level_key]["best_steps"] == 0:
 			levels_data[level_key]["best_steps"] = steps
-		if stars > levels_data[level_key]["stars"]:
-			levels_data[level_key]["stars"] = stars
+		levels_data[level_key]["stars"] = stars
 		
 		if level_number < 15:
-			levels_data[str(level_number + 1)]["unlocked"] = true
+			var next_key = str(level_number + 1)
+			levels_data[next_key]["unlocked"] = true
 			if level_number + 1 > levels_unlocked:
 				levels_unlocked = level_number + 1
 		
@@ -80,7 +125,6 @@ func load_levels_data():
 		var error = json.parse(file.get_as_text())
 		if error == OK:
 			levels_data = json.data
-			# Обновляем levels_unlocked
 			levels_unlocked = 1
 			for level in range(1, 16):
 				if str(level) in levels_data and levels_data[str(level)]["unlocked"]:
@@ -89,29 +133,20 @@ func load_levels_data():
 					break
 		else:
 			initialize_levels_data()
-		file.close()
 	else:
 		initialize_levels_data()
 
-# Безопасные методы доступа - теперь работают со строками
 func is_level_unlocked(level_number: int) -> bool:
 	return str(level_number) in levels_data and levels_data[str(level_number)]["unlocked"]
 
-func get_level_stars(level_number: int) -> int:
-	var level_key = str(level_number)
-	if level_key in levels_data:
-		return levels_data[level_key]["stars"]
-	return 0
-
-func get_level_best_steps(level_number: int) -> int:
-	var level_key = str(level_number)
-	if level_key in levels_data:
-		return levels_data[level_key]["best_steps"]
-	return 0
-
-# Новый метод для получения данных уровня
 func get_level_data(level_number: int) -> Dictionary:
 	var level_key = str(level_number)
 	if level_key in levels_data:
-		return levels_data[level_key].duplicate()  # Возвращаем копию
+		return levels_data[level_key].duplicate()
 	return {}
+
+func has_item(item_name: String) -> bool:
+	return item_name in purchased_items
+
+func get_purchased_items() -> Array:
+	return purchased_items.duplicate()

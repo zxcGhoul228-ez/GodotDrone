@@ -1,0 +1,47 @@
+[gd_scene load_steps=3 format=3 uid="uid://bnw4x54w430ar"]
+
+[ext_resource type="Script" uid="uid://dtuhmkhtm3msf" path="res://UI/LoadingScreen.gd" id="1_g05t5"]
+[ext_resource type="Texture2D" uid="uid://cl438cesrvewg" path="res://bg/main_menu.png" id="2_87264"]
+
+[node name="LoadingScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_g05t5")
+
+[node name="Background" type="TextureRect" parent="."]
+layout_mode = 0
+offset_right = 1920.0
+offset_bottom = 1080.0
+texture = ExtResource("2_87264")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="."]
+layout_mode = 1
+offset_left = 95.0
+offset_top = 153.0
+offset_right = 661.0
+offset_bottom = 950.0
+theme_override_constants/separation = 619
+alignment = 1
+
+[node name="CenterContainer" type="CenterContainer" parent="VBoxContainer"]
+layout_mode = 2
+
+[node name="LoadingText" type="Label" parent="VBoxContainer/CenterContainer"]
+layout_mode = 2
+size_flags_horizontal = 0
+size_flags_vertical = 6
+size_flags_stretch_ratio = 0.0
+theme_override_colors/font_color = Color(0.20315853, 0.11120742, 0.18597332, 1)
+theme_override_font_sizes/font_size = 36
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ProgressBar" type="ProgressBar" parent="VBoxContainer"]
+layout_mode = 2
+size_flags_vertical = 1
+theme_override_font_sizes/font_size = 56
+step = 1.0
