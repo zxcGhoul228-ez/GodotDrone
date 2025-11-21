@@ -607,15 +607,21 @@ func adjust_drone_height(relative_change: float):
 	set_drone_height(new_height)
 func setup_drone(drone_node: CharacterBody3D):
 	print("🔧 Настраиваем дрон...")
-	start_point_y = 0
-	# Устанавливаем позицию с проверкой границ
+	
+	# Устанавливаем стартовую позицию
 	var start_pos = calculate_start_position()
 	if not is_position_within_bounds(start_pos):
 		start_pos = clamp_position_to_bounds(start_pos)
 		print("⚠️ Стартовая позиция скорректирована: ", start_pos)
-	start_pos.y = 0
+	
 	drone_node.global_position = start_pos
 	drone_node.scale = Vector3(3, 3, 3)
+	
+	# Устанавливаем целевую позицию (например, противоположный угол)
+	var target_pos = Vector3(GRID_SIZE * 2, 0, GRID_SIZE * 2)
+	if drone_node.has_method("set_target_position"):
+		drone_node.set_target_position(target_pos)
+		print("🎯 Установлена целевая позиция для дрона: ", target_pos)
 	
 	# Добавляем коллизию если нужно
 	add_collision_if_needed(drone_node)
@@ -634,14 +640,6 @@ func setup_drone(drone_node: CharacterBody3D):
 	if drone_node.has_method("set_boundaries"):
 		drone_node.set_boundaries(grid_boundary_min, grid_boundary_max)
 		print("✅ Границы установлены для дрона")
-	
-	# Проверяем коллизию
-	var collision_node = drone_node.get_node_or_null("CollisionShape3D")
-	if collision_node:
-		print("🚁 Коллизия дрона: ", collision_node.global_position)
-	else:
-		print("⚠️ Коллизия дрона не найдена, добавляем...")
-		add_collision_if_needed(drone_node)
 	
 	print("✅ Дрон настроен: ", drone_node.name)
 

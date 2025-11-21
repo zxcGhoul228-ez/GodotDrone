@@ -6,6 +6,7 @@ extends Panel
 var dragged_block = null
 var dragged_block_data = null
 var program_blocks = []  # Хранит {type, container, count, color}
+var is_dragging = false  # Флаг перетаскивания
 
 # Сигнал для обновления предпросмотра траектории
 signal trajectory_updated(sequence: Array)
@@ -102,6 +103,12 @@ func _on_draggable_block_gui_input(event: InputEvent, block_data: Dictionary, co
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			start_dragging(block_data, container)
 			get_viewport().set_input_as_handled()
+	
+	# Обрабатываем перемещение мыши при активном перетаскивании
+	elif event is InputEventMouseMotion and is_dragging:
+		if dragged_block:
+			set_drag_position(get_global_mouse_position())
+		get_viewport().set_input_as_handled()
 
 func start_dragging(block_data: Dictionary, original_container: Control):
 	print("🎯 Начинаем перетаскивание: ", block_data["name"])
@@ -115,6 +122,7 @@ func start_dragging(block_data: Dictionary, original_container: Control):
 	get_parent().add_child(dragged_block)
 	
 	set_drag_position(get_global_mouse_position())
+	is_dragging = true
 
 func create_drag_visual(block_data: Dictionary) -> Control:
 	var container = Control.new()
@@ -155,12 +163,8 @@ func style_box_with_shadow(color: Color) -> StyleBoxFlat:
 	return style_box
 
 func _input(event):
-	# Обновляем позицию перетаскиваемого блока
-	if dragged_block and event is InputEventMouseMotion:
-		set_drag_position(get_global_mouse_position())
-	
 	# Завершаем перетаскивание при отпускании кнопки
-	if dragged_block and event is InputEventMouseButton:
+	if is_dragging and event is InputEventMouseButton:
 		if event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
 			finish_dragging()
 			get_viewport().set_input_as_handled()
@@ -187,7 +191,9 @@ func finish_dragging():
 	dragged_block.queue_free()
 	dragged_block = null
 	dragged_block_data = null
+	is_dragging = false
 
+# Остальные функции остаются без изменений...
 func add_block_to_program(block_data: Dictionary, count: int):
 	# Убираем подсказку если она есть
 	if program_area.get_child_count() > 0 and program_area.get_child(0) is Label:

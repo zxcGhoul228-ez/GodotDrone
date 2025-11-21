@@ -7,7 +7,7 @@ var is_executing = false
 var current_tween: Tween
 var start_position: Vector3
 
-# ПРОПЕЛЛЕРЫ - ТОЧНЫЙ ПОИСК ДЛЯ КВАДРОКОПТЕРА
+# ПРОПЕЛЛЕРЫ
 var propellers: Array[MeshInstance3D] = []
 var is_propellers_rotating: bool = false
 var current_propeller_speed: float = 0.0
@@ -16,9 +16,28 @@ var propeller_acceleration: float = 180.0
 var propeller_deceleration: float = 360.0
 var max_propeller_speed: float = 720.0
 
+# Физические параметры дрона
+var drone_mass: float = 1.0
+var drone_thrust: float = 10.0
+var is_balanced: bool = true
+var missing_motors: int = 0
+
+# Силы для каждого мотора
+var motor_forces = [1.0, 1.0, 1.0, 1.0]
+var base_motor_thrust: float = 8.0
+
+# Эффекты несбалансированности
+var imbalance_force: Vector3 = Vector3.ZERO
+var imbalance_timer: float = 0.0
+const IMBALANCE_UPDATE_RATE: float = 0.5
+
 # Границы сетки
 var boundary_min: Vector3
 var boundary_max: Vector3
+
+# Целевая позиция для определения успеха
+var target_position: Vector3
+var has_target: bool = false
 
 signal program_finished(success: bool)
 signal drone_moved
@@ -35,6 +54,12 @@ func _ready():
 	find_propellers_for_quadcopter()
 	print("🚁 Дрон готов, стартовая позиция: ", vector3_to_str(start_position))
 	print("🌀 Найдено пропеллеров: ", propellers.size())
+
+# УСТАНОВКА ЦЕЛЕВОЙ ПОЗИЦИИ
+func set_target_position(target: Vector3):
+	target_position = target
+	has_target = true
+	print("🎯 Установлена целевая позиция: ", vector3_to_str(target))
 
 # ФУНКЦИЯ ДОБАВЛЕНИЯ КОЛЛИЗИИ
 func add_collision_shape():
@@ -66,7 +91,7 @@ func has_collision() -> bool:
 			return true
 	return false
 
-# СПЕЦИАЛЬНЫЙ ПОИСК ДЛЯ КВАДРОКОПТЕРА (4 ПРОПЕЛЛЕРА)
+# СПЕЦИАЛЬНЫЙ ПОИСК ДЛЯ КВАДРОКОПТЕРА (4 ПРОПЕЛЛЕРОВ)
 func find_propellers_for_quadcopter():
 	propellers.clear()
 	await get_tree().create_timer(0.2).timeout
@@ -87,11 +112,6 @@ func find_propellers_for_quadcopter():
 		find_propellers_by_exact_characteristics()
 	
 	print("✅ Финальный результат: ", propellers.size(), " пропеллеров")
-	
-	# Отладочная информация
-	for i in range(propellers.size()):
-		var prop = propellers[i]
-		print("   Пропеллер ", i + 1, ": ", prop.name, " (расстояние: ", prop.global_position.distance_to(global_position), ")")
 
 # ПОИСК ПО СТРУКТУРЕ КВАДРОКОПТЕРА
 func find_propellers_by_quadcopter_structure(node: Node):
@@ -103,7 +123,6 @@ func find_propellers_by_quadcopter_structure(node: Node):
 				for mesh in meshes:
 					if not propellers.has(mesh):
 						propellers.append(mesh)
-						print("✅ Найден пропеллер квадрокоптера: ", child.name, " -> ", mesh.name)
 			
 			# Рекурсивный поиск
 			find_propellers_by_quadcopter_structure(child)
@@ -331,16 +350,19 @@ func _process(delta):
 			if is_instance_valid(propeller):
 				propeller.rotate_y(deg_to_rad(current_propeller_speed * delta))
 
-# ОСТАЛЬНЫЕ ФУНКЦИИ БЕЗ ИЗМЕНЕНИЙ
-func set_boundaries(min_bound: Vector3, max_bound: Vector3):
-	boundary_min = min_bound
-	boundary_max = max_bound
+# ОСТАНОВКА ВЫПОЛНЕНИЯ ПРОГРАММЫ
+func stop_execution():
+	print("🛑 Выполнение программы остановлено")
+	is_executing = false
+	stop_propellers()
+	
+	if current_tween:
+		current_tween.kill()
+	
+	await return_to_start()
+	program_finished.emit(false)
 
-func can_move_to(position: Vector3) -> bool:
-	return (position.x >= boundary_min.x and position.x <= boundary_max.x and
-			position.z >= boundary_min.z and position.z <= boundary_max.z and
-			position.y >= boundary_min.y and position.y <= boundary_max.y)
-
+# ВОЗВРАТ НА СТАРТОВУЮ ПОЗИЦИЮ
 func return_to_start():
 	print("🔄 Возвращаю дрона на стартовую позицию...")
 	
@@ -357,6 +379,83 @@ func return_to_start():
 	print("✅ Дрон вернулся на стартовую позицию")
 	drone_moved.emit()
 
+# УСТАНОВКА ГРАНИЦ СЕТКИ
+func set_boundaries(min_bound: Vector3, max_bound: Vector3):
+	boundary_min = min_bound
+	boundary_max = max_bound
+
+# ПРОВЕРКА ВОЗМОЖНОСТИ ДВИЖЕНИЯ
+func can_move_to(position: Vector3) -> bool:
+	return (position.x >= boundary_min.x and position.x <= boundary_max.x and
+			position.z >= boundary_min.z and position.z <= boundary_max.z and
+			position.y >= boundary_min.y and position.y <= boundary_max.y)
+
+# НАСТРОЙКА ФИЗИКИ ДРОНА (4 аргумента)
+func setup_drone_physics(mass: float, thrust: float, balanced: bool, missing: int):
+	drone_mass = mass
+	drone_thrust = thrust
+	is_balanced = balanced
+	missing_motors = missing
+	
+	print("🚁 Физика дрона: Масса=%.1f, Тяга=%.1f, Сбалансирован=%s" % [mass, thrust, balanced])
+	
+	# Настраиваем силы моторов в зависимости от балансировки
+	if not is_balanced:
+		setup_imbalanced_motors()
+
+# НАСТРОЙКА НЕСБАЛАНСИРОВАННЫХ МОТОРОВ
+func setup_imbalanced_motors():
+	# Случайным образом уменьшаем силу отсутствующих моторов
+	for i in range(missing_motors):
+		var motor_index = randi() % 4
+		motor_forces[motor_index] = 0.0
+		print("⚠️ Мотор %d отключен!" % (motor_index + 1))
+	
+	# Для оставшихся моторов увеличиваем нагрузку
+	var active_motors = 4 - missing_motors
+	if active_motors > 0:
+		var thrust_per_motor = drone_thrust / active_motors
+		for i in range(4):
+			if motor_forces[i] > 0:
+				motor_forces[i] = thrust_per_motor / base_motor_thrust
+
+# ВЫЧИСЛЕНИЕ СИЛЫ НЕСБАЛАНСИРОВАННОСТИ
+func calculate_imbalance_force() -> Vector3:
+	if is_balanced:
+		return Vector3.ZERO
+	
+	# Генерируем силу, заваливающую дрон в сторону отсутствующих моторов
+	imbalance_timer += get_physics_process_delta_time()
+	
+	if imbalance_timer >= IMBALANCE_UPDATE_RATE:
+		imbalance_timer = 0.0
+		
+		# Сила зависит от количества отсутствующих моторов
+		var imbalance_strength = missing_motors * 2.0
+		
+		# Случайное направление заваливания
+		var random_dir = Vector3(
+			randf_range(-1.0, 1.0),
+			randf_range(-0.5, -1.0),  # Всегда немного вниз
+			randf_range(-1.0, 1.0)
+		).normalized()
+		
+		imbalance_force = random_dir * imbalance_strength
+	
+	return imbalance_force
+
+# РАСЧЕТ СКОРОСТИ ДВИЖЕНИЯ
+func get_movement_speed() -> float:
+	# Базовая скорость модифицируется массой и тягой
+	var base_speed = MOVE_SPEED
+	var thrust_to_mass_ratio = drone_thrust / max(drone_mass, 0.1)
+	
+	# Чем лучше соотношение тяги к массе, тем быстрее дрон
+	var speed_multiplier = clamp(thrust_to_mass_ratio / 10.0, 0.5, 2.0)
+	
+	return base_speed * speed_multiplier
+
+# ВЫПОЛНЕНИЕ ПОСЛЕДОВАТЕЛЬНОСТИ КОМАНД
 func execute_sequence(sequence: Array):
 	if is_executing:
 		print("❌ Дрон уже выполняет команду!")
@@ -387,6 +486,7 @@ func execute_sequence(sequence: Array):
 	
 	program_finished.emit(success)
 
+# ВЫПОЛНЕНИЕ ОТДЕЛЬНЫХ ДЕЙСТВИЙ
 func execute_actions(sequence: Array) -> bool:
 	for i in range(sequence.size()):
 		var action = sequence[i]
@@ -398,8 +498,19 @@ func execute_actions(sequence: Array) -> bool:
 			return false
 	
 	await get_tree().create_timer(0.5).timeout
-	return false
+	
+	# ПРОВЕРЯЕМ УСПЕШНОСТЬ - если есть целевая позиция, проверяем достижение
+	if has_target:
+		var distance_to_target = global_position.distance_to(target_position)
+		var success = distance_to_target < GRID_SIZE * 0.8  # Допуск 80% размера клетки
+		print("🎯 Проверка достижения цели: расстояние=%.1f, успех=%s" % [distance_to_target, success])
+		return success
+	else:
+		# Если целевой позиции нет, считаем успехом просто выполнение всех команд
+		print("✅ Все команды выполнены (цель не установлена)")
+		return true
 
+# ПОЛУЧЕНИЕ ИМЕНИ НАПРАВЛЕНИЯ
 func get_direction_name(direction: int) -> String:
 	match direction:
 		0: return "Вперед"
@@ -410,10 +521,16 @@ func get_direction_name(direction: int) -> String:
 		5: return "Вниз"
 		_: return "Неизвестно"
 
+# ВЫПОЛНЕНИЕ ДВИЖЕНИЯ ПО СЕТКЕ
 func perform_grid_movement(direction: int) -> bool:
 	var start_pos = global_position
 	var target_position = global_position
 	
+	# Применяем эффект несбалансированности
+	var imbalance_effect = Vector3.ZERO
+	if not is_balanced:
+		imbalance_effect = calculate_imbalance_force()
+
 	match direction:
 		0: target_position.z -= GRID_SIZE
 		1: target_position.z += GRID_SIZE
@@ -422,32 +539,24 @@ func perform_grid_movement(direction: int) -> bool:
 		4: target_position.y += GRID_SIZE
 		5: target_position.y = max(target_position.y - GRID_SIZE, boundary_min.y)
 	
+	# Добавляем эффект несбалансированности к целевому положению
+	target_position += imbalance_effect
+	
 	if not can_move_to(target_position):
 		print("❌ Движение невозможно: позиция за пределами сетки")
 		return false
-	
-	print("📍 Двигаюсь из ", vector3_to_str(start_pos), " в ", vector3_to_str(target_position))
+
+	var move_speed = get_movement_speed()
 	
 	current_tween = create_tween()
-	current_tween.tween_property(self, "global_position", target_position, MOVE_SPEED)
+	current_tween.tween_property(self, "global_position", target_position, move_speed)
 	await current_tween.finished
 	
 	drone_moved.emit()
-	print("✅ Достигнута позиция: ", vector3_to_str(global_position))
 	
 	await get_tree().create_timer(0.1).timeout
 	return true
 
+# ПРЕОБРАЗОВАНИЕ VECTOR3 В СТРОКУ
 func vector3_to_str(vec: Vector3) -> String:
 	return "(%d, %d, %d)" % [vec.x, vec.y, vec.z]
-
-func stop_execution():
-	print("🛑 Выполнение программы остановлено")
-	is_executing = false
-	stop_propellers()
-	
-	if current_tween:
-		current_tween.kill()
-	
-	await return_to_start()
-	program_finished.emit(false)

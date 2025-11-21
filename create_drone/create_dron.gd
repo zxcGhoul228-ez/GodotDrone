@@ -1,5 +1,8 @@
 extends Node3D
 
+var save_slots = [null, null, null]  # Данные о сохранениях в слотах
+var current_save_ui = null
+
 # Ссылки на узлы
 var components_container
 var list_panel
@@ -15,6 +18,38 @@ var drone_frame = null
 var drone_board = null
 var motors = []
 var propellers = []
+
+# Параметры компонентов (добавить в начало скрипта)
+var component_stats = {
+	"frame": {
+		"Рама1": {"mass": 1.0, "durability": 100},
+		"Рама2": {"mass": 1.5, "durability": 150},
+		"Рама3": {"mass": 2.0, "durability": 200}
+	},
+	"board": {
+		"Плата1": {"mass": 0.3, "power": 1.0},
+		"Плата2": {"mass": 0.5, "power": 1.5},
+		"Плата3": {"mass": 0.7, "power": 2.0}
+	},
+	"motor": {
+		"Мотор1": {"mass": 0.2, "thrust": 8.0, "power_consumption": 1.0},
+		"Мотор2": {"mass": 0.3, "thrust": 12.0, "power_consumption": 1.5},
+		"Мотор3": {"mass": 0.4, "thrust": 16.0, "power_consumption": 2.0}
+	},
+	"propeller": {
+		"Пропеллер1": {"mass": 0.1, "efficiency": 0.9},
+		"Пропеллер2": {"mass": 0.15, "efficiency": 0.7},
+		"Пропеллер3": {"mass": 0.2, "efficiency": 0.8}
+	}
+}
+
+# Переменные для хранения характеристик собранного дрона
+var drone_stats = {
+	"total_mass": 0.0,
+	"total_thrust": 0.0,
+	"is_balanced": true,
+	"missing_motors": 0
+}
 
 # Словари префабов для каждого типа компонентов
 var frame_prefabs = {
@@ -342,6 +377,23 @@ func update_buttons_availability():
 	update_component_buttons_availability(propeller_buttons, propeller_prefabs.keys())
 	
 	update_current_selections()
+	update_balance_warning()  # Новая функция
+
+func update_balance_warning():
+	var warning_label = $UI.get_node_or_null("BalanceWarning")
+	if not warning_label:
+		warning_label = Label.new()
+		warning_label.name = "BalanceWarning"
+		warning_label.position = Vector2(20, 100)
+		warning_label.add_theme_font_size_override("font_size", 16)
+		$UI.add_child(warning_label)
+	
+	if not drone_stats["is_balanced"]:
+		warning_label.add_theme_color_override("font_color", Color.RED)
+		warning_label.text = "⚠️ ДРОН НЕСБАЛАНСИРОВАН! Добавьте %d моторов" % drone_stats["missing_motors"]
+	else:
+		warning_label.add_theme_color_override("font_color", Color.GREEN)
+		warning_label.text = "✅ Дрон сбалансирован"
 
 func update_component_buttons_availability(buttons: Array, component_names: Array):
 	for i in range(buttons.size()):
@@ -667,29 +719,6 @@ func create_component_list():
 	else:
 		print("Не могу создать Complist - нет панели Hierarchy")
 
-func add_save_load_buttons():
-	var save_load_container = HBoxContainer.new()
-	save_load_container.position = Vector2(1920/2-200, 0)
-	save_load_container.size = Vector2(200, 50)
-	
-	var save_button = Button.new()
-	save_button.text = "💾 Сохранить дрон"
-	save_button.connect("pressed", save_drone)
-	
-	var load_button = Button.new()
-	load_button.text = "📂 Загрузить дрон"
-	load_button.connect("pressed", load_drone)
-	
-	var export_button = Button.new()
-	export_button.text = "🚀 Экспорт сцены"
-	export_button.connect("pressed", export_drone_scene)
-	
-	save_load_container.add_child(save_button)
-	save_load_container.add_child(load_button)
-	save_load_container.add_child(export_button)
-	
-	$UI.add_child(save_load_container)
-
 func connect_buttons():
 	if has_node("UI/OpenClose"):
 		$UI/OpenClose.connect("pressed", _on_OpenClose_pressed)
@@ -795,8 +824,18 @@ func load_drone():
 		print("Файл сохранения не найден!")
 
 func export_drone_scene():
-	if not is_drone_complete():
-		print("Дрон не собран полностью! Нельзя экспортировать.")
+	# Пересчитываем характеристики перед экспортом
+	calculate_drone_stats()
+	
+	print("🔧 ЭКСПОРТ ДРОНА:")
+	print("   Есть рама: ", drone_frame != null)
+	print("   Есть плата: ", drone_board != null)
+	print("   Двигателей: ", motors.size())
+	print("   Пропеллеров: ", propellers.size())
+	
+	# Проверяем, есть ли вообще компоненты для экспорта
+	if drone_frame == null and drone_board == null and motors.is_empty() and propellers.is_empty():
+		show_simple_message("❌ Нечего экспортировать! Соберите дрон сначала.", Color(0.8, 0.1, 0.1))
 		return
 	
 	var drone_scene = PackedScene.new()
@@ -807,18 +846,39 @@ func export_drone_scene():
 	if drone_script:
 		drone_root.set_script(drone_script)
 		print("✅ Добавлен скрипт Drone.gd")
+	else:
+		show_simple_message("❌ Не найден скрипт дрона!", Color(0.8, 0.1, 0.1))
+		return
+	
+	# Передаем параметры физики дрону (4 аргумента)
+	if drone_root.has_method("setup_drone_physics"):
+		# Безопасная передача параметров
+		var mass = drone_stats.get("total_mass", 1.0)
+		var thrust = drone_stats.get("total_thrust", 10.0)
+		var balanced = drone_stats.get("is_balanced", true)
+		var missing = drone_stats.get("missing_motors", 0)
+		
+		drone_root.setup_drone_physics(mass, thrust, balanced, missing)
+		print("✅ Параметры физики переданы дрону")
+	else:
+		print("⚠️ У дрона нет метода setup_drone_physics, но продолжим экспорт")
+	
+	# Копируем компоненты (с проверками)
+	var components_copied = 0
 	
 	if drone_frame and is_instance_valid(drone_frame):
 		var frame_copy = drone_frame.duplicate()
 		drone_root.add_child(frame_copy)
 		frame_copy.owner = drone_root
 		print("✅ Скопирована рама")
+		components_copied += 1
 	
 	if drone_board and is_instance_valid(drone_board):
 		var board_copy = drone_board.duplicate()
 		drone_root.add_child(board_copy)
 		board_copy.owner = drone_root
 		print("✅ Скопирована плата")
+		components_copied += 1
 	
 	for i in range(motors.size()):
 		if is_instance_valid(motors[i]):
@@ -826,6 +886,7 @@ func export_drone_scene():
 			drone_root.add_child(motor_copy)
 			motor_copy.owner = drone_root
 			print("✅ Скопирован двигатель ", i+1)
+			components_copied += 1
 	
 	for i in range(propellers.size()):
 		if is_instance_valid(propellers[i]):
@@ -833,6 +894,11 @@ func export_drone_scene():
 			drone_root.add_child(propeller_copy)
 			propeller_copy.owner = drone_root
 			print("✅ Скопирован пропеллер ", i+1)
+			components_copied += 1
+	
+	if components_copied == 0:
+		show_simple_message("❌ Не удалось скопировать компоненты!", Color(0.8, 0.1, 0.1))
+		return
 	
 	drone_root.position = Vector3(0, 1, 0)
 	add_collision_to_drone(drone_root)
@@ -842,11 +908,101 @@ func export_drone_scene():
 		var error = ResourceSaver.save(drone_scene, "user://exported_drone.tscn")
 		if error == OK:
 			print("✅ Сцена дрона экспортирована в user://exported_drone.tscn")
-			print_drone_structure(drone_root)
+			show_simple_message("✅ ДРОН ЭКСПОРТИРОВАН", Color(0.1, 0.7, 0.3))
+			
+			# Показываем предупреждение если дрон неполный
+			if not is_drone_complete():
+				show_export_warning()
 		else:
-			print("❌ Ошибка экспорта сцены!")
+			show_simple_message("❌ Ошибка экспорта сцены!", Color(0.8, 0.1, 0.1))
 	else:
-		print("❌ Ошибка упаковки сцены!")
+		show_simple_message("❌ Ошибка упаковки сцены!", Color(0.8, 0.1, 0.1))
+
+func show_simple_message(text: String, color: Color):
+	var message_panel = Panel.new()
+	message_panel.name = "SimpleMessage"
+	message_panel.size = Vector2(400, 100)
+	message_panel.position = (get_viewport().get_visible_rect().size - message_panel.size) / 2
+	message_panel.z_index = 100
+	
+	var style = StyleBoxFlat.new()
+	style.bg_color = color
+	style.border_color = Color(1, 1, 1, 0.8)
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	message_panel.add_theme_stylebox_override("panel", style)
+	
+	var label = Label.new()
+	label.text = text
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 18)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.size = message_panel.size
+	
+	message_panel.add_child(label)
+	$UI.add_child(message_panel)
+	
+	# Автоматически закрываем через 2 секунды
+	await get_tree().create_timer(2.0).timeout
+	if message_panel and is_instance_valid(message_panel):
+		message_panel.queue_free()
+
+func show_export_warning():
+	var warning_panel = Panel.new()
+	warning_panel.name = "ExportWarning"
+	warning_panel.size = Vector2(500, 200)
+	warning_panel.position = (get_viewport().get_visible_rect().size - warning_panel.size) / 2
+	warning_panel.z_index = 100
+	
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.8, 0.6, 0.1, 0.9)
+	style.border_color = Color(1, 0.8, 0.2)
+	style.border_width_left = 4
+	style.border_width_top = 4
+	style.border_width_right = 4
+	style.border_width_bottom = 4
+	warning_panel.add_theme_stylebox_override("panel", style)
+	
+	var vbox = VBoxContainer.new()
+	vbox.size = warning_panel.size
+	
+	var warning_icon = Label.new()
+	warning_icon.text = "⚠️"
+	warning_icon.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	warning_icon.add_theme_font_size_override("font_size", 32)
+	
+	var warning_text = Label.new()
+	warning_text.text = "ДРОН ЭКСПОРТИРОВАН НЕПОЛНОСТЬЮ!\n\n"
+	warning_text.text += "Отсутствующие компоненты:\n"
+	
+	if drone_frame == null:
+		warning_text.text += "• Рама\n"
+	if drone_board == null:
+		warning_text.text += "• Плата управления\n"
+	if motors.size() < 4:
+		warning_text.text += "• Двигатели (%d/4)\n" % motors.size()
+	if propellers.size() < 4:
+		warning_text.text += "• Пропеллеры (%d/4)\n" % propellers.size()
+	
+	warning_text.text += "\nДрон все равно будет работать в игре!"
+	
+	warning_text.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	warning_text.add_theme_font_size_override("font_size", 16)
+	
+	var close_button = Button.new()
+	close_button.text = "Понятно"
+	close_button.custom_minimum_size = Vector2(100, 40)
+	close_button.connect("pressed", warning_panel.queue_free)
+	
+	vbox.add_child(warning_icon)
+	vbox.add_child(warning_text)
+	vbox.add_child(close_button)
+	
+	warning_panel.add_child(vbox)
+	$UI.add_child(warning_panel)
 
 func add_collision_to_drone(drone_node: CharacterBody3D):
 	var collision = CollisionShape3D.new()
@@ -1527,7 +1683,7 @@ func delete_frame():
 		print("Рама удалена")
 	else:
 		print("Рама уже удалена")
-
+	calculate_drone_stats()
 func delete_board():
 	if drone_board and is_instance_valid(drone_board):
 		print("Удаляем плату")
@@ -1537,7 +1693,7 @@ func delete_board():
 		print("Плата удалена")
 	else:
 		print("Плата уже удалена")
-
+	calculate_drone_stats()
 func delete_motor(index: int):
 	if index >= 0 and index < motors.size() and is_instance_valid(motors[index]):
 		print("Удаляем двигатель ", index + 1)
@@ -1556,7 +1712,7 @@ func delete_motor(index: int):
 		print("Двигатель ", index + 1, " удален")
 	else:
 		print("Неверный индекс двигателя: ", index)
-
+	calculate_drone_stats()
 func delete_propeller(index: int):
 	if index >= 0 and index < propellers.size() and is_instance_valid(propellers[index]):
 		print("Удаляем пропеллер ", index + 1)
@@ -1572,7 +1728,7 @@ func delete_propeller(index: int):
 		print("Пропеллер ", index + 1, " удален")
 	else:
 		print("Неверный индекс пропеллера: ", index)
-
+	calculate_drone_stats()
 # ========== ФУНКЦИИ СОЗДАНИЯ КОМПОНЕНТОВ ==========
 
 func add_frame():
@@ -1585,7 +1741,7 @@ func add_frame():
 		if frame_prefab:
 			var new_frame = frame_prefab.instantiate()
 			components_container.add_child(new_frame)
-			
+			calculate_drone_stats()
 			# Устанавливаем позицию под курсором
 			var mouse_pos = get_viewport().get_mouse_position()
 			var world_pos = screen_to_world_position(mouse_pos)
@@ -1612,7 +1768,7 @@ func add_board():
 		if board_prefab:
 			var new_board = board_prefab.instantiate()
 			components_container.add_child(new_board)
-			
+			calculate_drone_stats()
 			# Устанавливаем позицию под курсором
 			var mouse_pos = get_viewport().get_mouse_position()
 			var world_pos = screen_to_world_position(mouse_pos)
@@ -1639,7 +1795,7 @@ func add_motor():
 		if motor_prefab:
 			var new_motor = motor_prefab.instantiate()
 			components_container.add_child(new_motor)
-			
+			calculate_drone_stats()
 			# Устанавливаем позицию под курсором
 			var mouse_pos = get_viewport().get_mouse_position()
 			var world_pos = screen_to_world_position(mouse_pos)
@@ -1666,7 +1822,7 @@ func add_propeller():
 		if propeller_prefab:
 			var new_propeller = propeller_prefab.instantiate()
 			components_container.add_child(new_propeller)
-			
+			calculate_drone_stats()
 			# Устанавливаем позицию под курсором
 			var mouse_pos = get_viewport().get_mouse_position()
 			var world_pos = screen_to_world_position(mouse_pos)
@@ -1697,3 +1853,412 @@ func screen_to_world_position(screen_pos: Vector2) -> Vector3:
 		return intersection
 	else:
 		return Vector3(0, 0.5, 0)
+func calculate_drone_stats():
+	drone_stats["total_mass"] = 0.0
+	drone_stats["total_thrust"] = 0.0
+	drone_stats["missing_motors"] = 0
+	
+	# Расчет массы и тяги
+	if drone_frame and is_instance_valid(drone_frame):
+		var frame_stat = component_stats["frame"][current_frame_type]
+		drone_stats["total_mass"] += frame_stat["mass"]
+	
+	if drone_board and is_instance_valid(drone_board):
+		var board_stat = component_stats["board"][current_board_type]
+		drone_stats["total_mass"] += board_stat["mass"]
+	
+	# Расчет моторов и тяги
+	var motor_count = 0
+	for motor in motors:
+		if is_instance_valid(motor):
+			var motor_stat = component_stats["motor"][current_motor_type]
+			drone_stats["total_mass"] += motor_stat["mass"]
+			drone_stats["total_thrust"] += motor_stat["thrust"]
+			motor_count += 1
+	
+	# Расчет пропеллеров
+	for propeller in propellers:
+		if is_instance_valid(propeller):
+			var propeller_stat = component_stats["propeller"][current_propeller_type]
+			drone_stats["total_mass"] += propeller_stat["mass"]
+	
+	# Проверка балансировки
+	drone_stats["missing_motors"] = 4 - motor_count
+	drone_stats["is_balanced"] = (motor_count == 4) and (propellers.size() == 4)
+	
+	# Обновляем UI с характеристиками
+	update_stats_display()
+
+func update_stats_display():
+	# Создаем или обновляем панель характеристик
+	var stats_panel = $UI.get_node_or_null("StatsPanel")
+	if not stats_panel:
+		stats_panel = create_stats_panel()
+	
+	var stats_text = "ХАРАКТЕРИСТИКИ ДРОНА:\n"
+	stats_text += "Масса: %.1f кг\n" % drone_stats["total_mass"]
+	stats_text += "Тяга: %.1f ед.\n" % drone_stats["total_thrust"]
+	stats_text += "Соотношение: %.2f\n" % (drone_stats["total_thrust"] / max(drone_stats["total_mass"], 0.1))
+	
+	if not drone_stats["is_balanced"]:
+		stats_text += "⚠️ НЕСБАЛАНСИРОВАН!\n"
+		stats_text += "Отсутствует моторов: %d\n" % drone_stats["missing_motors"]
+		stats_text += "Дрон будет заваливаться в полете!"
+	else:
+		stats_text += "✅ Сбалансирован"
+	
+	stats_panel.get_node("Label").text = stats_text
+
+func create_stats_panel() -> Panel:
+	var panel = Panel.new()
+	panel.name = "StatsPanel"
+	panel.size = Vector2(300, 180)
+	panel.position = Vector2(20, 150)
+	
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0, 0, 0, 0.8)
+	style.border_color = Color(1, 1, 1, 0.5)
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	panel.add_theme_stylebox_override("panel", style)
+	
+	var label = Label.new()
+	label.name = "Label"
+	label.size = panel.size
+	label.add_theme_font_size_override("font_size", 14)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	
+	panel.add_child(label)
+	$UI.add_child(panel)
+	return panel
+# Добавляем в переменные класса
+
+func add_save_load_buttons():
+	var save_load_container = HBoxContainer.new()
+	save_load_container.position = Vector2(1920/2-150, 0)
+	save_load_container.size = Vector2(300, 50)
+	
+	var save_button = Button.new()
+	save_button.text = "💾 Сохранить"
+	save_button.custom_minimum_size = Vector2(90, 40)
+	save_button.connect("pressed", show_save_menu)
+	
+	var load_button = Button.new()
+	load_button.text = "📂 Загрузить"
+	load_button.custom_minimum_size = Vector2(90, 40)
+	load_button.connect("pressed", show_load_menu)
+	
+	var export_button = Button.new()
+	export_button.text = "🚀 Экспорт"
+	export_button.custom_minimum_size = Vector2(90, 40)
+	export_button.connect("pressed", export_drone_scene)
+	
+	save_load_container.add_child(save_button)
+	save_load_container.add_child(load_button)
+	save_load_container.add_child(export_button)
+	
+	$UI.add_child(save_load_container)
+	
+	# Загружаем информацию о сохранениях
+	load_slots_info()
+func add_help_tooltip():
+	var help_label = Label.new()
+	help_label.name = "HelpLabel"
+	help_label.position = Vector2(1920/2-200, 60)
+	help_label.size = Vector2(400, 30)
+	help_label.text = "💡 Сохраните дрон в слоты, затем экспортируйте для игры"
+	help_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	help_label.add_theme_font_size_override("font_size", 14)
+	help_label.add_theme_color_override("font_color", Color.LIGHT_BLUE)
+	
+	$UI.add_child(help_label)
+func load_slots_info():
+	for i in range(3):
+		var file_path = "user://drone_slot_%d.json" % i
+		if FileAccess.file_exists(file_path):
+			var file = FileAccess.open(file_path, FileAccess.READ)
+			if file:
+				var json_string = file.get_as_text()
+				file.close()
+				
+				var json = JSON.new()
+				var parse_result = json.parse(json_string)
+				
+				if parse_result == OK:
+					var data = json.get_data()  # Используем get_data() вместо прямого доступа
+					if data and typeof(data) == TYPE_DICTIONARY:  # Проверяем что data существует и это словарь
+						# Безопасно получаем значения с проверками
+						var frame_data = data.get("frame", {})
+						var frame_type = "Неизвестно"
+						if frame_data and typeof(frame_data) == TYPE_DICTIONARY:
+							frame_type = frame_data.get("component_type", "Неизвестно")
+						
+						var motors_array = data.get("motors", [])
+						var motors_count = 0
+						if motors_array and typeof(motors_array) == TYPE_ARRAY:
+							motors_count = motors_array.size()
+						
+						var has_board = data.has("board") and data["board"] != null
+						
+						save_slots[i] = {
+							"frame": frame_type,
+							"motors_count": motors_count,
+							"has_board": has_board
+						}
+					else:
+						print("❌ Данные в слоте %d не являются словарем" % i)
+				else:
+					print("❌ Ошибка парсинга JSON в слоте %d" % i)
+			else:
+				print("❌ Не удалось открыть файл слота %d" % i)
+		else:
+			# Файл не существует, слот пустой
+			save_slots[i] = null
+
+func show_save_menu():
+	if current_save_ui and is_instance_valid(current_save_ui):
+		current_save_ui.queue_free()
+	
+	current_save_ui = create_slot_menu(true, "СОХРАНЕНИЕ ДРОНА")
+	$UI.add_child(current_save_ui)
+
+func show_load_menu():
+	if current_save_ui and is_instance_valid(current_save_ui):
+		current_save_ui.queue_free()
+	
+	current_save_ui = create_slot_menu(false, "ЗАГРУЗКА ДРОНА")
+	$UI.add_child(current_save_ui)
+
+func create_slot_menu(is_save_mode: bool, title: String) -> Panel:
+	var menu_panel = Panel.new()
+	menu_panel.name = "SlotMenu"
+	menu_panel.size = Vector2(800, 400)
+	menu_panel.position = (get_viewport().get_visible_rect().size - menu_panel.size) / 2
+	menu_panel.z_index = 100
+	
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.1, 0.1, 0.2, 0.95)
+	style.border_color = Color(0.3, 0.5, 1.0)
+	style.border_width_left = 4
+	style.border_width_top = 4
+	style.border_width_right = 4
+	style.border_width_bottom = 4
+	style.corner_radius_top_left = 12
+	style.corner_radius_top_right = 12
+	style.corner_radius_bottom_right = 12
+	style.corner_radius_bottom_left = 12
+	menu_panel.add_theme_stylebox_override("panel", style)
+	
+	var container = VBoxContainer.new()
+	container.size = menu_panel.size
+	container.alignment = BoxContainer.ALIGNMENT_CENTER
+	
+	# Заголовок
+	var title_label = Label.new()
+	title_label.text = title
+	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.add_theme_font_size_override("font_size", 28)
+	title_label.add_theme_color_override("font_color", Color.WHITE)
+	title_label.custom_minimum_size = Vector2(0, 60)
+	
+	# Контейнер для кнопок слотов
+	var slots_container = HBoxContainer.new()
+	slots_container.custom_minimum_size = Vector2(700, 250)
+	slots_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	
+	# Создаем 3 большие кнопки слотов
+	for slot_index in range(3):
+		var slot_button = create_slot_button(slot_index, is_save_mode)
+		slots_container.add_child(slot_button)
+	
+	# Кнопка закрытия
+	var close_button = Button.new()
+	close_button.text = "ЗАКРЫТЬ"
+	close_button.custom_minimum_size = Vector2(200, 50)
+	close_button.add_theme_font_size_override("font_size", 18)
+	close_button.connect("pressed", menu_panel.queue_free)
+	
+	container.add_child(title_label)
+	container.add_child(slots_container)
+	container.add_child(close_button)
+	
+	menu_panel.add_child(container)
+	return menu_panel
+
+func create_slot_button(slot_index: int, is_save_mode: bool) -> Button:
+	var slot_button = Button.new()
+	slot_button.name = "SlotButton_%d" % slot_index
+	slot_button.custom_minimum_size = Vector2(200, 200)
+	slot_button.add_theme_font_size_override("font_size", 16)
+	
+	var slot_data = save_slots[slot_index]
+	var slot_text = "СЛОТ %d\n\n" % (slot_index + 1)
+	
+	if slot_data:
+		# Есть сохранение в этом слоте
+		slot_text += "✅ Сохранение:\n"
+		slot_text += "Рама: %s\n" % slot_data["frame"]
+		slot_text += "Двигатели: %d/4\n" % slot_data["motors_count"]
+		slot_text += "Плата: %s\n" % ("✅" if slot_data["has_board"] else "❌")
+		
+		if is_save_mode:
+			slot_text += "\n⚠️ Нажмите для ПЕРЕЗАПИСИ"
+		else:
+			slot_text += "\n🎯 Нажмите для ЗАГРУЗКИ"
+	else:
+		# Пустой слот
+		slot_text += "📭 Пусто\n\n"
+		if is_save_mode:
+			slot_text += "💾 Нажмите для СОХРАНЕНИЯ"
+		else:
+			slot_text += "❌ Нет сохранения"
+	
+	slot_button.text = slot_text
+	
+	# Настраиваем стиль в зависимости от содержимого
+	var button_style = StyleBoxFlat.new()
+	
+	if slot_data:
+		if is_save_mode:
+			button_style.bg_color = Color(0.9, 0.7, 0.1, 0.8)  # Оранжевый для перезаписи
+		else:
+			button_style.bg_color = Color(0.1, 0.7, 0.3, 0.8)  # Зеленый для загрузки
+	else:
+		if is_save_mode:
+			button_style.bg_color = Color(0.1, 0.5, 0.9, 0.8)  # Синий для нового сохранения
+		else:
+			button_style.bg_color = Color(0.3, 0.3, 0.3, 0.8)  # Серый для пустого
+	
+	button_style.border_color = Color(1, 1, 1, 0.6)
+	button_style.border_width_left = 2
+	button_style.border_width_top = 2
+	button_style.border_width_right = 2
+	button_style.border_width_bottom = 2
+	button_style.corner_radius_top_left = 8
+	button_style.corner_radius_top_right = 8
+	button_style.corner_radius_bottom_right = 8
+	button_style.corner_radius_bottom_left = 8
+	
+	slot_button.add_theme_stylebox_override("normal", button_style)
+	
+	# Подключаем сигнал
+	if is_save_mode or slot_data:
+		slot_button.connect("pressed", _on_slot_button_pressed.bind(slot_index, is_save_mode))
+	else:
+		slot_button.disabled = true
+	
+	return slot_button
+
+func _on_slot_button_pressed(slot_index: int, is_save_mode: bool):
+	if is_save_mode:
+		save_drone_to_slot(slot_index)
+	else:
+		load_drone_from_slot(slot_index)
+	
+	# Закрываем меню
+	if current_save_ui and is_instance_valid(current_save_ui):
+		current_save_ui.queue_free()
+	
+	# Показываем подтверждение
+	show_slot_action_message(slot_index, is_save_mode)
+
+func save_drone_to_slot(slot_index: int):
+	var drone_data = {
+		"frame": get_component_data(drone_frame),
+		"board": get_component_data(drone_board) if drone_board else null,
+		"motors": [],
+		"propellers": []
+	}
+	
+	for motor in motors:
+		if is_instance_valid(motor):
+			drone_data["motors"].append(get_component_data(motor))
+	
+	for propeller in propellers:
+		if is_instance_valid(propeller):
+			drone_data["propellers"].append(get_component_data(propeller))
+	
+	var file = FileAccess.open("user://drone_slot_%d.json" % slot_index, FileAccess.WRITE)
+	if file:
+		file.store_string(JSON.stringify(drone_data))
+		file.close()
+		
+		# Обновляем информацию о слоте
+		save_slots[slot_index] = {
+			"frame": current_frame_type,
+			"motors_count": motors.size(),
+			"has_board": drone_board != null
+		}
+		
+		print("✅ Дрон сохранен в слот %d" % (slot_index + 1))
+	else:
+		print("❌ Ошибка сохранения дрона в слот %d!" % (slot_index + 1))
+
+func load_drone_from_slot(slot_index: int):
+	var file_path = "user://drone_slot_%d.json" % slot_index
+	if FileAccess.file_exists(file_path):
+		var file = FileAccess.open(file_path, FileAccess.READ)
+		if file:
+			var json_string = file.get_as_text()
+			file.close()
+			
+			var json = JSON.new()
+			var parse_result = json.parse(json_string)
+			
+			if parse_result == OK:
+				var drone_data = json.get_data()  # Используем get_data()
+				if drone_data and typeof(drone_data) == TYPE_DICTIONARY:
+					clear_drone()
+					create_drone_from_data(drone_data)
+					print("✅ Дрон загружен из слота %d!" % (slot_index + 1))
+					show_simple_message("✅ ДРОН ЗАГРУЖЕН ИЗ СЛОТА %d" % (slot_index + 1), Color(0.1, 0.5, 0.9))
+				else:
+					print("❌ Данные в слоте %d не являются словарем" % slot_index)
+					show_simple_message("❌ Ошибка загрузки: неверный формат", Color(0.8, 0.1, 0.1))
+			else:
+				print("❌ Ошибка загрузки дрона из слота %d: неверный формат файла" % (slot_index + 1))
+				show_simple_message("❌ Ошибка загрузки: неверный формат файла", Color(0.8, 0.1, 0.1))
+		else:
+			print("❌ Не удалось открыть файл в слоте %d" % (slot_index + 1))
+			show_simple_message("❌ Не удалось открыть файл сохранения", Color(0.8, 0.1, 0.1))
+	else:
+		print("❌ Файл сохранения в слоте %d не найден!" % (slot_index + 1))
+		show_simple_message("❌ Файл сохранения не найден", Color(0.8, 0.1, 0.1))
+
+func show_slot_action_message(slot_index: int, is_save_mode: bool):
+	var message_panel = Panel.new()
+	message_panel.name = "SlotActionMessage"
+	message_panel.size = Vector2(400, 150)
+	message_panel.position = (get_viewport().get_visible_rect().size - message_panel.size) / 2
+	message_panel.z_index = 101
+	
+	var style = StyleBoxFlat.new()
+	if is_save_mode:
+		style.bg_color = Color(0.1, 0.7, 0.3, 0.9)  # Зеленый для сохранения
+	else:
+		style.bg_color = Color(0.1, 0.5, 0.9, 0.9)  # Синий для загрузки
+	
+	style.border_color = Color(1, 1, 1, 0.8)
+	style.border_width_left = 3
+	style.border_width_top = 3
+	style.border_width_right = 3
+	style.border_width_bottom = 3
+	message_panel.add_theme_stylebox_override("panel", style)
+	
+	var label = Label.new()
+	label.text = "✅ %s В СЛОТЕ %d!" % ["СОХРАНЕНО" if is_save_mode else "ЗАГРУЖЕНО", slot_index + 1]
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 20)
+	label.add_theme_color_override("font_color", Color.WHITE)
+	label.size = message_panel.size
+	
+	message_panel.add_child(label)
+	$UI.add_child(message_panel)
+	
+	# Автоматически закрываем через 2 секунды
+	await get_tree().create_timer(2.0).timeout
+	if message_panel and is_instance_valid(message_panel):
+		message_panel.queue_free()
