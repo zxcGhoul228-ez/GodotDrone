@@ -1,6 +1,0 @@
-res://DroneLevels/DroneScene.tscn
-res://BlockProgramming.gd
-res://create_drone/create_dron.gd
-res://DroneLevels/Drone.gd
-res://DroneScene.gd
-res://UI/LoadingScreen.tscn

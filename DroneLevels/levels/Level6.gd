@@ -235,9 +235,8 @@ func complete_level():
 	if drone_scene and drone_scene.has_method("_on_program_finished"):
 		drone_scene._on_program_finished(true)
 	
-	if Global:
-		Global.complete_level(6, 25, 10)
-		print("✅ Прогресс сохранен")
+	# УДАЛЕНО: Global.complete_level(6, 25, 10) - теперь это делается автоматически в DroneScene
+	print("✅ Прогресс будет сохранен автоматически")
 	
 	show_success_message()
 

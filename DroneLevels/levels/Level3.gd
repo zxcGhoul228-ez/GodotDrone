@@ -178,10 +178,8 @@ func complete_level():
 	if drone_scene and drone_scene.has_method("_on_program_finished"):
 		drone_scene._on_program_finished(true)
 	
-	# Сохраняем прогресс
-	if Global:
-		Global.complete_level(3, 8, 3)  # level_number, target_steps, max_stars
-		print("✅ Прогресс сохранен")
+	# УДАЛЕНО: Global.complete_level(3, 8, 3) - теперь это делается автоматически в DroneScene
+	print("✅ Прогресс будет сохранен автоматически")
 
 func show_success_message():
 	var success_ui = CanvasLayer.new()
