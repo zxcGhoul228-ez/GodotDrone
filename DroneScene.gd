@@ -3,6 +3,57 @@ extends Node3D
 const GRID_SIZE = 32
 const GRID_CELLS_COUNT = 32
 
+# Массив путей к моделям комнат (5 комнат)
+const ROOM_PATHS = [
+	"res://room3d/source/room1.glb",
+	"res://room3d/source/room2.glb", 
+	"res://room3d/source/room3.glb",
+	"res://room3d/source/room4.glb",
+    "res://room3d/source/room5.glb"
+]
+
+# Конфигурация комнат для каждого уровня (15 уровней)
+# Формат: [индекс_комнаты, масштаб, позиция]
+# Индекс комнаты: 0-4 (соответствует ROOM_PATHS)
+var level_room_configs = {
+	1: [0, Vector3(700, 700, 700), Vector3(-600, -200, -200)],
+	2: [1, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
+	3: [2, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
+	4: [3, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
+	5: [4, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
+	6: [0, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
+	7: [1, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
+	8: [2, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
+	9: [3, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
+	10: [4, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
+	11: [0, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
+	12: [1, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
+	13: [2, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
+	14: [3, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
+	15: [4, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)]
+}
+
+# Если хотите перемешанный порядок комнат, раскомментируйте эту функцию
+func create_shuffled_room_order() -> Dictionary:
+	# Создаем массив из 15 индексов (каждая комната по 3 раза)
+	var room_indices = []
+	for i in range(5):
+		for j in range(3):
+			room_indices.append(i)
+	
+	# Перемешиваем
+	room_indices.shuffle()
+	
+	# Создаем новую конфигурацию с перемешанными комнатами
+	var shuffled_configs = {}
+	for level in range(1, 16):
+		var room_idx = room_indices[level - 1]
+		# Используем настройки из оригинальной конфигурации, но меняем индекс комнаты
+		var original_config = level_room_configs[level]
+		shuffled_configs[level] = [room_idx, original_config[1], original_config[2]]
+	
+	return shuffled_configs
+
 @onready var camera_pivot = $CameraPivot
 @onready var camera = $CameraPivot/Camera3D
 @onready var drone_container = $DroneContainer
@@ -29,7 +80,7 @@ var MIN_DISTANCE = 12.0
 var MAX_DISTANCE = 400.0
 var MIN_VERTICAL_ANGLE = -1.0
 var MAX_VERTICAL_ANGLE = 1.5
-var CAMERA_MOVE_SPEED = 50.0
+var CAMERA_MOVE_SPEED = 500.0
 var camera_move_input = Vector3.ZERO
 var current_drone: CharacterBody3D = null
 var pause_menu = null
@@ -66,16 +117,18 @@ var preview_material: StandardMaterial3D
 
 func _ready():
 	create_wooden_floor()
-	var room_scene = load("res://room3d/source/Untitled1.glb")
-	# Корректировка масштаба
-	camera.far = 100000.0  # Вместо стандартных 100
-	var room_instance = room_scene.instantiate()
-	room_instance.scale = Vector3(2000, 2000, 2000)  # Пример
-	add_child(room_instance)
+	
+	# Загружаем комнату для текущего уровня
+	load_room_for_level(Global.current_level)
+	
+	# Корректировка масштаба камеры для больших комнат
+	camera.far = 100000.0
+	
 	print("=== ИНИЦИАЛИЗАЦИЯ СЦЕНЫ ДРОНА ===")
 	print("Размер сетки: ", GRID_SIZE, "x", GRID_SIZE)
 	print("Количество клеток: ", GRID_CELLS_COUNT, "x", GRID_CELLS_COUNT)
-	room_instance.position = Vector3(3200, -1000, -16)  # Центровка
+	print("Текущий уровень: ", Global.current_level)
+	
 	# Инициализация границ
 	calculate_grid_boundaries()
 	
@@ -99,6 +152,43 @@ func _ready():
 	
 	print("Сцена готова! Сетка: ", GRID_CELLS_COUNT, "x", GRID_CELLS_COUNT, " клеток")
 	print("Границы сетки: от ", grid_boundary_min, " до ", grid_boundary_max)
+
+# ================== СИСТЕМА ЗАГРУЗКИ КОМНАТ ==================
+func load_room_for_level(level: int):
+	print("🔄 Загружаем комнату для уровня: ", level)
+	
+	# Если хотите использовать перемешанный порядок комнат, раскомментируйте следующую строку:
+	# level_room_configs = create_shuffled_room_order()
+	
+	# Получаем конфигурацию для текущего уровня
+	var config = level_room_configs.get(level, [0, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)])
+	
+	var room_index = config[0]  # Индекс комнаты (0-4)
+	var room_scale = config[1]  # Масштаб комнаты
+	var room_position = config[2]  # Позиция комнаты
+	
+	# Проверяем, что индекс комнаты в допустимом диапазоне
+	if room_index < 0 or room_index >= ROOM_PATHS.size():
+		room_index = 0
+		print("⚠️ Неверный индекс комнаты, используется комната по умолчанию")
+	
+	var room_path = ROOM_PATHS[room_index]
+	
+	# Загружаем сцену комнаты
+	var room_scene = load(room_path)
+	if room_scene:
+		var room_instance = room_scene.instantiate()
+		
+		# Применяем настройки масштаба и положения
+		room_instance.scale = room_scale
+		room_instance.position = room_position
+		
+		add_child(room_instance)
+		print("✅ Загружена комната: ", room_path)
+		print("   Масштаб: ", room_scale)
+		print("   Позиция: ", room_position)
+	else:
+		print("❌ Не удалось загрузить комнату: ", room_path)
 
 # ================== ГРАНИЦЫ СЕТКИ ==================
 func calculate_grid_boundaries():
@@ -557,7 +647,7 @@ func create_drone():
 	var drone_paths = [
 		"res://exported_drone.tscn",
 		"user://exported_drone.tscn", 
-		"res://DroneLevels/Drone.tscn"
+        "res://DroneLevels/Drone.tscn"
 	]
 	
 	var drone_loaded = false
@@ -671,6 +761,7 @@ func calculate_start_position() -> Vector3:
 	@warning_ignore("integer_division")
 	var aligned_z = round((start_point_z + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
 	return Vector3(aligned_x, start_point_y, aligned_z)  # ИСПОЛЬЗУЕМ start_point_y (теперь 0)
+
 # ================== УПРАВЛЕНИЕ ВЫСОТОЙ ДРОНА ==================
 func set_drone_height(height: float):
 	print("🔄 Устанавливаем высоту дрона: ", height)
@@ -692,6 +783,7 @@ func get_drone_height() -> float:
 func adjust_drone_height(relative_change: float):
 	var new_height = start_point_y + relative_change
 	set_drone_height(new_height)
+
 func setup_drone(drone_node: CharacterBody3D):
 	print("🔧 Настраиваем дрон...")
 	
@@ -905,6 +997,7 @@ func create_table_legs_long(table_width: float, table_depth: float, table_height
 		leg.owner = get_tree().edited_scene_root
 	
 	print("✅ Длинные ножки созданы: высота = ", leg_size.y)
+
 func create_grid_line(from: Vector3, to: Vector3, material: Material, thickness: float):
 	var mesh_instance = MeshInstance3D.new()
 	var immediate_mesh = ImmediateMesh.new()
@@ -916,37 +1009,33 @@ func create_grid_line(from: Vector3, to: Vector3, material: Material, thickness:
 	$Grid.add_child(mesh_instance)
 	mesh_instance.owner = get_tree().edited_scene_root
 
-
 func create_highlight_shader() -> Shader:
 	var shader_code = """
-	shader_type spatial;
-	render_mode unshaded, blend_add;
-	
-	uniform vec4 highlight_color;
-	uniform float pulse_speed;
-	
-	void fragment() {
-		float time = TIME * pulse_speed;
-		float pulse = (sin(time) + 1.0) * 0.5;
-		float alpha = highlight_color.a * (0.7 + 0.3 * pulse);
-		
-		// Плавное затухание к краям
-		vec2 uv = UV - 0.5;
-		float edge_fade = 1.0 - smoothstep(0.3, 0.5, length(uv));
-		
-		ALBEDO = highlight_color.rgb;
-		ALPHA = alpha * edge_fade;
-	}
-	"""
+    shader_type spatial;
+    render_mode unshaded, blend_add;
+    
+    uniform vec4 highlight_color;
+    uniform float pulse_speed;
+    
+    void fragment() {
+        float time = TIME * pulse_speed;
+        float pulse = (sin(time) + 1.0) * 0.5;
+        float alpha = highlight_color.a * (0.7 + 0.3 * pulse);
+        
+        // Плавное затухание к краям
+        vec2 uv = UV - 0.5;
+        float edge_fade = 1.0 - smoothstep(0.3, 0.5, length(uv));
+        
+        ALBEDO = highlight_color.rgb;
+        ALPHA = alpha * edge_fade;
+    }
+    """
 	
 	var shader = Shader.new()
 	shader.code = shader_code
 	return shader
 
-# Обнови позицию подсветки в update_grid_highlight():
-
-
-# В # В DroneScene.gd замени функцию create_grid_highlight():
+# В DroneScene.gd замени функцию create_grid_highlight():
 func create_grid_highlight():
 	var box_mesh = BoxMesh.new()
 	box_mesh.size = Vector3(GRID_SIZE * 0.9, 0.1, GRID_SIZE * 0.9)
@@ -1002,6 +1091,7 @@ func update_grid_highlight():
 	if new_cell_position != current_cell_position and current_cell_position != Vector3.ZERO:
 		create_trail_marker(current_cell_position)
 	current_cell_position = new_cell_position
+
 func create_wooden_floor():
 	var floor_node = $Floor  # или путь к вашему узлу Floor
 	
@@ -1024,6 +1114,7 @@ func create_wooden_floor():
 			
 			mesh_instance.material_override = floor_material
 			print("✅ Деревянный пол создан")
+
 # Улучшенная функция создания следов:
 func create_trail_marker(position: Vector3):
 	if not is_position_within_bounds(position):
@@ -1052,7 +1143,6 @@ func create_trail_marker(position: Vector3):
 			oldest_trail.queue_free()
 	
 	start_trail_fade(trail_mesh)
-
 
 func start_trail_fade(trail_mesh: MeshInstance3D):
 	var trail_index = trail_meshes.find(trail_mesh)
