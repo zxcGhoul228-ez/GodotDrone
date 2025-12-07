@@ -6,8 +6,8 @@ const GRID_CELLS_COUNT = 32
 # Массив путей к моделям комнат (5 комнат)
 const ROOM_PATHS = [
 	"res://room3d/source/room1.glb",
-	"res://room3d/source/room2.glb", 
-	"res://room3d/source/room3.glb",
+	"res://room3d/room2/source/chicken_gun_standoff_2_arena.glb", 
+	"res://room3d/room3/source/Scene 1 - RealRoom.glb",
 	"res://room3d/source/room4.glb",
     "res://room3d/source/room5.glb"
 ]
@@ -17,8 +17,8 @@ const ROOM_PATHS = [
 # Индекс комнаты: 0-4 (соответствует ROOM_PATHS)
 var level_room_configs = {
 	1: [0, Vector3(700, 700, 700), Vector3(-600, -200, -200)],
-	2: [1, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
-	3: [2, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
+	2: [1, Vector3(20000, 20000, 20000), Vector3(0, -40, 500)],
+	3: [2, Vector3(1000, 1000, 1000), Vector3(-2000, -80, 2000)],
 	4: [3, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
 	5: [4, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
 	6: [0, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)],
@@ -794,7 +794,7 @@ func setup_drone(drone_node: CharacterBody3D):
 		print("⚠️ Стартовая позиция скорректирована: ", start_pos)
 	
 	drone_node.global_position = start_pos
-	drone_node.scale = Vector3(3, 3, 3)
+	drone_node.scale = Vector3(6, 6, 6)
 	
 	# Устанавливаем целевую позицию (например, противоположный угол)
 	var target_pos = Vector3(GRID_SIZE * 2, 0, GRID_SIZE * 2)
@@ -1029,7 +1029,7 @@ func create_highlight_shader() -> Shader:
         ALBEDO = highlight_color.rgb;
         ALPHA = alpha * edge_fade;
     }
-    """
+	"""
 	
 	var shader = Shader.new()
 	shader.code = shader_code

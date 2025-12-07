@@ -8,17 +8,18 @@
 [sub_resource type="Environment" id="Environment_anata"]
 background_mode = 1
 background_color = Color(0.16470589, 0.16470589, 0.16470589, 1)
+background_energy_multiplier = 7.65
 ambient_light_source = 2
 ambient_light_color = Color(0.22745098, 0.22745098, 0.22745098, 1)
-ambient_light_energy = 6.13
-tonemap_mode = 3
-tonemap_exposure = 0.8
-tonemap_white = 8.0
+ambient_light_energy = 7.35
+tonemap_exposure = 0.71
+tonemap_white = 2.9
 ssao_enabled = true
 ssao_radius = 0.5
 ssao_intensity = 1.0
 ssao_light_affect = 0.2
 adjustment_enabled = true
+adjustment_brightness = 1.71
 adjustment_contrast = 1.21
 adjustment_saturation = 1.51
 
@@ -47,12 +48,14 @@ transform = Transform3D(0.7071068, -0.40557978, 0.579228, 0, 0.819152, 0.5735764
 light_color = Color(1, 0.9098039, 0.8, 1)
 light_energy = 0.6
 light_indirect_energy = 0.3
+light_angular_distance = 73.34
 shadow_enabled = true
 shadow_bias = 0.03
 shadow_normal_bias = 0.185
 shadow_transmittance_bias = -1.059
 shadow_opacity = 0.5
 shadow_blur = 4.564
+directional_shadow_max_distance = 548.0
 
 [node name="Grid" type="Node3D" parent="."]
 script = ExtResource("2_av3q6")

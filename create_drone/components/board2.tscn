@@ -1,3 +1,9 @@
-[gd_scene format=3 uid="uid://dv645snqtt5dx"]
+[gd_scene load_steps=2 format=3 uid="uid://dv645snqtt5dx"]
+
+[ext_resource type="Script" uid="uid://bvfmba7s51c35" path="res://component.gd" id="1_yxxdm"]
 
 [node name="Board2" type="Node3D"]
+script = ExtResource("1_yxxdm")
+component_name = "Плата"
+component_type = "board"
+component_variant = 2

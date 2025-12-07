@@ -8,555 +8,260 @@ var current_tween: Tween
 var start_position: Vector3
 
 # ПРОПЕЛЛЕРЫ
-var propellers: Array[MeshInstance3D] = []
+var propellers: Array[Node3D] = []
 var is_propellers_rotating: bool = false
 var current_propeller_speed: float = 0.0
 var target_propeller_speed: float = 0.0
-var propeller_acceleration: float = 180.0
-var propeller_deceleration: float = 360.0
-var max_propeller_speed: float = 720.0
-
-# Физические параметры дрона
-var drone_mass: float = 1.0
-var drone_thrust: float = 10.0
-var is_balanced: bool = true
-var missing_motors: int = 0
-
-# Силы для каждого мотора
-var motor_forces = [1.0, 1.0, 1.0, 1.0]
-var base_motor_thrust: float = 8.0
-
-# Эффекты несбалансированности
-var imbalance_force: Vector3 = Vector3.ZERO
-var imbalance_timer: float = 0.0
-const IMBALANCE_UPDATE_RATE: float = 0.5
-
-# Границы сетки
-var boundary_min: Vector3
-var boundary_max: Vector3
-
-# Целевая позиция для определения успеха
-var target_position: Vector3
-var has_target: bool = false
+var propeller_acceleration: float = 720.0
+var max_propeller_speed: float = 2160.0
 
 signal program_finished(success: bool)
 signal drone_moved
 
 func _ready():
-	# Ждем полной инициализации позиции
 	await get_tree().process_frame
 	start_position = global_position
 	
-	# ДОБАВЛЯЕМ КОЛЛИЗИЮ ЕСЛИ ЕЁ НЕТ
-	add_collision_shape()
+	# УВЕЛИЧИВАЕМ РАЗМЕР ДРОНА В 2 РАЗА
+	scale = Vector3(6.0, 6.0, 6.0)
+	print("🚁 Масштабирую дрон: ", scale)
 	
-	# ТОЧНЫЙ ПОИСК ПРОПЕЛЛЕРОВ ДЛЯ КВАДРОКОПТЕРА
-	find_propellers_for_quadcopter()
-	print("🚁 Дрон готов, стартовая позиция: ", vector3_to_str(start_position))
+	# ГАРАНТИРОВАННЫЙ ПОИСК ПРОПЕЛЛЕРОВ
+	find_propellers_guaranteed()
+	
+	print("🚁 Дрон готов, масштаб: ", scale)
 	print("🌀 Найдено пропеллеров: ", propellers.size())
 
-# УСТАНОВКА ЦЕЛЕВОЙ ПОЗИЦИИ
-func set_target_position(target: Vector3):
-	target_position = target
-	has_target = true
-	print("🎯 Установлена целевая позиция: ", vector3_to_str(target))
-
-# ФУНКЦИЯ ДОБАВЛЕНИЯ КОЛЛИЗИИ
-func add_collision_shape():
-	if has_collision():
-		print("✅ Коллизия дрона уже существует")
-		return
-	
-	print("🛡️ Добавляем коллизию дрону...")
-	
-	var collision = CollisionShape3D.new()
-	var shape = CapsuleShape3D.new()
-	shape.radius = 1.5
-	shape.height = 1.0
-	
-	collision.shape = shape
-	collision.name = "DroneCollision"
-	
-	add_child(collision)
-	
-	if get_tree().edited_scene_root:
-		collision.owner = get_tree().edited_scene_root
-	
-	print("✅ Коллизия добавлена")
-
-# ПРОВЕРКА НАЛИЧИЯ КОЛЛИЗИИ
-func has_collision() -> bool:
-	for child in get_children():
-		if child is CollisionShape3D:
-			return true
-	return false
-
-# СПЕЦИАЛЬНЫЙ ПОИСК ДЛЯ КВАДРОКОПТЕРА (4 ПРОПЕЛЛЕРОВ)
-func find_propellers_for_quadcopter():
+# ГАРАНТИРОВАННЫЙ ПОИСК ПРОПЕЛЛЕРОВ
+func find_propellers_guaranteed():
 	propellers.clear()
-	await get_tree().create_timer(0.2).timeout
 	
-	print("🎯 Специальный поиск пропеллеров для квадрокоптера...")
+	# Способ 1: Поиск по группе
+	var group_propellers = get_tree().get_nodes_in_group("drone_propellers")
+	for node in group_propellers:
+		if node is Node3D and is_instance_valid(node):
+			if not propellers.has(node):
+				propellers.append(node)
+				print("✅ Найден по группе: ", node.name)
 	
-	# Метод 1: Поиск по именам и структуре
-	find_propellers_by_quadcopter_structure(self)
+	# Способ 2: Поиск по метаданным
+	if propellers.size() == 0:
+		search_by_metadata(self)
 	
-	# Метод 2: Если нашли не 4 пропеллера, используем альтернативный метод
-	if propellers.size() != 4:
-		print("⚠️ Найдено ", propellers.size(), " пропеллеров вместо 4, используем альтернативный поиск")
-		find_propellers_alternative_quadcopter()
+	# Способ 3: Последний шанс - ищем все Node3D и MeshInstance3D
+	if propellers.size() == 0:
+		find_all_3d_nodes(self)
 	
-	# Метод 3: Если все еще не 4, ищем по характерным признакам
-	if propellers.size() != 4:
-		print("⚠️ Все еще не 4 пропеллера, используем точный поиск по характеристикам")
-		find_propellers_by_exact_characteristics()
+	print("🎯 Итог: ", propellers.size(), " пропеллеров")
 	
-	print("✅ Финальный результат: ", propellers.size(), " пропеллеров")
+	# Отладочная информация
+	if propellers.size() == 0:
+		print("⚠️ ВНИМАНИЕ: пропеллеры не найдены!")
+		print_debug_tree(self, 0)
 
-# ПОИСК ПО СТРУКТУРЕ КВАДРОКОПТЕРА
-func find_propellers_by_quadcopter_structure(node: Node):
+func search_by_metadata(node: Node):
 	for child in node.get_children():
-		if child is Node3D:
-			# Проверяем, является ли этот узел пропеллером квадрокоптера
-			if is_quadcopter_propeller(child):
-				var meshes = find_propeller_meshes(child)
-				for mesh in meshes:
-					if not propellers.has(mesh):
-						propellers.append(mesh)
-			
-			# Рекурсивный поиск
-			find_propellers_by_quadcopter_structure(child)
+		if child is Node3D or child is MeshInstance3D:
+			if child.has_meta("is_drone_propeller"):
+				if child.get_meta("is_drone_propeller") == true:
+					if not propellers.has(child):
+						propellers.append(child)
+						print("✅ Найден по метаданным: ", child.name)
+		search_by_metadata(child)
 
-# ХАРАКТЕРНЫЕ ПРИЗНАКИ ПРОПЕЛЛЕРА КВАДРОКОПТЕРА
-func is_quadcopter_propeller(node: Node3D) -> bool:
-	var node_name = node.name.to_lower()
-	
-	# Признак 1: Имя содержит propeller, rotor, blade или винт
-	var has_propeller_name = (
-		"propeller" in node_name or 
-		"rotor" in node_name or 
-		"blade" in node_name or
-		"винт" in node_name or
-		"пропеллер" in node_name
-	)
-	
-	# Признак 2: Расположение на характерных позициях квадрокоптера
-	var is_on_quadcopter_position = is_on_quadcopter_arm(node.global_position)
-	
-	# Признак 3: Расстояние от центра - пропеллеры на периферии
-	var distance_from_center = node.global_position.distance_to(global_position)
-	var is_on_periphery = distance_from_center > 5.0 and distance_from_center < 15.0
-	
-	# Признак 4: Высота - пропеллеры обычно выше центра
-	var is_above_center = node.global_position.y > global_position.y + 0.5
-	
-	# Для квадрокоптера должны выполняться минимум 3 признака
-	var score = 0
-	if has_propeller_name: score += 2
-	if is_on_quadcopter_position: score += 2
-	if is_on_periphery: score += 1
-	if is_above_center: score += 1
-	
-	return score >= 3
-
-# ПРОВЕРКА РАСПОЛОЖЕНИЯ НА ЛУЧАХ КВАДРОКОПТЕРА
-func is_on_quadcopter_arm(position: Vector3) -> bool:
-	var local_pos = position - global_position
-	local_pos.y = 0  # Игнорируем высоту
-	
-	var angle = atan2(local_pos.z, local_pos.x)
-	var distance = local_pos.length()
-	
-	# Квадрокоптер имеет 4 луча под углами 45°, 135°, 225°, 315°
-	var quadcopter_angles = [PI/4, 3*PI/4, 5*PI/4, 7*PI/4]
-	
-	for target_angle in quadcopter_angles:
-		var angle_diff = abs(angle - target_angle)
-		angle_diff = min(angle_diff, 2*PI - angle_diff)
-		
-		# Допуск ±15 градусов
-		if angle_diff < PI/12 and distance > 6.0 and distance < 12.0:
-			return true
-	
-	return false
-
-# ПОИСК МЕШЕЙ ПРОПЕЛЛЕРОВ В УЗЛЕ
-func find_propeller_meshes(node: Node3D) -> Array[MeshInstance3D]:
-	var meshes: Array[MeshInstance3D] = []
-	
+func find_all_3d_nodes(node: Node):
 	for child in node.get_children():
-		if child is MeshInstance3D:
-			# Проверяем, что это именно пропеллер (а не двигатель или рама)
-			if is_propeller_mesh(child):
-				meshes.append(child)
-	
-	return meshes
+		if child is Node3D or child is MeshInstance3D:
+			# Проверяем, похож ли на пропеллер по имени
+			var child_name = str(child.name).to_lower()
+			if "propeller" in child_name or "винт" in child_name or "пропеллер" in child_name:
+				if not propellers.has(child):
+					propellers.append(child)
+					print("✅ Найден по имени: ", child.name)
+		find_all_3d_nodes(child)
 
-# ПРИЗНАКИ МЕША ПРОПЕЛЛЕРА
-func is_propeller_mesh(mesh: MeshInstance3D) -> bool:
-	# Пропеллеры обычно:
-	# - Имеют тонкую плоскую форму
-	# - Расположены выше других деталей
-	# - Имеют характерную форму лопастей
+func print_debug_tree(node: Node, indent: int):
+	var indent_str = ""
+	for i in range(indent):
+		indent_str += "  "
 	
-	# Проверяем масштаб - пропеллеры обычно плоские (маленький scale.y)
-	var is_flat = mesh.scale.y < 0.5
+	print(indent_str + "└─ " + node.name + " (" + node.get_class() + ")")
 	
-	# Проверяем положение - пропеллеры обычно выше других деталей двигателя
-	var is_high = mesh.global_position.y > global_position.y + 1.0
+	# Проверяем группы
+	if node.has_method("get_groups"):
+		var groups = node.get_groups()
+		if groups.size() > 0:
+			print(indent_str + "   Группы: ", groups)
 	
-	# Проверяем имя меша
-	var mesh_name = ""
-	if mesh.mesh:
-		mesh_name = mesh.mesh.resource_name.to_lower()
-	var has_propeller_mesh_name = (
-		"propeller" in mesh_name or 
-		"blade" in mesh_name or
-		"винт" in mesh_name
-	)
+	# Проверяем метаданные
+	if node.has_meta("is_drone_propeller"):
+		print(indent_str + "   Мета: is_drone_propeller = ", node.get_meta("is_drone_propeller"))
 	
-	return (is_flat and is_high) or has_propeller_mesh_name
-
-# АЛЬТЕРНАТИВНЫЙ ПОИСК ДЛЯ КВАДРОКОПТЕРА
-func find_propellers_alternative_quadcopter():
-	print("🔍 Альтернативный поиск для квадрокоптера...")
-	
-	# Ищем все меши в сцене
-	var all_meshes: Array[MeshInstance3D] = []
-	find_all_mesh_instances(self, all_meshes)
-	
-	# Фильтруем по характерным признакам пропеллеров квадрокоптера
-	var candidate_propellers: Array[MeshInstance3D] = []
-	
-	for mesh in all_meshes:
-		if is_quadcopter_propeller_mesh(mesh):
-			candidate_propellers.append(mesh)
-	
-	# Если нашли 4 кандидата - отлично!
-	if candidate_propellers.size() == 4:
-		propellers = candidate_propellers
-		print("✅ Найдено 4 пропеллера альтернативным методом")
-	else:
-		# Иначе берем 4 самых подходящих
-		candidate_propellers.sort_custom(sort_propellers_by_suitability)
-		propellers = candidate_propellers.slice(0, min(4, candidate_propellers.size()))
-		print("✅ Выбрано ", propellers.size(), " наиболее подходящих пропеллеров")
-
-# ХАРАКТЕРНЫЕ ПРИЗНАКИ МЕША ПРОПЕЛЛЕРА КВАДРОКОПТЕРА
-func is_quadcopter_propeller_mesh(mesh: MeshInstance3D) -> bool:
-	var distance = mesh.global_position.distance_to(global_position)
-	var is_on_periphery = distance > 6.0 and distance < 12.0
-	
-	var is_flat = mesh.scale.y < 0.3  # Очень плоский
-	var is_high = mesh.global_position.y > global_position.y + 1.5  # Высоко расположен
-	
-	var is_on_arm = is_on_quadcopter_arm(mesh.global_position)
-	
-	return is_on_periphery and is_flat and is_high and is_on_arm
-
-# СОРТИРОВКА ПРОПЕЛЛЕРОВ ПО ПОДХОДЯЩЕСТИ
-func sort_propellers_by_suitability(a: MeshInstance3D, b: MeshInstance3D) -> bool:
-	# Более подходящие пропеллеры: более плоские, выше, на правильных позициях
-	var score_a = calculate_propeller_score(a)
-	var score_b = calculate_propeller_score(b)
-	return score_a > score_b
-
-func calculate_propeller_score(mesh: MeshInstance3D) -> float:
-	var score = 0.0
-	
-	# Плоскость (чем более плоский, тем лучше)
-	score += (1.0 - min(mesh.scale.y, 1.0)) * 10
-	
-	# Высота (чем выше, тем лучше)
-	score += max(0, mesh.global_position.y - global_position.y) * 5
-	
-	# Положение на луче (чем ближе к идеальной позиции, тем лучше)
-	if is_on_quadcopter_arm(mesh.global_position):
-		score += 20
-	
-	# Расстояние (оптимальное расстояние 8-10 единиц)
-	var distance = mesh.global_position.distance_to(global_position)
-	var distance_score = 1.0 - abs(distance - 9.0) / 9.0  # 9.0 - идеальное расстояние
-	score += distance_score * 10
-	
-	return score
-
-# ТОЧНЫЙ ПОИСК ПО ХАРАКТЕРИСТИКАМ
-func find_propellers_by_exact_characteristics():
-	print("🎯 Точный поиск по характеристикам...")
-	
-	# Создаем список всех мешей
-	var all_meshes: Array[MeshInstance3D] = []
-	find_all_mesh_instances(self, all_meshes)
-	
-	# Ищем 4 меша, которые наиболее соответствуют пропеллерам квадрокоптера
-	var best_propellers: Array[MeshInstance3D] = []
-	
-	for mesh in all_meshes:
-		var score = calculate_propeller_score(mesh)
-		
-		# Если счет высокий, добавляем в кандидаты
-		if score > 15.0:
-			best_propellers.append(mesh)
-	
-	# Сортируем по убыванию счета
-	best_propellers.sort_custom(sort_propellers_by_suitability)
-	
-	# Берем только 4 лучших
-	propellers = best_propellers.slice(0, min(4, best_propellers.size()))
-	
-	print("✅ Найдено ", propellers.size(), " пропеллеров точным поиском")
-
-# ПОИСК ВСЕХ MESHINSTANCE3D В СЦЕНЕ
-func find_all_mesh_instances(node: Node, collection: Array[MeshInstance3D]):
+	# Рекурсивно для детей
 	for child in node.get_children():
-		if child is MeshInstance3D:
-			collection.append(child)
-		find_all_mesh_instances(child, collection)
+		print_debug_tree(child, indent + 1)
 
-# ЗАПУСК ПРОПЕЛЛЕРОВ С ПЛАВНЫМ РАЗГОНОМ
+# ЗАПУСК ПРОПЕЛЛЕРОВ
 func start_propellers():
 	if is_propellers_rotating:
 		return
 	
 	is_propellers_rotating = true
 	target_propeller_speed = max_propeller_speed
-	print("🌀 Запуск вращения ", propellers.size(), " пропеллеров")
+	print("🌀 ЗАПУСК ПРОПЕЛЛЕРОВ")
 
-# ОСТАНОВКА ПРОПЕЛЛЕРОВ С ПЛАВНЫМ ЗАМЕДЛЕНИЕМ
+# ОСТАНОВКА ПРОПЕЛЛЕРОВ
 func stop_propellers():
 	if not is_propellers_rotating:
 		return
 	
 	is_propellers_rotating = false
 	target_propeller_speed = 0.0
-	print("🛑 Остановка вращения пропеллеров")
+	print("🛑 ОСТАНОВКА ПРОПЕЛЛЕРОВ")
 
-# ВРАЩЕНИЕ ПРОПЕЛЛЕРОВ С ПЛАВНЫМ ИЗМЕНЕНИЕМ СКОРОСТИ
+# ВРАЩЕНИЕ ПРОПЕЛЛЕРОВ
 func _process(delta):
-	# Плавное изменение скорости пропеллеров
+	# Плавное изменение скорости
 	if current_propeller_speed < target_propeller_speed:
-		# Разгон
 		current_propeller_speed += propeller_acceleration * delta
 		current_propeller_speed = min(current_propeller_speed, target_propeller_speed)
 	elif current_propeller_speed > target_propeller_speed:
-		# Замедление
-		current_propeller_speed -= propeller_deceleration * delta
-		current_propeller_speed = max(current_propeller_speed, target_propeller_speed)
+		current_propeller_speed -= propeller_acceleration * 2 * delta
+		current_propeller_speed = max(current_propeller_speed, 0.0)
 	
-	# Вращаем пропеллеры с текущей скоростью
-	if current_propeller_speed > 0:
-		for propeller in propellers:
-			if is_instance_valid(propeller):
-				propeller.rotate_y(deg_to_rad(current_propeller_speed * delta))
+	# Вращение пропеллеров
+	if current_propeller_speed > 0.1:
+		rotate_propellers(delta)
 
-# ОСТАНОВКА ВЫПОЛНЕНИЯ ПРОГРАММЫ
-func stop_execution():
-	print("🛑 Выполнение программы остановлено")
-	is_executing = false
-	stop_propellers()
+func rotate_propellers(delta):
+	var rotation_angle = deg_to_rad(current_propeller_speed * delta)
 	
-	if current_tween:
-		current_tween.kill()
+	for propeller in propellers:
+		if is_instance_valid(propeller):
+			propeller.rotate_y(rotation_angle)
 	
-	await return_to_start()
-	program_finished.emit(false)
+	# Отладочный вывод
+	if Engine.get_frames_drawn() % 120 == 0 and propellers.size() > 0 and current_propeller_speed > 100:
+		print("🌀 Вращение: ", int(current_propeller_speed), "°/с")
 
-# ВОЗВРАТ НА СТАРТОВУЮ ПОЗИЦИЮ
-func return_to_start():
-	print("🔄 Возвращаю дрона на стартовую позицию...")
-	
-	if current_tween:
-		current_tween.kill()
-	
-	is_executing = false
-	stop_propellers()
-	
-	current_tween = create_tween()
-	current_tween.tween_property(self, "global_position", start_position, MOVE_SPEED * 1.5)
-	await current_tween.finished
-	
-	print("✅ Дрон вернулся на стартовую позицию")
-	drone_moved.emit()
-
-# УСТАНОВКА ГРАНИЦ СЕТКИ
-func set_boundaries(min_bound: Vector3, max_bound: Vector3):
-	boundary_min = min_bound
-	boundary_max = max_bound
-
-# ПРОВЕРКА ВОЗМОЖНОСТИ ДВИЖЕНИЯ
-func can_move_to(position: Vector3) -> bool:
-	return (position.x >= boundary_min.x and position.x <= boundary_max.x and
-			position.z >= boundary_min.z and position.z <= boundary_max.z and
-			position.y >= boundary_min.y and position.y <= boundary_max.y)
-
-# НАСТРОЙКА ФИЗИКИ ДРОНА (4 аргумента)
-func setup_drone_physics(mass: float, thrust: float, balanced: bool, missing: int):
-	drone_mass = mass
-	drone_thrust = thrust
-	is_balanced = balanced
-	missing_motors = missing
-	
-	print("🚁 Физика дрона: Масса=%.1f, Тяга=%.1f, Сбалансирован=%s" % [mass, thrust, balanced])
-	
-	# Настраиваем силы моторов в зависимости от балансировки
-	if not is_balanced:
-		setup_imbalanced_motors()
-
-# НАСТРОЙКА НЕСБАЛАНСИРОВАННЫХ МОТОРОВ
-func setup_imbalanced_motors():
-	# Случайным образом уменьшаем силу отсутствующих моторов
-	for i in range(missing_motors):
-		var motor_index = randi() % 4
-		motor_forces[motor_index] = 0.0
-		print("⚠️ Мотор %d отключен!" % (motor_index + 1))
-	
-	# Для оставшихся моторов увеличиваем нагрузку
-	var active_motors = 4 - missing_motors
-	if active_motors > 0:
-		var thrust_per_motor = drone_thrust / active_motors
-		for i in range(4):
-			if motor_forces[i] > 0:
-				motor_forces[i] = thrust_per_motor / base_motor_thrust
-
-# ВЫЧИСЛЕНИЕ СИЛЫ НЕСБАЛАНСИРОВАННОСТИ
-func calculate_imbalance_force() -> Vector3:
-	if is_balanced:
-		return Vector3.ZERO
-	
-	# Генерируем силу, заваливающую дрон в сторону отсутствующих моторов
-	imbalance_timer += get_physics_process_delta_time()
-	
-	if imbalance_timer >= IMBALANCE_UPDATE_RATE:
-		imbalance_timer = 0.0
-		
-		# Сила зависит от количества отсутствующих моторов
-		var imbalance_strength = missing_motors * 2.0
-		
-		# Случайное направление заваливания
-		var random_dir = Vector3(
-			randf_range(-1.0, 1.0),
-			randf_range(-0.5, -1.0),  # Всегда немного вниз
-			randf_range(-1.0, 1.0)
-		).normalized()
-		
-		imbalance_force = random_dir * imbalance_strength
-	
-	return imbalance_force
-
-# РАСЧЕТ СКОРОСТИ ДВИЖЕНИЯ
-func get_movement_speed() -> float:
-	# Базовая скорость модифицируется массой и тягой
-	var base_speed = MOVE_SPEED
-	var thrust_to_mass_ratio = drone_thrust / max(drone_mass, 0.1)
-	
-	# Чем лучше соотношение тяги к массе, тем быстрее дрон
-	var speed_multiplier = clamp(thrust_to_mass_ratio / 10.0, 0.5, 2.0)
-	
-	return base_speed * speed_multiplier
-
-# ВЫПОЛНЕНИЕ ПОСЛЕДОВАТЕЛЬНОСТИ КОМАНД
+# ВЫПОЛНЕНИЕ ПРОГРАММЫ - ИСПРАВЛЕННЫЙ КОД
 func execute_sequence(sequence: Array):
 	if is_executing:
-		print("❌ Дрон уже выполняет команду!")
+		print("❌ Дрон уже выполняет программу!")
 		return
-	if sequence.is_empty():
-		print("❌ Пустая последовательность!")
-		program_finished.emit(false)
-		return
-		
-	print("🚀 Запуск программы дрона из ", sequence.size(), " команд")
+	
+	print("========================================")
+	print("🚀 ЗАПУСК ПРОГРАММЫ")
+	print("   Команд: ", sequence.size())
+	print("   Пропеллеров: ", propellers.size())
+	
 	is_executing = true
 	
-	# ЗАПУСКАЕМ ПРОПЕЛЛЕРЫ С ПЛАВНЫМ РАЗГОНОМ
+	# ГАРАНТИРОВАННЫЙ ЗАПУСК ПРОПЕЛЛЕРОВ
 	start_propellers()
 	start_position = global_position
 	
-	var success = await execute_actions(sequence)
-	is_executing = false
+	# Ждем раскрутки
+	await get_tree().create_timer(0.3).timeout
+	print("🌀 Пропеллеры раскручены")
 	
-	# ОСТАНАВЛИВАЕМ ПРОПЕЛЛЕРЫ С ПЛАВНЫМ ЗАМЕДЛЕНИЕМ
+	# Выполняем команды
+	var success = await execute_actions(sequence)
+	
+	# Останавливаем пропеллеры
 	stop_propellers()
 	
+	# Ждем остановки
+	await get_tree().create_timer(0.3).timeout
+	
+	is_executing = false
+	
+	# ВАЖНОЕ ИСПРАВЛЕНИЕ: ВОЗВРАЩАЕМ ДРОНА НА СТАРТ ПРИ НЕУДАЧЕ!
 	if not success:
-		print("❌ Программа завершена неудачно, возвращаю дрона на старт")
+		print("❌ Программа завершена НЕУДАЧНО, возвращаю дрона на старт")
 		await return_to_start()
 	else:
-		print("✅ Программа завершена успешно!")
+		print("✅ Программа завершена УСПЕШНО, дрон остается на месте")
 	
+	print("✅ Программа завершена")
 	program_finished.emit(success)
 
-# ВЫПОЛНЕНИЕ ОТДЕЛЬНЫХ ДЕЙСТВИЙ
+# ВЫПОЛНЕНИЕ КОМАНД
 func execute_actions(sequence: Array) -> bool:
+	if sequence.is_empty():
+		print("⚠️ Пустая программа")
+		return false
+	
+	print("🎯 Выполнение команд")
+	
 	for i in range(sequence.size()):
 		var action = sequence[i]
-		print("🎯 Выполняю команду ", i + 1, "/", sequence.size(), ": ", get_direction_name(action))
+		var command_name = get_direction_name(action)
+		print("   ", i + 1, "/", sequence.size(), ": ", command_name)
 		
-		var move_success = await perform_grid_movement(action)
+		var move_success = await perform_movement(action)
 		if not move_success:
-			print("❌ Движение невозможно - достигнут предел сетки!")
+			print("❌ Ошибка движения")
 			return false
+		
+		await get_tree().create_timer(0.1).timeout
 	
-	await get_tree().create_timer(0.5).timeout
-	
-	# ПРОВЕРЯЕМ УСПЕШНОСТЬ - если есть целевая позиция, проверяем достижение
-	if has_target:
-		var distance_to_target = global_position.distance_to(target_position)
-		var success = distance_to_target < GRID_SIZE * 0.8  # Допуск 80% размера клетки
-		print("🎯 Проверка достижения цели: расстояние=%.1f, успех=%s" % [distance_to_target, success])
-		return success
-	else:
-		# Если целевой позиции нет, считаем успехом просто выполнение всех команд
-		print("✅ Все команды выполнены (цель не установлена)")
-		return true
+	print("📊 Программа выполнена, но цель не достигнута")
+	return false  # ВРЕМЕННО: всегда возвращаем false, чтобы тестировать возврат
 
-# ПОЛУЧЕНИЕ ИМЕНИ НАПРАВЛЕНИЯ
 func get_direction_name(direction: int) -> String:
 	match direction:
-		0: return "Вперед"
-		1: return "Назад" 
-		2: return "Влево"
-		3: return "Вправо"
-		4: return "Вверх"
-		5: return "Вниз"
-		_: return "Неизвестно"
+		0: return "ВПЕРЕД"
+		1: return "НАЗАД"
+		2: return "ВЛЕВО"
+		3: return "ВПРАВО"
+		4: return "ВВЕРХ"
+		5: return "ВНИЗ"
+		_: return "???"
 
-# ВЫПОЛНЕНИЕ ДВИЖЕНИЯ ПО СЕТКЕ
-func perform_grid_movement(direction: int) -> bool:
-	var start_pos = global_position
-	var target_position = global_position
+func perform_movement(direction: int) -> bool:
+	var target_pos = global_position
 	
-	# Применяем эффект несбалансированности
-	var imbalance_effect = Vector3.ZERO
-	if not is_balanced:
-		imbalance_effect = calculate_imbalance_force()
-
 	match direction:
-		0: target_position.z -= GRID_SIZE
-		1: target_position.z += GRID_SIZE
-		2: target_position.x -= GRID_SIZE
-		3: target_position.x += GRID_SIZE
-		4: target_position.y += GRID_SIZE
-		5: target_position.y = max(target_position.y - GRID_SIZE, boundary_min.y)
+		0: target_pos.z -= GRID_SIZE
+		1: target_pos.z += GRID_SIZE
+		2: target_pos.x -= GRID_SIZE
+		3: target_pos.x += GRID_SIZE
+		4: target_pos.y += GRID_SIZE
+		5: target_pos.y -= GRID_SIZE
 	
-	# Добавляем эффект несбалансированности к целевому положению
-	target_position += imbalance_effect
-	
-	if not can_move_to(target_position):
-		print("❌ Движение невозможно: позиция за пределами сетки")
-		return false
-
-	var move_speed = get_movement_speed()
-	
-	current_tween = create_tween()
-	current_tween.tween_property(self, "global_position", target_position, move_speed)
-	await current_tween.finished
+	# Движение
+	var tween = create_tween()
+	tween.tween_property(self, "global_position", target_pos, MOVE_SPEED)
+	await tween.finished
 	
 	drone_moved.emit()
-	
-	await get_tree().create_timer(0.1).timeout
 	return true
 
-# ПРЕОБРАЗОВАНИЕ VECTOR3 В СТРОКУ
-func vector3_to_str(vec: Vector3) -> String:
-	return "(%d, %d, %d)" % [vec.x, vec.y, vec.z]
+# ОСТАНОВКА
+func stop_execution():
+	print("🛑 ПРИНУДИТЕЛЬНАЯ ОСТАНОВКА")
+	is_executing = false
+	stop_propellers()
+	
+	if current_tween:
+		current_tween.kill()
+	
+	# Принудительный возврат на старт при остановке
+	print("↩️ Принудительный возврат на старт")
+	await return_to_start()
+	
+	program_finished.emit(false)
+
+# ВОЗВРАТ НА СТАРТ
+func return_to_start():
+	print("↩️ ВОЗВРАТ НА СТАРТ")
+	stop_propellers()
+	
+	# Создаем твин для возврата
+	var tween = create_tween()
+	tween.tween_property(self, "global_position", start_position, MOVE_SPEED * 2)
+	await tween.finished
+	
+	drone_moved.emit()
+	print("✅ Дрон вернулся на стартовую позицию")

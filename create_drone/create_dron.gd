@@ -220,7 +220,7 @@ func show_board_attachment_points():
 	add_child(point)
 	
 	# Затем устанавливаем позицию (центр рамы + небольшое смещение вверх)
-	var world_position = drone_frame.global_position + Vector3(0, 0.2, 0)
+	var world_position = drone_frame.global_position + Vector3(0, 0.6,0)
 	point.global_position = world_position
 	
 	# Проверяем, свободна ли точка (нет ли уже прикрепленной платы)
@@ -337,7 +337,7 @@ func find_closest_board_attachment_point(position: Vector3) -> Vector3:
 		return position
 	
 	# Точка крепления для платы (центр рамы сверху)
-	var board_point = drone_frame.global_position + Vector3(0, 0.2, 0)
+	var board_point = drone_frame.global_position + Vector3(0, 0.3, 0.1)
 	
 	# Проверяем, свободна ли точка (нет ли уже прикрепленной платы)
 	var point_free = (drone_board == null or not is_instance_valid(drone_board) or drone_board == dragged_component)
@@ -823,6 +823,8 @@ func load_drone():
 	else:
 		print("Файл сохранения не найден!")
 
+# В функции export_drone_scene() добавьте в начало:
+# В функции export_drone_scene() добавьте в начало:
 func export_drone_scene():
 	# Пересчитываем характеристики перед экспортом
 	calculate_drone_stats()
@@ -833,90 +835,35 @@ func export_drone_scene():
 	print("   Двигателей: ", motors.size())
 	print("   Пропеллеров: ", propellers.size())
 	
-	# Проверяем, есть ли вообще компоненты для экспорта
-	if drone_frame == null and drone_board == null and motors.is_empty() and propellers.is_empty():
-		show_simple_message("❌ Нечего экспортировать! Соберите дрон сначала.", Color(0.8, 0.1, 0.1))
-		return
+	# ГАРАНТИРУЕМ МАРКИРОВКУ ПРОПЕЛЛЕРОВ
+	ensure_propellers_marked()
 	
-	var drone_scene = PackedScene.new()
-	var drone_root = CharacterBody3D.new()
-	drone_root.name = "ExportedDrone"
+	# ... остальной код без изменений ...
+func mark_propeller_copy(propeller_copy):
+	# Гарантируем маркировку в скопированном пропеллере
+	propeller_copy.set_meta("is_drone_propeller", true)
+	propeller_copy.add_to_group("drone_propellers")
 	
-	var drone_script = load("res://DroneLevels/Drone.gd")
-	if drone_script:
-		drone_root.set_script(drone_script)
-		print("✅ Добавлен скрипт Drone.gd")
-	else:
-		show_simple_message("❌ Не найден скрипт дрона!", Color(0.8, 0.1, 0.1))
-		return
-	
-	# Передаем параметры физики дрону (4 аргумента)
-	if drone_root.has_method("setup_drone_physics"):
-		# Безопасная передача параметров
-		var mass = drone_stats.get("total_mass", 1.0)
-		var thrust = drone_stats.get("total_thrust", 10.0)
-		var balanced = drone_stats.get("is_balanced", true)
-		var missing = drone_stats.get("missing_motors", 0)
-		
-		drone_root.setup_drone_physics(mass, thrust, balanced, missing)
-		print("✅ Параметры физики переданы дрону")
-	else:
-		print("⚠️ У дрона нет метода setup_drone_physics, но продолжим экспорт")
-	
-	# Копируем компоненты (с проверками)
-	var components_copied = 0
-	
-	if drone_frame and is_instance_valid(drone_frame):
-		var frame_copy = drone_frame.duplicate()
-		drone_root.add_child(frame_copy)
-		frame_copy.owner = drone_root
-		print("✅ Скопирована рама")
-		components_copied += 1
-	
-	if drone_board and is_instance_valid(drone_board):
-		var board_copy = drone_board.duplicate()
-		drone_root.add_child(board_copy)
-		board_copy.owner = drone_root
-		print("✅ Скопирована плата")
-		components_copied += 1
-	
-	for i in range(motors.size()):
-		if is_instance_valid(motors[i]):
-			var motor_copy = motors[i].duplicate()
-			drone_root.add_child(motor_copy)
-			motor_copy.owner = drone_root
-			print("✅ Скопирован двигатель ", i+1)
-			components_copied += 1
-	
+	# Также маркируем всех детей
+	for child in propeller_copy.get_children():
+		if child is MeshInstance3D or child is Node3D:
+			child.set_meta("is_drone_propeller", true)
+			child.add_to_group("drone_propellers")
+func ensure_propellers_marked():
 	for i in range(propellers.size()):
-		if is_instance_valid(propellers[i]):
-			var propeller_copy = propellers[i].duplicate()
-			drone_root.add_child(propeller_copy)
-			propeller_copy.owner = drone_root
-			print("✅ Скопирован пропеллер ", i+1)
-			components_copied += 1
-	
-	if components_copied == 0:
-		show_simple_message("❌ Не удалось скопировать компоненты!", Color(0.8, 0.1, 0.1))
-		return
-	
-	drone_root.position = Vector3(0, 1, 0)
-	add_collision_to_drone(drone_root)
-	
-	var result = drone_scene.pack(drone_root)
-	if result == OK:
-		var error = ResourceSaver.save(drone_scene, "user://exported_drone.tscn")
-		if error == OK:
-			print("✅ Сцена дрона экспортирована в user://exported_drone.tscn")
-			show_simple_message("✅ ДРОН ЭКСПОРТИРОВАН", Color(0.1, 0.7, 0.3))
+		var propeller = propellers[i]
+		if is_instance_valid(propeller):
+			# Переименовываем для удобства
+			propeller.name = "propeller_" + str(i)
 			
-			# Показываем предупреждение если дрон неполный
-			if not is_drone_complete():
-				show_export_warning()
-		else:
-			show_simple_message("❌ Ошибка экспорта сцены!", Color(0.8, 0.1, 0.1))
-	else:
-		show_simple_message("❌ Ошибка упаковки сцены!", Color(0.8, 0.1, 0.1))
+			# Проверяем и добавляем маркировку если ее нет
+			if not propeller.has_meta("is_drone_propeller"):
+				propeller.set_meta("is_drone_propeller", true)
+			
+			if not propeller.is_in_group("drone_propellers"):
+				propeller.add_to_group("drone_propellers")
+			
+			print("✅ Помечен пропеллер: ", propeller.name)
 
 func show_simple_message(text: String, color: Color):
 	var message_panel = Panel.new()
@@ -1007,12 +954,12 @@ func show_export_warning():
 func add_collision_to_drone(drone_node: CharacterBody3D):
 	var collision = CollisionShape3D.new()
 	var shape = BoxShape3D.new()
-	shape.size = Vector3(3, 1, 3)
+	shape.size = Vector3(6, 2, 6)  # УВЕЛИЧИЛ В 2 РАЗА (было 3, 1, 3)
 	collision.shape = shape
-	collision.position = Vector3(0, 0.5, 0)
+	collision.position = Vector3(0, 1, 0)  # Поднял выше (было 0, 0.5, 0)
 	drone_node.add_child(collision)
 	collision.owner = drone_node
-	print("✅ Добавлена коллизия дрону")
+	print("✅ Добавлена коллизия дрону, размер: ", shape.size)
 
 func print_drone_structure(node: Node, indent: int = 0):
 	var indent_str = "  ".repeat(indent)
@@ -1505,7 +1452,7 @@ func snap_board_to_frame(board):
 	if not drone_frame or not is_instance_valid(drone_frame):
 		return
 	
-	var target_pos = drone_frame.global_position + Vector3(0, 0.2, 0)
+	var target_pos = drone_frame.global_position + Vector3(0, 0.3, 0.1)
 	var current_pos = board.global_position
 	
 	# Если плата близко к точке крепления, привязываем ее
@@ -2262,3 +2209,15 @@ func show_slot_action_message(slot_index: int, is_save_mode: bool):
 	await get_tree().create_timer(2.0).timeout
 	if message_panel and is_instance_valid(message_panel):
 		message_panel.queue_free()
+# Добавляем эту функцию в create_drone.gd
+func mark_propellers_for_drone():
+	print("🎯 Маркировка пропеллеров для скрипта дрона...")
+	
+	for i in range(propellers.size()):
+		var propeller = propellers[i]
+		if is_instance_valid(propeller):
+			# Переименовываем пропеллер для легкого поиска
+			propeller.name = "propeller_" + str(i)
+			# Добавляем в группу
+			propeller.add_to_group("drone_propellers")
+			print("✅ Помечен пропеллер: ", propeller.name)

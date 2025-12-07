@@ -9,8 +9,25 @@ var is_attached: bool = false
 
 func _ready():
 	setup_component()
+	
+	# ДОБАВЛЯЕМ МАРКИРОВКУ ДЛЯ ПРОПЕЛЛЕРОВ
+	if component_type == "propeller":
+		mark_as_propeller()
+
+func mark_as_propeller():
+	# Добавляем метаданные для легкого поиска в Drone.gd
+	set_meta("is_drone_propeller", true)
+	add_to_group("drone_propellers")
+	
+	# Также маркируем всех детей (меши)
+	for child in get_children():
+		if child is MeshInstance3D or child is Node3D:
+			child.set_meta("is_drone_propeller", true)
+			child.add_to_group("drone_propellers")
 
 func setup_component():
+	print("DEBUG: Setting up component: ", component_type, " variant: ", component_variant)
+	
 	# Очищаем всех детей
 	for child in get_children():
 		child.queue_free()
@@ -33,23 +50,112 @@ func setup_component():
 			can_attach_to = []
 			create_propeller()
 
-func create_frame():
-	# Пытаемся загрузить .obj модель
-	var model_path = "res://create_drone/models/frame" + str(component_variant) + ".obj"
+# УНИВЕРСАЛЬНАЯ ФУНКЦИЯ ДЛЯ ЗАГРУЗКИ МОДЕЛЕЙ
+func load_model(base_name: String, default_scale: Vector3 = Vector3(0.1, 0.1, 0.1)) -> Node3D:
+	var variant_str = str(component_variant)
 	
-	if ResourceLoader.exists(model_path):
-		var mesh = load(model_path)
+	# Сначала пробуем .glb (только для платы)
+	if component_type == "board":
+		var glb_path = "res://create_drone/models/" + base_name + variant_str + ".glb"
+		print("DEBUG: Trying to load GLB: ", glb_path)
+		
+		if ResourceLoader.exists(glb_path):
+			print("DEBUG: GLB file exists")
+			var scene = load(glb_path)
+			if scene and scene is PackedScene:
+				print("DEBUG: GLB scene loaded successfully")
+				var instance = scene.instantiate()
+				
+				# ИНДИВИДУАЛЬНЫЕ НАСТРОЙКИ ДЛЯ КАЖДОЙ ПЛАТЫ
+				match component_variant:
+					1:  # board1.tscn
+						# Масштаб и поворот для board1
+						instance.scale = Vector3(0.1, 0.1, 0.1)  # Уменьшить в 5 раз от 0.1
+						instance.rotation_degrees = Vector3(0, 0, 0)  # Поворот для board1
+						print("DEBUG: Applied settings for board1: scale=0.02, rotation=(0,0,0)")
+					2:  # board2.tscn
+						# Масштаб и поворот для board2
+						instance.scale = Vector3(1, 1, 1)  # Увеличить
+						instance.rotation_degrees = Vector3(-90, 0, 0)  # Поворот на 90 градусов по X
+						print("DEBUG: Applied settings for board2: scale=2.5, rotation=(90,0,0)")
+					3:  # board3.tscn
+						# Масштаб и поворот для board3 (настройте по необходимости)
+						instance.scale = Vector3(1.0, 1.0, 1.0)  # Нейтральный масштаб
+						instance.rotation_degrees = Vector3(0, 0, 0)  # Без поворота
+						print("DEBUG: Applied settings for board3: scale=1.0, rotation=(0,0,0)")
+					_:  # По умолчанию
+						instance.scale = Vector3(1.0, 1.0, 1.0)
+						instance.rotation_degrees = Vector3(0, 0, 0)
+				
+				return instance
+		
+		# Если .glb не найден, пробуем .gltf
+		var gltf_path = "res://create_drone/models/" + base_name + variant_str + ".gltf"
+		print("DEBUG: Trying to load GLTF: ", gltf_path)
+		
+		if ResourceLoader.exists(gltf_path):
+			print("DEBUG: GLTF file exists")
+			var scene = load(gltf_path)
+			if scene and scene is PackedScene:
+				print("DEBUG: GLTF scene loaded successfully")
+				var instance = scene.instantiate()
+				
+				# Применяем те же индивидуальные настройки для .gltf
+				match component_variant:
+					1:
+						instance.scale = Vector3(0.02, 0.02, 0.02)
+						instance.rotation_degrees = Vector3(0, 0, 0)
+					2:
+						instance.scale = Vector3(2.5, 2.5, 2.5)
+						instance.rotation_degrees = Vector3(90, 0, 0)
+					3:
+						instance.scale = Vector3(1.0, 1.0, 1.0)
+						instance.rotation_degrees = Vector3(0, 0, 0)
+					_:
+						instance.scale = Vector3(1.0, 1.0, 1.0)
+						instance.rotation_degrees = Vector3(0, 0, 0)
+				return instance
+	
+	# Для всех типов пробуем .obj (основной формат)
+	var obj_path = "res://create_drone/models/" + base_name + variant_str + ".obj"
+	print("DEBUG: Trying to load OBJ: ", obj_path)
+	
+	if ResourceLoader.exists(obj_path):
+		print("DEBUG: OBJ file exists")
+		var mesh = load(obj_path)
 		if mesh:
+			print("DEBUG: OBJ mesh loaded successfully")
 			var mesh_instance = MeshInstance3D.new()
 			mesh_instance.mesh = mesh
+			mesh_instance.scale = default_scale
+			return mesh_instance
+	
+	print("DEBUG: No model found for ", base_name, variant_str)
+	return null
+
+func create_frame():
+	print("DEBUG: Creating frame...")
+	var model = load_model("frame", Vector3(0.1, 0.1, 0.1))
+	if model:
+		print("DEBUG: Frame model loaded successfully")
+		add_child(model)
+		
+		# Добавляем материал для рамы
+		if model is MeshInstance3D:
 			var material = StandardMaterial3D.new()
 			material.albedo_color = Color(0.2, 0.2, 0.2)
-			mesh_instance.material_override = material
-			mesh_instance.scale = Vector3(0.1, 0.1, 0.1)
-			add_child(mesh_instance)
-			return
+			model.material_override = material
+		else:
+			# Если это сцена, ищем MeshInstance3D внутри
+			var mesh_instance = find_mesh_instance(model)
+			if mesh_instance:
+				var material = StandardMaterial3D.new()
+				material.albedo_color = Color(0.2, 0.2, 0.2)
+				mesh_instance.material_override = material
+		return
 	
-	# Fallback
+	print("DEBUG: Using fallback frame")
+	# Fallback - простая рама
 	var mesh_instance = MeshInstance3D.new()
 	var mesh = BoxMesh.new()
 	mesh.size = Vector3(2.0, 0.1, 2.0)
@@ -60,6 +166,21 @@ func create_frame():
 	add_child(mesh_instance)
 
 func create_board():
+	print("DEBUG: Creating board variant ", component_variant, "...")
+	var model = load_model("board", Vector3(0.1, 0.1, 0.1))
+	if model:
+		print("DEBUG: Board model loaded successfully")
+		print("DEBUG: Board scale: ", model.scale)
+		print("DEBUG: Board rotation: ", model.rotation_degrees)
+		add_child(model)
+		
+		# Проверим размеры и ориентацию модели
+		await get_tree().process_frame  # Ждем один кадр для загрузки
+		check_model_size_and_orientation(model)
+		return
+	
+	print("DEBUG: Using fallback board")
+	# Fallback - простая плата
 	var mesh_instance = MeshInstance3D.new()
 	var mesh = BoxMesh.new()
 	mesh.size = Vector3(0.8, 0.05, 0.8)
@@ -69,7 +190,50 @@ func create_board():
 	mesh_instance.material_override = material
 	add_child(mesh_instance)
 
+# Функция для проверки размеров и ориентации модели
+func check_model_size_and_orientation(model_node: Node3D):
+	# Ищем все MeshInstance3D в модели
+	var mesh_instances = []
+	find_all_mesh_instances(model_node, mesh_instances)
+	
+	print("DEBUG: Found ", mesh_instances.size(), " mesh instances in board model")
+	for i in range(mesh_instances.size()):
+		var mesh_instance = mesh_instances[i]
+		if mesh_instance.mesh:
+			var aabb = mesh_instance.get_aabb()
+			print("DEBUG: Mesh ", i, " AABB size: ", aabb.size)
+			print("DEBUG: Mesh ", i, " AABB min: ", aabb.position, " max: ", aabb.end)
+
+# Рекурсивно ищем все MeshInstance3D
+func find_all_mesh_instances(node: Node, result: Array):
+	if node is MeshInstance3D:
+		result.append(node)
+	
+	for child in node.get_children():
+		find_all_mesh_instances(child, result)
+
 func create_motor():
+	print("DEBUG: Creating motor...")
+	var model = load_model("motor", Vector3(0.1, 0.1, 0.1))
+	if model:
+		print("DEBUG: Motor model loaded successfully")
+		add_child(model)
+		
+		# Добавляем материал для мотора
+		if model is MeshInstance3D:
+			var material = StandardMaterial3D.new()
+			material.albedo_color = Color(0.7, 0.7, 0.7)
+			model.material_override = material
+		else:
+			var mesh_instance = find_mesh_instance(model)
+			if mesh_instance:
+				var material = StandardMaterial3D.new()
+				material.albedo_color = Color(0.7, 0.7, 0.7)
+				mesh_instance.material_override = material
+		return
+	
+	print("DEBUG: Using fallback motor")
+	# Fallback - простой двигатель
 	var mesh_instance = MeshInstance3D.new()
 	var mesh = CylinderMesh.new()
 	mesh.top_radius = 0.2
@@ -82,22 +246,26 @@ func create_motor():
 	add_child(mesh_instance)
 
 func create_propeller():
-	# Пытаемся загрузить .obj модель
-	var model_path = "res://create_drone/models/propeller" + str(component_variant) + ".obj"
-	
-	if ResourceLoader.exists(model_path):
-		var mesh = load(model_path)
-		if mesh:
-			var mesh_instance = MeshInstance3D.new()
-			mesh_instance.mesh = mesh
+	print("DEBUG: Creating propeller...")
+	var model = load_model("propeller", Vector3(0.01, 0.01, 0.01))  # Маленький масштаб для пропеллера
+	if model:
+		print("DEBUG: Propeller model loaded successfully")
+		add_child(model)
+		
+		# Добавляем материал для пропеллера
+		if model is MeshInstance3D:
 			var material = StandardMaterial3D.new()
 			material.albedo_color = Color(0.9, 0.9, 0.9)
-			mesh_instance.material_override = material
-			mesh_instance.scale = Vector3(0.01, 0.01, 0.01)  # Очень маленький масштаб
-			add_child(mesh_instance)
-			add_rotation_script(mesh_instance)
-			return
+			model.material_override = material
+		else:
+			var mesh_instance = find_mesh_instance(model)
+			if mesh_instance:
+				var material = StandardMaterial3D.new()
+				material.albedo_color = Color(0.9, 0.9, 0.9)
+				mesh_instance.material_override = material
+		return
 	
+	print("DEBUG: Using fallback propeller")
 	# Fallback - простой пропеллер
 	var propeller_node = Node3D.new()
 	
@@ -122,18 +290,23 @@ func create_propeller():
 		var blade_material = StandardMaterial3D.new()
 		blade_material.albedo_color = Color(0.9, 0.9, 0.9)
 		blade.material_override = blade_material
-		blade.rotation_degrees.y = i * 90
+		blade.rotation_degrees.y = i * 180  # Противоположные лопасти
 		blade.position.x = 0.75
 		propeller_node.add_child(blade)
 	
 	add_child(propeller_node)
-	add_rotation_script(propeller_node)
 
-func add_rotation_script(node: Node3D):
-	var rotation_script = GDScript.new()
-	rotation_script.source_code = "extends Node3D\n\nvar rotation_speed = 360.0\n\nfunc _process(delta):\n\trotate_y(deg_to_rad(rotation_speed * delta))"
-	rotation_script.reload()
-	node.set_script(rotation_script)
+# Вспомогательная функция для поиска MeshInstance3D в иерархии
+func find_mesh_instance(node: Node) -> MeshInstance3D:
+	if node is MeshInstance3D:
+		return node
+	
+	for child in node.get_children():
+		var result = find_mesh_instance(child)
+		if result:
+			return result
+	
+	return null
 
 func can_attach(component_type_to_attach: String) -> bool:
 	return component_type_to_attach in can_attach_to

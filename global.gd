@@ -3,7 +3,7 @@ extends Node
 
 # Игровые данные
 var purchased_items = ["Рама1", "Плата1", "Мотор1", "Пропеллер1"]
-var score = 100
+var score = 100000
 static var drone_data = {}
 var current_level: int = 1
 var levels_unlocked: int = 1
