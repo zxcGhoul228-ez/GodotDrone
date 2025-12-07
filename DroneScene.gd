@@ -1,20 +1,35 @@
 extends Node3D
 
+# ==================== КОНСТАНТЫ ====================
 const GRID_SIZE = 32
 const GRID_CELLS_COUNT = 32
+const ROTATION_SPEED = 0.003
+const ZOOM_SPEED = 3.0
+const MIN_DISTANCE = 12.0
+const MAX_DISTANCE = 400.0
+const MIN_VERTICAL_ANGLE = -1.0
+const MAX_VERTICAL_ANGLE = 1.5
+const CAMERA_MOVE_SPEED = 500.0
+const FRICTION = 0.92
+const MAX_VELOCITY = 0.1
+const MAX_TRAIL_LENGTH = 20
+const TRAIL_FADE_TIME = 2.0
+const MIN_CAMERA_HEIGHT = -15.0
+const START_POINT_X = 0
+const START_POINT_Z = 0
+const START_POINT_Y = 0
+const HIGHLIGHT_COLOR_WARNING = Color(1.0, 0.3, 0.3, 0.7)
 
-# Массив путей к моделям комнат (5 комнат)
+# ==================== ПУТИ К КОМНАТАМ ====================
 const ROOM_PATHS = [
 	"res://room3d/source/room1.glb",
 	"res://room3d/room2/source/chicken_gun_standoff_2_arena.glb", 
 	"res://room3d/room3/source/Scene 1 - RealRoom.glb",
 	"res://room3d/source/room4.glb",
-    "res://room3d/source/room5.glb"
+	"res://room3d/source/room5.glb"
 ]
 
-# Конфигурация комнат для каждого уровня (15 уровней)
-# Формат: [индекс_комнаты, масштаб, позиция]
-# Индекс комнаты: 0-4 (соответствует ROOM_PATHS)
+# ==================== КОНФИГУРАЦИЯ КОМНАТ ПО УРОВНЯМ ====================
 var level_room_configs = {
 	1: [0, Vector3(700, 700, 700), Vector3(-600, -200, -200)],
 	2: [1, Vector3(20000, 20000, 20000), Vector3(0, -40, 500)],
@@ -33,35 +48,15 @@ var level_room_configs = {
 	15: [4, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)]
 }
 
-# Если хотите перемешанный порядок комнат, раскомментируйте эту функцию
-func create_shuffled_room_order() -> Dictionary:
-	# Создаем массив из 15 индексов (каждая комната по 3 раза)
-	var room_indices = []
-	for i in range(5):
-		for j in range(3):
-			room_indices.append(i)
-	
-	# Перемешиваем
-	room_indices.shuffle()
-	
-	# Создаем новую конфигурацию с перемешанными комнатами
-	var shuffled_configs = {}
-	for level in range(1, 16):
-		var room_idx = room_indices[level - 1]
-		# Используем настройки из оригинальной конфигурации, но меняем индекс комнаты
-		var original_config = level_room_configs[level]
-		shuffled_configs[level] = [room_idx, original_config[1], original_config[2]]
-	
-	return shuffled_configs
-
+# ==================== ССЫЛКИ НА НОДЫ ====================
 @onready var camera_pivot = $CameraPivot
 @onready var camera = $CameraPivot/Camera3D
 @onready var drone_container = $DroneContainer
 @onready var block_ui = $UI/BlockProgramming
 @onready var programming_button = $UI/Control/ProgrammingButton
+@onready var grid_highlight = $GridHighlight
 
-
-# Таймер переменные
+# ==================== ПЕРЕМЕННЫЕ ТАЙМЕРА ====================
 var timer_ui: CanvasLayer
 var timer_label: Label
 var timer: Timer
@@ -71,126 +66,96 @@ var is_timer_running: bool = false
 var best_time_ms: int = 0
 var best_time_label: Label
 
-# Основные переменные
+# ==================== ОСНОВНЫЕ ПЕРЕМЕННЫЕ ====================
 var camera_rotation = Vector2(0, 0)
 var camera_distance = 200.0
-var ROTATION_SPEED = 0.003
-var ZOOM_SPEED = 3.0
-var MIN_DISTANCE = 12.0
-var MAX_DISTANCE = 400.0
-var MIN_VERTICAL_ANGLE = -1.0
-var MAX_VERTICAL_ANGLE = 1.5
-var CAMERA_MOVE_SPEED = 500.0
 var camera_move_input = Vector3.ZERO
 var current_drone: CharacterBody3D = null
-var pause_menu = null
-var settings_menu = null
-var is_paused = false
-var mouse_sensitivity: float = 1.0
-var camera_fov: float = 75.0
-var brightness: float = 1.0
-var music_volume: float = 50.0
-var sfx_volume: float = 50.0
 var rotation_velocity = Vector2(0, 0)
-const FRICTION = 0.92
-const MAX_VELOCITY = 0.1
-@onready var grid_highlight = $GridHighlight
 var highlight_mesh: MeshInstance3D
 var current_cell_position = Vector3.ZERO
 var trail_meshes: Array[MeshInstance3D] = []
-var max_trail_length = 20
-var trail_fade_time = 2.0
-var start_point_x: int = 0
-var start_point_z: int = 0
-var start_point_y: int = 0  # ИЗМЕНЕНО: было GRID_SIZE, теперь 0 - старт с земли
-var highlight_color: Color = Color(0, 1, 0, 0.6)
-var trail_color: Color = Color(0, 1, 0, 0.3)
-var MIN_CAMERA_HEIGHT = -15.0  # Минимальная высота камеры (чуть выше стола)
-# Границы сетки
 var grid_boundary_min: Vector3
 var grid_boundary_max: Vector3
 
-# Траектория и предпросмотр
+# ==================== ПЕРЕМЕННЫЕ ВИЗУАЛЬНЫХ ЭФФЕКТОВ ====================
 var trajectory_markers: Array[MeshInstance3D] = []
 var preview_color: Color = Color(0.2, 0.6, 1.0, 0.4)
 var preview_material: StandardMaterial3D
 
+# ==================== ПЕРЕМЕННЫЕ ОСВЕЩЕНИЯ ====================
+var lights_container: Node3D
+var fill_light: OmniLight3D
+var accent_lights: Node3D
+var reflection_probe: ReflectionProbe
+
+# ==================== МЕНЮ ПАУЗЫ И НАСТРОЕК ====================
+var pause_menu = null
+var settings_menu_instance: CanvasLayer = null
+var is_paused = false
+var is_settings_visible = false
+var original_settings = {}
+
+# ==================== ФУНКЦИИ ИНИЦИАЛИЗАЦИИ ====================
 func _ready():
+	print("=== ИНИЦИАЛИЗАЦИЯ СЦЕНЫ ДРОНА ===")
+	
+	# Базовые настройки
 	create_wooden_floor()
-	
-	# Загружаем комнату для текущего уровня
 	load_room_for_level(Global.current_level)
+	setup_additional_lighting()
+	add_reflection_probe()
 	
-	# Корректировка масштаба камеры для больших комнат
+	# Камера
 	camera.far = 100000.0
 	
-	print("=== ИНИЦИАЛИЗАЦИЯ СЦЕНЫ ДРОНА ===")
-	print("Размер сетки: ", GRID_SIZE, "x", GRID_SIZE)
-	print("Количество клеток: ", GRID_CELLS_COUNT, "x", GRID_CELLS_COUNT)
-	print("Текущий уровень: ", Global.current_level)
-	
-	# Инициализация границ
+	# Границы и сетка
 	calculate_grid_boundaries()
-	
-	# Создаем материал для предпросмотра траектории
 	create_preview_material()
 	
+	# Загрузка настроек и создание объектов
 	load_settings()
 	create_drone()
 	create_grid()
-	create_table()  # ДОБАВЬТЕ ЭТУ СТРОКУ
+	create_table()
 	create_grid_highlight()
+	
+	# UI и кнопки
 	block_ui.hide()
 	update_camera_position()
 	connect_buttons()
 	
-	# Инициализируем таймер
+	# Таймер
 	setup_timer()
 	
+	# Игровые настройки
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
 	
 	print("Сцена готова! Сетка: ", GRID_CELLS_COUNT, "x", GRID_CELLS_COUNT, " клеток")
 	print("Границы сетки: от ", grid_boundary_min, " до ", grid_boundary_max)
 
-# ================== СИСТЕМА ЗАГРУЗКИ КОМНАТ ==================
+# ==================== СИСТЕМА КОМНАТ ====================
 func load_room_for_level(level: int):
 	print("🔄 Загружаем комнату для уровня: ", level)
 	
-	# Если хотите использовать перемешанный порядок комнат, раскомментируйте следующую строку:
-	# level_room_configs = create_shuffled_room_order()
-	
-	# Получаем конфигурацию для текущего уровня
 	var config = level_room_configs.get(level, [0, Vector3(2000, 2000, 2000), Vector3(3200, -1000, -16)])
-	
-	var room_index = config[0]  # Индекс комнаты (0-4)
-	var room_scale = config[1]  # Масштаб комнаты
-	var room_position = config[2]  # Позиция комнаты
-	
-	# Проверяем, что индекс комнаты в допустимом диапазоне
-	if room_index < 0 or room_index >= ROOM_PATHS.size():
-		room_index = 0
-		print("⚠️ Неверный индекс комнаты, используется комната по умолчанию")
-	
+	var room_index = clamp(config[0], 0, ROOM_PATHS.size() - 1)
+	var room_scale = config[1]
+	var room_position = config[2]
 	var room_path = ROOM_PATHS[room_index]
 	
-	# Загружаем сцену комнаты
 	var room_scene = load(room_path)
 	if room_scene:
 		var room_instance = room_scene.instantiate()
-		
-		# Применяем настройки масштаба и положения
 		room_instance.scale = room_scale
 		room_instance.position = room_position
-		
 		add_child(room_instance)
 		print("✅ Загружена комната: ", room_path)
-		print("   Масштаб: ", room_scale)
-		print("   Позиция: ", room_position)
 	else:
 		print("❌ Не удалось загрузить комнату: ", room_path)
 
-# ================== ГРАНИЦЫ СЕТКИ ==================
+# ==================== СИСТЕМА ГРАНИЦ ====================
 func calculate_grid_boundaries():
 	var half_size = (GRID_CELLS_COUNT * GRID_SIZE) / 2
 	grid_boundary_min = Vector3(-half_size, 0, -half_size)
@@ -208,40 +173,25 @@ func clamp_position_to_bounds(position: Vector3) -> Vector3:
 		clamp(position.z, grid_boundary_min.z, grid_boundary_max.z)
 	)
 
-# ================== ПРЕДПРОСМОТР ТРАЕКТОРИИ ==================
-func create_preview_material():
-	preview_material = StandardMaterial3D.new()
-	preview_material.flags_unshaded = true
-	preview_material.flags_transparent = true
-	preview_material.albedo_color = preview_color
-
+# ==================== СИСТЕМА ПРЕДПРОСМОТРА ТРАЕКТОРИИ ====================
 func update_trajectory_preview(sequence: Array):
-	# Очищаем старые маркеры
 	clear_trajectory_preview()
-	
 	if not current_drone or sequence.is_empty():
 		return
 	
 	print("🔄 Обновляем предпросмотр траектории для ", sequence.size(), " команд")
-	
-	# Начинаем от текущей позиции дрона
 	var current_pos = current_drone.global_position
 	var visited_cells = {}
 	
-	# Создаем маркер для стартовой позиции
 	create_trajectory_marker(current_pos, true)
 	visited_cells[vector2_to_key(current_pos.x, current_pos.z)] = true
 	
-	# Проходим по всем командам и вычисляем позиции
 	for i in range(sequence.size()):
 		var direction = sequence[i]
 		var next_pos = calculate_next_position(current_pos, direction)
-		
-		# Проверяем, была ли уже эта клетка
 		var cell_key = vector2_to_key(next_pos.x, next_pos.z)
 		var is_new_cell = not visited_cells.has(cell_key)
 		
-		# Создаем маркер для следующей позиции
 		if is_new_cell:
 			create_trajectory_marker(next_pos, false)
 			visited_cells[cell_key] = true
@@ -252,7 +202,6 @@ func update_trajectory_preview(sequence: Array):
 
 func calculate_next_position(current_pos: Vector3, direction: int) -> Vector3:
 	var next_pos = current_pos
-	
 	match direction:
 		0: next_pos.z -= GRID_SIZE  # Вперед
 		1: next_pos.z += GRID_SIZE  # Назад
@@ -260,58 +209,26 @@ func calculate_next_position(current_pos: Vector3, direction: int) -> Vector3:
 		3: next_pos.x += GRID_SIZE  # Вправо
 		4: next_pos.y += GRID_SIZE  # Вверх
 		5: next_pos.y = max(next_pos.y - GRID_SIZE, grid_boundary_min.y)  # Вниз
-	
 	return next_pos
-
-func create_trajectory_marker(position: Vector3, is_start: bool):
-	var marker = MeshInstance3D.new()
-	add_child(marker)
-	marker.owner = get_tree().edited_scene_root
-	
-	# Позиционируем маркер чуть выше пола
-	marker.global_position = Vector3(position.x, 0.08, position.z)
-	
-	# Создаем меш для маркера
-	var box_mesh = BoxMesh.new()
-	if is_start:
-		box_mesh.size = Vector3(GRID_SIZE * 0.6, 0.15, GRID_SIZE * 0.6)  # Стартовая клетка меньше
-	else:
-		box_mesh.size = Vector3(GRID_SIZE * 0.8, 0.12, GRID_SIZE * 0.8)  # Обычные клетки
-	
-	marker.mesh = box_mesh
-	
-	# Настраиваем материал
-	var marker_material = preview_material.duplicate()
-	if is_start:
-		marker_material.albedo_color = Color(0, 1, 0, 0.6)  # Зеленый для старта
-	else:
-		marker_material.albedo_color = preview_color
-	
-	marker.material_override = marker_material
-	
-	trajectory_markers.append(marker)
 
 func clear_trajectory_preview():
 	for marker in trajectory_markers:
 		if is_instance_valid(marker):
 			marker.queue_free()
 	trajectory_markers.clear()
-	
 	print("🧹 Предпросмотр траектории очищен")
 
 func vector2_to_key(x: float, z: float) -> String:
 	return "%.1f_%.1f" % [x, z]
 
-# ================== ТАЙМЕР ==================
+# ==================== СИСТЕМА ТАЙМЕРА ====================
 func setup_timer():
 	timer = Timer.new()
 	timer.wait_time = 0.01
 	timer.timeout.connect(_on_timer_timeout)
 	add_child(timer)
-	
 	create_timer_ui()
 	load_best_time()
-	
 	print("✅ Таймер инициализирован")
 
 func create_timer_ui():
@@ -347,7 +264,6 @@ func create_timer_ui():
 	panel.add_child(best_time_label)
 	timer_ui.add_child(panel)
 	add_child(timer_ui)
-	
 	update_best_time_display()
 
 func create_panel_style() -> StyleBoxFlat:
@@ -367,12 +283,10 @@ func create_panel_style() -> StyleBoxFlat:
 func start_timer():
 	if not timer:
 		setup_timer()
-	
 	start_time = Time.get_ticks_msec()
 	current_time_ms = 0
 	is_timer_running = true
 	timer.start()
-	
 	update_timer_display()
 	print("⏱️ Таймер запущен")
 
@@ -380,7 +294,6 @@ func stop_timer() -> String:
 	if timer and is_timer_running:
 		is_timer_running = false
 		timer.stop()
-		
 		var final_time = format_time_ms(current_time_ms)
 		print("⏹️ Таймер остановлен. Итоговое время: ", final_time)
 		return final_time
@@ -432,24 +345,18 @@ func load_best_time():
 	else:
 		best_time_ms = 0
 		print("📁 Лучшее время не найдено")
-	
 	update_best_time_display()
 
+# ==================== СИСТЕМА РЕЗУЛЬТАТОВ ====================
 func _on_program_finished(success: bool):
 	print("🎯 Программа завершена, успех: ", success)
-	
 	var final_time = stop_timer()
 	
 	if success:
 		print("🎉 Уровень пройден! Время: ", final_time)
-		
-		# Сохраняем результат и получаем награду
 		var result = Global.complete_level(Global.current_level, current_time_ms)
-		
-		# Показываем сообщение с результатом
 		show_success_message(final_time, current_time_ms, result)
 		
-		# Обновляем лучшее время если нужно
 		if best_time_ms == 0 or current_time_ms < best_time_ms:
 			best_time_ms = current_time_ms
 			save_best_time()
@@ -491,7 +398,7 @@ func show_success_message(final_time: String, time_ms: int, result: Dictionary):
 	vbox.size = panel.size
 	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	
-	# Заголовок с анимацией
+	# Заголовок
 	var title_label = Label.new()
 	title_label.name = "TitleLabel"
 	title_label.text = get_success_title(result["stars"])
@@ -499,60 +406,51 @@ func show_success_message(final_time: String, time_ms: int, result: Dictionary):
 	title_label.add_theme_font_size_override("font_size", 36)
 	title_label.add_theme_color_override("font_color", get_star_color(result["stars"]))
 	
-	# Контейнер для звезд
+	# Звезды
 	var stars_container = HBoxContainer.new()
 	stars_container.name = "StarsContainer"
 	stars_container.alignment = BoxContainer.ALIGNMENT_CENTER
 	stars_container.add_theme_constant_override("separation", 20)
 	
-	# Создаем звезды
 	var stars_earned = result["stars"]
 	for i in range(3):
 		var star_frame = CenterContainer.new()
 		star_frame.custom_minimum_size = Vector2(80, 80)
-		
 		var star_label = Label.new()
 		if i < stars_earned:
 			star_label.text = "★"
 			star_label.add_theme_color_override("font_color", Color.GOLD)
-			# Анимация для полученных звезд
 			var tween = create_tween()
 			tween.tween_property(star_label, "scale", Vector2(1.5, 1.5), 0.5)
 			tween.tween_property(star_label, "scale", Vector2(1.2, 1.2), 0.3)
 		else:
 			star_label.text = "☆"
 			star_label.add_theme_color_override("font_color", Color.DARK_GRAY)
-		
 		star_label.add_theme_font_size_override("font_size", 64)
 		star_frame.add_child(star_label)
 		stars_container.add_child(star_frame)
 	
-	# Время прохождения
+	# Время
 	var time_container = HBoxContainer.new()
 	time_container.alignment = BoxContainer.ALIGNMENT_CENTER
-	
 	var time_icon = Label.new()
 	time_icon.text = "⏱️"
 	time_icon.add_theme_font_size_override("font_size", 24)
-	
 	var time_label = Label.new()
 	time_label.name = "TimeLabel"
 	time_label.text = final_time
 	time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	time_label.add_theme_font_size_override("font_size", 28)
 	time_label.add_theme_color_override("font_color", Color.WHITE)
-	
 	time_container.add_child(time_icon)
 	time_container.add_child(time_label)
 	
 	# Награда
 	var reward_container = HBoxContainer.new()
 	reward_container.alignment = BoxContainer.ALIGNMENT_CENTER
-	
 	var reward_icon = Label.new()
 	reward_icon.text = "💰"
 	reward_icon.add_theme_font_size_override("font_size", 24)
-	
 	var reward_label = Label.new()
 	reward_label.name = "RewardLabel"
 	var reward_text = "+" + str(result["reward"]) + " монет"
@@ -562,11 +460,10 @@ func show_success_message(final_time: String, time_ms: int, result: Dictionary):
 	reward_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	reward_label.add_theme_font_size_override("font_size", 24)
 	reward_label.add_theme_color_override("font_color", Color.GOLD)
-	
 	reward_container.add_child(reward_icon)
 	reward_container.add_child(reward_label)
 	
-	# Информация о порогах
+	# Пороги времени
 	var thresholds = Global.level_star_thresholds.get(Global.current_level, [0, 0, 0])
 	var thresholds_label = Label.new()
 	thresholds_label.name = "ThresholdsLabel"
@@ -585,14 +482,13 @@ func show_success_message(final_time: String, time_ms: int, result: Dictionary):
 	continue_button.custom_minimum_size = Vector2(200, 50)
 	continue_button.pressed.connect(_on_continue_pressed.bind(canvas))
 	
-	# Добавляем все элементы
+	# Добавление элементов
 	vbox.add_child(title_label)
 	vbox.add_child(stars_container)
 	vbox.add_child(time_container)
 	vbox.add_child(reward_container)
 	vbox.add_child(thresholds_label)
 	vbox.add_child(continue_button)
-	
 	vbox.add_theme_constant_override("separation", 20)
 	
 	panel.add_child(vbox)
@@ -604,25 +500,17 @@ func show_success_message(final_time: String, time_ms: int, result: Dictionary):
 
 func get_success_title(stars: int) -> String:
 	match stars:
-		3:
-			return "🎉 ИДЕАЛЬНО! 3 ЗВЕЗДЫ! 🎉"
-		2:
-			return "✨ ОТЛИЧНО! 2 ЗВЕЗДЫ! ✨"
-		1:
-			return "👍 ХОРОШО! 1 ЗВЕЗДА! 👍"
-		_:
-			return "✅ УРОВЕНЬ ПРОЙДЕН!"
+		3: return "🎉 ИДЕАЛЬНО! 3 ЗВЕЗДЫ! 🎉"
+		2: return "✨ ОТЛИЧНО! 2 ЗВЕЗДЫ! ✨"
+		1: return "👍 ХОРОШО! 1 ЗВЕЗДА! 👍"
+		_: return "✅ УРОВЕНЬ ПРОЙДЕН!"
 
 func get_star_color(stars: int) -> Color:
 	match stars:
-		3:
-			return Color.GOLD
-		2:
-			return Color.SILVER
-		1:
-			return Color.ORANGE
-		_:
-			return Color.GREEN
+		3: return Color.GOLD
+		2: return Color.SILVER
+		1: return Color.ORANGE
+		_: return Color.GREEN
 
 func _on_continue_pressed(canvas: CanvasLayer):
 	if canvas and is_instance_valid(canvas):
@@ -635,19 +523,16 @@ func return_to_selection():
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
 	get_tree().change_scene_to_file("res://UI/game_level.tscn")
 
-# ================== СИСТЕМА ДРОНА ==================
+# ==================== СИСТЕМА ДРОНА ====================
 func create_drone():
 	print("🔧 Создаем дрон...")
-	
-	# Очищаем контейнер
 	for child in drone_container.get_children():
 		child.queue_free()
 	
-	# Пытаемся загрузить существующий дрон
 	var drone_paths = [
 		"res://exported_drone.tscn",
 		"user://exported_drone.tscn", 
-        "res://DroneLevels/Drone.tscn"
+		"res://DroneLevels/Drone.tscn"
 	]
 	
 	var drone_loaded = false
@@ -675,7 +560,6 @@ func load_drone_from_path(path: String) -> bool:
 			setup_drone(current_drone)
 			return true
 		else:
-			# Если это не CharacterBody3D, ищем внутри
 			var drone_body = find_drone_root(drone_instance)
 			if drone_body:
 				current_drone = create_drone_from_parts(drone_body)
@@ -717,7 +601,6 @@ func create_drone_from_parts(drone_node: Node3D) -> CharacterBody3D:
 	var new_drone = CharacterBody3D.new()
 	new_drone.name = "Drone"
 	
-	# Загружаем скрипт дрона
 	var drone_script = load("res://DroneLevels/Drone.gd")
 	if drone_script:
 		new_drone.set_script(drone_script)
@@ -741,7 +624,6 @@ func create_drone_from_parts(drone_node: Node3D) -> CharacterBody3D:
 				child.transform = relative_transform
 				child.name = child_name
 	
-	# Устанавливаем позицию с проверкой границ
 	var start_pos = calculate_start_position()
 	if not is_position_within_bounds(start_pos):
 		start_pos = clamp_position_to_bounds(start_pos)
@@ -757,37 +639,28 @@ func create_drone_from_parts(drone_node: Node3D) -> CharacterBody3D:
 
 func calculate_start_position() -> Vector3:
 	@warning_ignore("integer_division")
-	var aligned_x = round((start_point_x + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
+	var aligned_x = round((START_POINT_X + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
 	@warning_ignore("integer_division")
-	var aligned_z = round((start_point_z + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
-	return Vector3(aligned_x, start_point_y, aligned_z)  # ИСПОЛЬЗУЕМ start_point_y (теперь 0)
+	var aligned_z = round((START_POINT_Z + GRID_SIZE/2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE/2
+	return Vector3(aligned_x, START_POINT_Y, aligned_z)
 
-# ================== УПРАВЛЕНИЕ ВЫСОТОЙ ДРОНА ==================
 func set_drone_height(height: float):
 	print("🔄 Устанавливаем высоту дрона: ", height)
-	start_point_y = height
-	
 	if current_drone:
 		var new_pos = current_drone.global_position
 		new_pos.y = height
 		current_drone.global_position = new_pos
 		print("✅ Высота дрона установлена: ", new_pos)
-	
-	# Сохраняем настройки
-	save_settings()
 
 func get_drone_height() -> float:
-	return start_point_y
+	return START_POINT_Y
 
-# Функция для внешнего управления высотой (например из Level1)
 func adjust_drone_height(relative_change: float):
-	var new_height = start_point_y + relative_change
+	var new_height = START_POINT_Y + relative_change
 	set_drone_height(new_height)
 
 func setup_drone(drone_node: CharacterBody3D):
 	print("🔧 Настраиваем дрон...")
-	
-	# Устанавливаем стартовую позицию
 	var start_pos = calculate_start_position()
 	if not is_position_within_bounds(start_pos):
 		start_pos = clamp_position_to_bounds(start_pos)
@@ -796,26 +669,21 @@ func setup_drone(drone_node: CharacterBody3D):
 	drone_node.global_position = start_pos
 	drone_node.scale = Vector3(6, 6, 6)
 	
-	# Устанавливаем целевую позицию (например, противоположный угол)
 	var target_pos = Vector3(GRID_SIZE * 2, 0, GRID_SIZE * 2)
 	if drone_node.has_method("set_target_position"):
 		drone_node.set_target_position(target_pos)
 		print("🎯 Установлена целевая позиция для дрона: ", target_pos)
 	
-	# Добавляем коллизию если нужно
 	add_collision_if_needed(drone_node)
-	
 	drone_node.collision_layer = 1
 	drone_node.collision_mask = 1
 	
-	# Подключаем сигналы
 	if drone_node.has_signal("drone_moved"):
 		drone_node.drone_moved.connect(on_drone_moved)
 	if drone_node.has_signal("program_finished"):
 		drone_node.program_finished.connect(_on_program_finished)
 		print("✅ Сигнал program_finished подключен")
 	
-	# Устанавливаем границы
 	if drone_node.has_method("set_boundaries"):
 		drone_node.set_boundaries(grid_boundary_min, grid_boundary_max)
 		print("✅ Границы установлены для дрона")
@@ -827,9 +695,9 @@ func add_collision_if_needed(drone_node: CharacterBody3D):
 		print("➕ Добавляем коллизию дрону...")
 		var collision = CollisionShape3D.new()
 		var shape = BoxShape3D.new()
-		shape.size = Vector3(6, 1.5, 6)  # Стандартный размер для дрона
+		shape.size = Vector3(6, 1.5, 6)
 		collision.shape = shape
-		collision.position = Vector3(0, 0.75, 0)  # Центрируем по высоте
+		collision.position = Vector3(0, 0.75, 0)
 		drone_node.add_child(collision)
 		collision.owner = get_tree().edited_scene_root
 		print("✅ Добавлена коллизия дрону")
@@ -842,19 +710,17 @@ func create_default_character_drone() -> CharacterBody3D:
 	var drone_node = CharacterBody3D.new()
 	drone_node.name = "DefaultDrone"
 	
-	# Добавляем скрипт
 	var drone_script = load("res://DroneLevels/Drone.gd")
 	if drone_script:
 		drone_node.set_script(drone_script)
 	
-	# Добавляем визуальную часть
 	var mesh_instance = MeshInstance3D.new()
 	var box_mesh = BoxMesh.new()
 	box_mesh.size = Vector3(4, 1, 4)
 	mesh_instance.mesh = box_mesh
 	
 	var material = StandardMaterial3D.new()
-	material.albedo_color = Color(0.8, 0.2, 0.2)  # Красный цвет для видимости
+	material.albedo_color = Color(0.8, 0.2, 0.2)
 	mesh_instance.material_override = material
 	
 	drone_node.add_child(mesh_instance)
@@ -870,7 +736,7 @@ func create_default_character_drone() -> CharacterBody3D:
 func get_drone() -> CharacterBody3D:
 	return current_drone
 
-# ================== СЕТКА И ВИЗУАЛЬНЫЕ ЭФФЕКТЫ ==================
+# ==================== СИСТЕМА СЕТКИ И ВИЗУАЛЬНЫХ ЭФФЕКТОВ ====================
 func create_grid():
 	var grid = $Grid
 	var material = StandardMaterial3D.new()
@@ -879,7 +745,6 @@ func create_grid():
 	for child in grid.get_children():
 		child.queue_free()
 	
-	# Создаем сетку 32x32 клеток
 	var half_cells = GRID_CELLS_COUNT / 2
 	for i in range(-half_cells, half_cells + 1):
 		create_grid_line(
@@ -895,109 +760,6 @@ func create_grid():
 	
 	print("✅ Сетка создана: ", GRID_CELLS_COUNT, "x", GRID_CELLS_COUNT, " клеток")
 
-# Замени функцию create_table():
-func create_table():
-	print("🔧 Создаем красивый игровой стол...")
-	
-	var table_node = MeshInstance3D.new()
-	table_node.name = "GameTable"
-	
-	# Размеры стола
-	var table_width = GRID_CELLS_COUNT * GRID_SIZE + 100
-	var table_depth = GRID_CELLS_COUNT * GRID_SIZE + 100
-	var table_height = 15
-	
-	var table_mesh = BoxMesh.new()
-	table_mesh.size = Vector3(table_width, table_height, table_depth)
-	table_node.mesh = table_mesh
-	
-	table_node.position = Vector3(0, -table_height/2 - 2, 0)
-	
-	# Создаем красивый материал для стола
-	var table_material = StandardMaterial3D.new()
-	table_material.albedo_color = Color(0.3, 0.2, 0.1)
-	table_material.roughness = 0.7
-	table_material.metallic = 0.1
-	
-	# Пробуем загрузить деревянную текстуру
-	var wood_texture = load("res://room3d/textures/wood.jpg")
-	if wood_texture:
-		table_material.albedo_texture = wood_texture
-		table_material.uv1_scale = Vector3(4, 4, 4)
-		table_material.roughness_texture = wood_texture
-		table_material.metallic_texture = wood_texture
-	
-	table_node.material_override = table_material
-	
-	add_child(table_node)
-	table_node.owner = get_tree().edited_scene_root
-	
-	# Создаем стильные ножки
-	create_modern_table_legs(table_width, table_depth, table_height)
-	
-	print("✅ Красивый стол создан")
-
-func create_modern_table_legs(table_width: float, table_depth: float, table_height: float):
-	var leg_height = 80
-	var leg_thickness = 12
-	
-	var leg_material = StandardMaterial3D.new()
-	leg_material.albedo_color = Color(0.15, 0.15, 0.15)
-	leg_material.roughness = 0.8
-	leg_material.metallic = 0.3
-	
-	var leg_positions = [
-		Vector3(-table_width/2 + leg_thickness, -table_height/2 - leg_height/2, -table_depth/2 + leg_thickness),
-		Vector3(table_width/2 - leg_thickness, -table_height/2 - leg_height/2, -table_depth/2 + leg_thickness),
-		Vector3(-table_width/2 + leg_thickness, -table_height/2 - leg_height/2, table_depth/2 - leg_thickness),
-		Vector3(table_width/2 - leg_thickness, -table_height/2 - leg_height/2, table_depth/2 - leg_thickness)
-	]
-	
-	for i in range(4):
-		var leg = MeshInstance3D.new()
-		leg.name = "ModernTableLeg_" + str(i)
-		
-		var leg_mesh = CylinderMesh.new()
-		leg_mesh.top_radius = leg_thickness / 2
-		leg_mesh.bottom_radius = leg_thickness / 2
-		leg_mesh.height = leg_height
-		leg.mesh = leg_mesh
-		leg.material_override = leg_material
-		
-		leg.position = leg_positions[i]
-		
-		add_child(leg)
-		leg.owner = get_tree().edited_scene_root
-
-func create_table_legs_long(table_width: float, table_depth: float, table_height: float):
-	var leg_size = Vector3(40, 4000, 40)
-	var leg_material = StandardMaterial3D.new()
-	leg_material.albedo_color = Color(0.3, 0.15, 0.05)
-	leg_material.roughness = 0.9
-	
-	var leg_positions = [
-		Vector3(-table_width/2 + leg_size.x, -table_height/2 - leg_size.y/2, -table_depth/2 + leg_size.z),
-		Vector3(table_width/2 - leg_size.x, -table_height/2 - leg_size.y/2, -table_depth/2 + leg_size.z),
-		Vector3(-table_width/2 + leg_size.x, -table_height/2 - leg_size.y/2, table_depth/2 - leg_size.z),
-		Vector3(table_width/2 - leg_size.x, -table_height/2 - leg_size.y/2, table_depth/2 - leg_size.z)
-	]
-	
-	for i in range(4):
-		var leg = MeshInstance3D.new()
-		leg.name = "TableLeg_Long_" + str(i)
-		
-		var leg_mesh = BoxMesh.new()
-		leg_mesh.size = leg_size
-		leg.mesh = leg_mesh
-		leg.material_override = leg_material
-		
-		leg.position = leg_positions[i]
-		
-		add_child(leg)
-		leg.owner = get_tree().edited_scene_root
-	
-	print("✅ Длинные ножки созданы: высота = ", leg_size.y)
-
 func create_grid_line(from: Vector3, to: Vector3, material: Material, thickness: float):
 	var mesh_instance = MeshInstance3D.new()
 	var immediate_mesh = ImmediateMesh.new()
@@ -1009,78 +771,16 @@ func create_grid_line(from: Vector3, to: Vector3, material: Material, thickness:
 	$Grid.add_child(mesh_instance)
 	mesh_instance.owner = get_tree().edited_scene_root
 
-func create_highlight_shader() -> Shader:
-	var shader_code = """
-    shader_type spatial;
-    render_mode unshaded, blend_add;
-    
-    uniform vec4 highlight_color;
-    uniform float pulse_speed;
-    
-    void fragment() {
-        float time = TIME * pulse_speed;
-        float pulse = (sin(time) + 1.0) * 0.5;
-        float alpha = highlight_color.a * (0.7 + 0.3 * pulse);
-        
-        // Плавное затухание к краям
-        vec2 uv = UV - 0.5;
-        float edge_fade = 1.0 - smoothstep(0.3, 0.5, length(uv));
-        
-        ALBEDO = highlight_color.rgb;
-        ALPHA = alpha * edge_fade;
-    }
-	"""
-	
-	var shader = Shader.new()
-	shader.code = shader_code
-	return shader
-
-# В DroneScene.gd замени функцию create_grid_highlight():
-func create_grid_highlight():
-	var box_mesh = BoxMesh.new()
-	box_mesh.size = Vector3(GRID_SIZE * 0.9, 0.1, GRID_SIZE * 0.9)
-	highlight_mesh = MeshInstance3D.new()
-	highlight_mesh.mesh = box_mesh
-	
-	# Создаем красивый материал для подсветки
-	var highlight_material = StandardMaterial3D.new()
-	highlight_material.flags_transparent = true
-	highlight_material.albedo_color = HIGHLIGHT_COLOR_NORMAL
-	highlight_material.emission_enabled = true
-	highlight_material.emission = HIGHLIGHT_COLOR_NORMAL * 0.6
-	highlight_material.metallic = 0.2
-	highlight_material.roughness = 0.1
-	
-	highlight_mesh.material_override = highlight_material
-	grid_highlight.add_child(highlight_mesh)
-	highlight_mesh.owner = get_tree().edited_scene_root
-	grid_highlight.visible = false
-	
-	# Плавная анимация пульсации
-	var tween = create_tween()
-	tween.set_loops()
-	tween.tween_property(highlight_mesh.material_override, "albedo_color:a", 0.7, 1.5)
-	tween.tween_property(highlight_mesh.material_override, "emission", HIGHLIGHT_COLOR_NORMAL * 0.8, 0.75)
-	tween.tween_property(highlight_mesh.material_override, "albedo_color:a", 0.3, 1.5)
-	tween.tween_property(highlight_mesh.material_override, "emission", HIGHLIGHT_COLOR_NORMAL * 0.3, 0.75)
-
-# Обнови константы цветов:
-const HIGHLIGHT_COLOR_NORMAL = Color(0.2, 0.6, 1.0, 0.5)
-const HIGHLIGHT_COLOR_WARNING = Color(1.0, 0.2, 0.2, 0.6)
-const TRAIL_COLOR = Color(0.2, 0.5, 0.9, 0.4)
-
-# В update_grid_highlight() обнови позицию:
 func update_grid_highlight():
 	if not current_drone or not grid_highlight:
 		return
 	
 	var drone_pos = current_drone.global_position
-	
 	if is_position_within_bounds(drone_pos):
 		grid_highlight.global_position = Vector3(drone_pos.x, 0.15, drone_pos.z)
 		grid_highlight.visible = true
-		highlight_mesh.material_override.albedo_color = HIGHLIGHT_COLOR_NORMAL
-		highlight_mesh.material_override.emission = HIGHLIGHT_COLOR_NORMAL * 0.6
+		highlight_mesh.material_override.albedo_color = Global.highlight_color
+		highlight_mesh.material_override.emission = Global.highlight_color * 0.6
 	else:
 		grid_highlight.global_position = Vector3(drone_pos.x, 0.15, drone_pos.z)
 		grid_highlight.visible = true
@@ -1093,62 +793,28 @@ func update_grid_highlight():
 	current_cell_position = new_cell_position
 
 func create_wooden_floor():
-	var floor_node = $Floor  # или путь к вашему узлу Floor
-	
+	var floor_node = $Floor
 	if floor_node:
 		var mesh_instance = floor_node.get_node("MeshInstance3D")
 		if mesh_instance:
-			# Создаем красивый деревянный материал
 			var floor_material = StandardMaterial3D.new()
 			floor_material.albedo_color = Color(0.35, 0.25, 0.15)
 			floor_material.metallic = 0.1
 			floor_material.roughness = 0.7
 			
-			# Пробуем загрузить деревянную текстуру
 			var wood_texture = load("res://room3d/textures/wood.jpg")
 			if wood_texture:
 				floor_material.albedo_texture = wood_texture
-				# Настраиваем масштаб текстуры для хорошего размера
 				floor_material.uv1_scale = Vector3(16, 16, 16)
-			
 			
 			mesh_instance.material_override = floor_material
 			print("✅ Деревянный пол создан")
 
-# Улучшенная функция создания следов:
-func create_trail_marker(position: Vector3):
-	if not is_position_within_bounds(position):
-		return
-	
-	var trail_mesh = MeshInstance3D.new()
-	add_child(trail_mesh)
-	trail_mesh.owner = get_tree().edited_scene_root
-	trail_mesh.global_position = Vector3(position.x, 0.08, position.z)
-	
-	var box_mesh = BoxMesh.new()
-	box_mesh.size = Vector3(GRID_SIZE * 0.7, 0.08, GRID_SIZE * 0.7)
-	trail_mesh.mesh = box_mesh
-	
-	var trail_material = StandardMaterial3D.new()
-	trail_material.flags_unshaded = true
-	trail_material.flags_transparent = true
-	trail_material.albedo_color = TRAIL_COLOR
-	trail_mesh.material_override = trail_material
-	
-	trail_meshes.append(trail_mesh)
-	
-	if trail_meshes.size() > max_trail_length:
-		var oldest_trail = trail_meshes.pop_front()
-		if is_instance_valid(oldest_trail):
-			oldest_trail.queue_free()
-	
-	start_trail_fade(trail_mesh)
-
 func start_trail_fade(trail_mesh: MeshInstance3D):
 	var trail_index = trail_meshes.find(trail_mesh)
 	var tween = create_tween()
-	tween.tween_property(trail_mesh, "scale", Vector3(0.5, 0.5, 0.5), trail_fade_time * 0.7)
-	tween.parallel().tween_property(trail_mesh.material_override, "albedo_color:a", 0.0, trail_fade_time)
+	tween.tween_property(trail_mesh, "scale", Vector3(0.5, 0.5, 0.5), TRAIL_FADE_TIME * 0.7)
+	tween.parallel().tween_property(trail_mesh.material_override, "albedo_color:a", 0.0, TRAIL_FADE_TIME)
 	tween.tween_callback(_on_trail_fade_finished.bind(trail_index))
 
 func _on_trail_fade_finished(trail_index: int):
@@ -1173,9 +839,14 @@ func clear_all_trails():
 func on_drone_moved():
 	update_grid_highlight()
 
-# ================== УПРАВЛЕНИЕ КАМЕРОЙ ==================
+# ==================== СИСТЕМА УПРАВЛЕНИЯ КАМЕРОЙ ====================
 func _input(event):
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+		if is_settings_visible and settings_menu_instance:
+			print("📋 Нажата ESC в меню настроек - отменяем изменения")
+			settings_menu_instance._on_cancel_pressed()
+			get_viewport().set_input_as_handled()
+			return
 		toggle_pause_menu()
 		get_viewport().set_input_as_handled()
 		return
@@ -1191,20 +862,15 @@ func _unhandled_input(event):
 	
 	if event is InputEventMouseMotion:
 		var mouse_delta = event.relative
-		
 		rotation_velocity = Vector2(
-			-mouse_delta.y * ROTATION_SPEED * mouse_sensitivity * 0.5,
-			-mouse_delta.x * ROTATION_SPEED * mouse_sensitivity * 0.5
+			-mouse_delta.y * ROTATION_SPEED * Global.mouse_sensitivity * 0.5,
+			-mouse_delta.x * ROTATION_SPEED * Global.mouse_sensitivity * 0.5
 		)
-		
 		rotation_velocity.x = clamp(rotation_velocity.x, -MAX_VELOCITY, MAX_VELOCITY)
 		rotation_velocity.y = clamp(rotation_velocity.y, -MAX_VELOCITY, MAX_VELOCITY)
-		
-		camera_rotation.x += -mouse_delta.y * ROTATION_SPEED * mouse_sensitivity
-		camera_rotation.y += -mouse_delta.x * ROTATION_SPEED * mouse_sensitivity
-		
+		camera_rotation.x += -mouse_delta.y * ROTATION_SPEED * Global.mouse_sensitivity
+		camera_rotation.y += -mouse_delta.x * ROTATION_SPEED * Global.mouse_sensitivity
 		camera_rotation.x = clamp(camera_rotation.x, MIN_VERTICAL_ANGLE, MAX_VERTICAL_ANGLE)
-		
 		update_camera_position()
 	
 	if event is InputEventMouseButton:
@@ -1249,16 +915,7 @@ func _process(delta):
 	if current_drone and grid_highlight:
 		update_grid_highlight()
 
-func update_camera_position():
-	var camera_position = Vector3(
-		sin(camera_rotation.y) * cos(camera_rotation.x),
-		sin(camera_rotation.x),
-		cos(camera_rotation.y) * cos(camera_rotation.x)
-	) * camera_distance
-	camera.position = camera_position
-	camera.look_at(camera_pivot.global_position, Vector3.UP)
-
-# ================== UI И КНОПКИ ==================
+# ==================== СИСТЕМА UI И КНОПОК ====================
 func connect_buttons():
 	var programming_btn = $UI/Control/ProgrammingButton
 	var start_btn = $UI/BlockProgramming/StartButton
@@ -1274,7 +931,6 @@ func connect_buttons():
 	if close_btn:
 		close_btn.pressed.connect(_on_close_button_pressed)
 	
-	# ПОДКЛЮЧАЕМ СИГНАЛ ДЛЯ ПРЕДПРОСМОТРА ТРАЕКТОРИИ
 	if block_ui and block_ui.has_signal("trajectory_updated"):
 		block_ui.trajectory_updated.connect(update_trajectory_preview)
 		print("✅ Сигнал trajectory_updated подключен")
@@ -1286,10 +942,7 @@ func _on_programming_button_pressed():
 
 func _on_start_button_pressed():
 	print("🟢 Запускаем программу дрона")
-	
-	# Очищаем предпросмотр перед запуском
 	clear_trajectory_preview()
-	
 	var drone = get_drone()
 	if drone and drone.has_method("execute_sequence"):
 		var sequence = block_ui.get_program_sequence()
@@ -1305,10 +958,7 @@ func _on_start_button_pressed():
 
 func _on_clear_button_pressed():
 	print("🗑️ Очищаем программу")
-	
-	# Очищаем предпросмотр при очистке программы
 	clear_trajectory_preview()
-	
 	if block_ui and block_ui.has_method("_on_clear_button_pressed"):
 		block_ui._on_clear_button_pressed()
 	elif block_ui and block_ui.has_method("clear_program"):
@@ -1324,29 +974,157 @@ func toggle_programming():
 		block_ui.hide()
 		programming_button.show()
 		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
-		
-		# Очищаем предпросмотр при закрытии панели
 		clear_trajectory_preview()
-		
 		print("❌ Закрываем панель программирования")
 	else:
 		block_ui.show()
 		programming_button.hide()
 		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
-		
-		# Обновляем предпросмотр при открытии панели
 		if block_ui.has_method("get_program_sequence"):
 			var sequence = block_ui.get_program_sequence()
 			update_trajectory_preview(sequence)
-		
 		print("🧩 Открываем панель программирования")
 
-# ================== МЕНЮ ПАУЗЫ И НАСТРОЕК ==================
+# ==================== МЕНЮ ПАУЗЫ ====================
+func create_pause_menu():
+	pause_menu = ColorRect.new()
+	pause_menu.color = Color(0, 0, 0, 0.7)
+	pause_menu.size = get_viewport().size
+	pause_menu.visible = false
+	
+	var container = VBoxContainer.new()
+	container.alignment = BoxContainer.ALIGNMENT_CENTER
+	container.size = Vector2(400, 350)
+	
+	var viewport_size = Vector2(get_viewport().size)
+	container.position = (viewport_size - container.size) / 2
+	
+	var title = Label.new()
+	title.text = "ПАУЗА"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 32)
+	title.add_theme_color_override("font_color", Color.WHITE)
+	
+	var resume_btn = Button.new()
+	resume_btn.text = "Продолжить"
+	resume_btn.custom_minimum_size = Vector2(300, 50)
+	resume_btn.pressed.connect(toggle_pause_menu)
+	
+	var settings_btn = Button.new()
+	settings_btn.text = "Настройки"
+	settings_btn.custom_minimum_size = Vector2(300, 50)
+	settings_btn.pressed.connect(open_settings)
+	
+	var main_menu_btn = Button.new()
+	main_menu_btn.text = "Главное меню"
+	main_menu_btn.custom_minimum_size = Vector2(300, 50)
+	main_menu_btn.pressed.connect(go_to_main_menu)
+	
+	var quit_btn = Button.new()
+	quit_btn.text = "Выйти из игры"
+	quit_btn.custom_minimum_size = Vector2(300, 50)
+	quit_btn.pressed.connect(quit_game)
+	
+	container.add_child(title)
+	container.add_child(resume_btn)
+	container.add_child(settings_btn)
+	container.add_child(main_menu_btn)
+	container.add_child(quit_btn)
+	
+	pause_menu.add_child(container)
+	add_child(pause_menu)
+
+# ==================== ОТДЕЛЬНАЯ СЦЕНА НАСТРОЕК ====================
+# ==================== ОТДЕЛЬНАЯ СЦЕНА НАСТРОЕК ====================
+func open_settings():
+	print("🔄 Открываем настройки...")
+	
+	# Если меню настроек уже открыто, ничего не делаем
+	if is_settings_visible and settings_menu_instance:
+		print("⚠️ Меню настроек уже открыто")
+		return
+	
+	# Загружаем сцену настроек если еще не загружена
+	if settings_menu_instance == null:
+		print("📥 Загружаем сцену настроек...")
+		var settings_scene = load("res://UI/SettingsScene.tscn")
+		if settings_scene:
+			settings_menu_instance = settings_scene.instantiate()
+			add_child(settings_menu_instance)
+			
+			# Подключаем сигналы от сцены настроек
+			settings_menu_instance.settings_saved.connect(_on_settings_saved)
+			settings_menu_instance.settings_cancelled.connect(_on_settings_cancelled)
+			settings_menu_instance.settings_closed.connect(_on_settings_closed)
+			print("✅ Сцена настроек загружена и добавлена")
+		else:
+			print("❌ Не удалось загрузить сцену настроек")
+			return
+	
+	# Открываем меню настроек
+	if settings_menu_instance.has_method("open"):
+		settings_menu_instance.open()
+		is_settings_visible = true
+		
+		# Ставим игру на паузу, если она еще не на паузе
+		if not is_paused:
+			toggle_pause_menu_silent()  # Специальная функция для бесшумной паузы
+		
+		# Скрываем меню паузы если оно открыто
+		if pause_menu and pause_menu.visible:
+			pause_menu.visible = false
+			print("📋 Скрыли меню паузы")
+		
+		print("⚙️ Меню настроек открыто, игра на паузе")
+	else:
+		print("❌ Сцена настроек не имеет метода open()")
+
+func close_settings():
+	print("🔄 Закрываем настройки...")
+	
+	if settings_menu_instance and settings_menu_instance.has_method("close"):
+		settings_menu_instance.close()
+	
+	is_settings_visible = false
+	
+	# Если игра была на паузе до открытия настроек, показываем меню паузы
+	if is_paused and pause_menu:
+		pause_menu.visible = true
+		print("📋 Показали меню паузы")
+	else:
+		# Если игра не на паузе, снимаем паузу (на всякий случай)
+		if is_paused:
+			toggle_pause_menu_silent()
+	
+	print("✅ Меню настроек закрыто")
+
+# ==================== УПРАВЛЕНИЕ ПАУЗОЙ (новые функции) ====================
+func toggle_pause_menu_silent():
+	"""Переключает паузу без показа/скрытия меню паузы"""
+	is_paused = !is_paused
+	
+	if is_paused and is_timer_running:
+		timer.paused = true
+		print("⏸️ Таймер на паузе (бесшумно)")
+	elif not is_paused and is_timer_running:
+		timer.paused = false
+		print("▶️ Таймер возобновлен (бесшумно)")
+	
+	if is_paused:
+		Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+		print("⏸️ Игра на паузе (бесшумно)")
+	else:
+		Input.set_mouse_mode(Input.MOUSE_MODE_CAPTURED)
+		print("▶️ Игра продолжается (бесшумно)")
+	
+	get_tree().paused = is_paused
+
 func toggle_pause_menu():
 	print("🔄 Нажата кнопка ESC, текущая пауза:", is_paused)
 	
-	if settings_menu and settings_menu.visible:
-		print("📋 Закрываем настройки")
+	# Если открыты настройки - закрываем их
+	if is_settings_visible and settings_menu_instance:
+		print("📋 Закрываем настройки вместо паузы")
 		close_settings()
 		return
 	
@@ -1380,351 +1158,30 @@ func toggle_pause_menu():
 	
 	get_tree().paused = is_paused
 
-func create_pause_menu():
-	pause_menu = ColorRect.new()
-	pause_menu.color = Color(0, 0, 0, 0.7)
-	pause_menu.size = get_viewport().size
-	pause_menu.visible = false
+func _on_settings_saved():
+	print("✅ Настройки сохранены (сигнал получен)")
+	# Применяем настройки к текущей сцене
+	apply_settings()
 	
-	var container = VBoxContainer.new()
-	container.alignment = BoxContainer.ALIGNMENT_CENTER
-	container.size = Vector2(400, 300)
-	
-	var viewport_size = Vector2(get_viewport().size)
-	container.position = (viewport_size - container.size) / 2
-	
-	var title = Label.new()
-	title.text = "ПАУЗА"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 32)
-	title.add_theme_color_override("font_color", Color.WHITE)
-	
-	var settings_btn = Button.new()
-	settings_btn.text = "Настройки"
-	settings_btn.custom_minimum_size = Vector2(300, 50)
-	settings_btn.pressed.connect(open_settings)
-	
-	var main_menu_btn = Button.new()
-	main_menu_btn.text = "Главное меню"
-	main_menu_btn.custom_minimum_size = Vector2(300, 50)
-	main_menu_btn.pressed.connect(go_to_main_menu)
-	
-	var quit_btn = Button.new()
-	quit_btn.text = "Выйти из игры"
-	quit_btn.custom_minimum_size = Vector2(300, 50)
-	quit_btn.pressed.connect(quit_game)
-	
-	var resume_btn = Button.new()
-	resume_btn.text = "Продолжить"
-	resume_btn.custom_minimum_size = Vector2(300, 50)
-	resume_btn.pressed.connect(toggle_pause_menu)
-	
-	container.add_child(title)
-	container.add_child(resume_btn)
-	container.add_child(settings_btn)
-	container.add_child(main_menu_btn)
-	container.add_child(quit_btn)
-	
-	pause_menu.add_child(container)
-	add_child(pause_menu)
+	# Закрываем меню настроек и автоматически снимаем паузу
+	close_settings()
+	if is_paused:
+		toggle_pause_menu()
+	print("🎮 Игра продолжается после сохранения настроек")
 
-func open_settings():
-	if settings_menu == null:
-		create_settings_menu()
-	pause_menu.visible = false
-	settings_menu.visible = true
+func _on_settings_cancelled():
+	print("↩️ Изменения настроек отменены (сигнал получен)")
+	# Закрываем меню настроек и показываем меню паузы
+	close_settings()
+	print("📋 Возвращаемся в меню паузы")
 
-func close_settings():
-	if settings_menu:
-		settings_menu.visible = false
+func _on_settings_closed():
+	print("📋 Меню настроек закрыто (сигнал получен)")
+	is_settings_visible = false
+	# Если игра на паузе и меню паузы не видно, показываем его
+	if is_paused and pause_menu and not pause_menu.visible:
 		pause_menu.visible = true
-		save_settings()
-
-func create_settings_menu():
-	settings_menu = ColorRect.new()
-	settings_menu.color = Color(0, 0, 0, 0.8)
-	settings_menu.size = get_viewport().size
-	settings_menu.visible = false
-	
-	var container = VBoxContainer.new()
-	container.alignment = BoxContainer.ALIGNMENT_CENTER
-	container.size = Vector2(500, 700)
-	
-	var viewport_size = Vector2(get_viewport().size)
-	container.position = (viewport_size - container.size) / 2
-	
-	var title = Label.new()
-	title.text = "НАСТРОЙКИ"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	title.add_theme_font_size_override("font_size", 32)
-	title.add_theme_color_override("font_color", Color.WHITE)
-	
-	# Настройки чувствительности мыши
-	var mouse_sens_container = HBoxContainer.new()
-	var mouse_sens_label = Label.new()
-	mouse_sens_label.text = "Чувствительность мыши:"
-	mouse_sens_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var mouse_sens_slider = HSlider.new()
-	mouse_sens_slider.min_value = 0.1
-	mouse_sens_slider.max_value = 2.0
-	mouse_sens_slider.value = mouse_sensitivity
-	mouse_sens_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	mouse_sens_slider.value_changed.connect(_on_mouse_sens_changed)
-	var mouse_sens_value = Label.new()
-	mouse_sens_value.text = str(mouse_sensitivity)
-	mouse_sens_value.custom_minimum_size = Vector2(40, 0)
-	mouse_sens_container.add_child(mouse_sens_label)
-	mouse_sens_container.add_child(mouse_sens_slider)
-	mouse_sens_container.add_child(mouse_sens_value)
-	
-	# Настройки FOV
-	var fov_container = HBoxContainer.new()
-	var fov_label = Label.new()
-	fov_label.text = "Поле зрения (FOV):"
-	fov_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var fov_slider = HSlider.new()
-	fov_slider.min_value = 60
-	fov_slider.max_value = 120
-	fov_slider.value = camera_fov
-	fov_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	fov_slider.value_changed.connect(_on_fov_changed)
-	var fov_value = Label.new()
-	fov_value.text = str(int(camera_fov))
-	fov_value.custom_minimum_size = Vector2(40, 0)
-	fov_container.add_child(fov_label)
-	fov_container.add_child(fov_slider)
-	fov_container.add_child(fov_value)
-	
-	# Настройки яркости
-	var brightness_container = HBoxContainer.new()
-	var brightness_label = Label.new()
-	brightness_label.text = "Яркость:"
-	brightness_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var brightness_slider = HSlider.new()
-	brightness_slider.min_value = 0.5
-	brightness_slider.max_value = 2.0
-	brightness_slider.value = brightness
-	brightness_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	brightness_slider.value_changed.connect(_on_brightness_changed)
-	var brightness_value = Label.new()
-	brightness_value.text = str(brightness)
-	brightness_value.custom_minimum_size = Vector2(40, 0)
-	brightness_container.add_child(brightness_label)
-	brightness_container.add_child(brightness_slider)
-	brightness_container.add_child(brightness_value)
-	
-	# Настройки громкости музыки
-	var music_volume_container = HBoxContainer.new()
-	var music_volume_label = Label.new()
-	music_volume_label.text = "Громкость музыки:"
-	music_volume_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var music_volume_slider = HSlider.new()
-	music_volume_slider.min_value = 0
-	music_volume_slider.max_value = 100
-	music_volume_slider.value = music_volume
-	music_volume_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	music_volume_slider.value_changed.connect(_on_music_volume_changed)
-	var music_volume_value = Label.new()
-	music_volume_value.text = str(int(music_volume))
-	music_volume_value.custom_minimum_size = Vector2(40, 0)
-	music_volume_container.add_child(music_volume_label)
-	music_volume_container.add_child(music_volume_slider)
-	music_volume_container.add_child(music_volume_value)
-	
-	# Настройки громкости звуков
-	var sfx_volume_container = HBoxContainer.new()
-	var sfx_volume_label = Label.new()
-	sfx_volume_label.text = "Громкость звуков:"
-	sfx_volume_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var sfx_volume_slider = HSlider.new()
-	sfx_volume_slider.min_value = 0
-	sfx_volume_slider.max_value = 100
-	sfx_volume_slider.value = sfx_volume
-	sfx_volume_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	sfx_volume_slider.value_changed.connect(_on_sfx_volume_changed)
-	var sfx_volume_value = Label.new()
-	sfx_volume_value.text = str(int(sfx_volume))
-	sfx_volume_value.custom_minimum_size = Vector2(40, 0)
-	sfx_volume_container.add_child(sfx_volume_label)
-	sfx_volume_container.add_child(sfx_volume_slider)
-	sfx_volume_container.add_child(sfx_volume_value)
-	
-	# Разделитель для стартовой позиции
-	var start_point_separator = HSeparator.new()
-	start_point_separator.custom_minimum_size = Vector2(400, 5)
-	
-	var start_point_label = Label.new()
-	start_point_label.text = "=== СТАРТОВАЯ ТОЧКА ДРОНА ==="
-	start_point_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	start_point_label.add_theme_color_override("font_color", Color.YELLOW)
-	
-	# Настройки стартовой позиции X
-	var start_x_container = HBoxContainer.new()
-	var start_x_label = Label.new()
-	start_x_label.text = "Стартовая позиция X:"
-	start_x_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var start_x_slider = HSlider.new()
-	start_x_slider.min_value = -GRID_CELLS_COUNT/2 * GRID_SIZE
-	start_x_slider.max_value = GRID_CELLS_COUNT/2 * GRID_SIZE
-	start_x_slider.step = GRID_SIZE
-	start_x_slider.value = start_point_x
-	start_x_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	start_x_slider.value_changed.connect(_on_start_x_changed)
-	var start_x_value = Label.new()
-	start_x_value.text = str(start_point_x)
-	start_x_value.custom_minimum_size = Vector2(60, 0)
-	start_x_container.add_child(start_x_label)
-	start_x_container.add_child(start_x_slider)
-	start_x_container.add_child(start_x_value)
-	
-	# Настройки стартовой позиции Z
-	var start_z_container = HBoxContainer.new()
-	var start_z_label = Label.new()
-	start_z_label.text = "Стартовая позиция Z:"
-	start_z_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var start_z_slider = HSlider.new()
-	start_z_slider.min_value = -GRID_CELLS_COUNT/2 * GRID_SIZE
-	start_z_slider.max_value = GRID_CELLS_COUNT/2 * GRID_SIZE
-	start_z_slider.step = GRID_SIZE
-	start_z_slider.value = start_point_z
-	start_z_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	start_z_slider.value_changed.connect(_on_start_z_changed)
-	var start_z_value = Label.new()
-	start_z_value.text = str(start_point_z)
-	start_z_value.custom_minimum_size = Vector2(60, 0)
-	start_z_container.add_child(start_z_label)
-	start_z_container.add_child(start_z_slider)
-	start_z_container.add_child(start_z_value)
-	
-	# Настройки стартовой высоты Y - ИЗМЕНЕНО: теперь минимум 0
-	var start_y_container = HBoxContainer.new()
-	var start_y_label = Label.new()
-	start_y_label.text = "Стартовая высота Y:"
-	start_y_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var start_y_slider = HSlider.new()
-	start_y_slider.min_value = 0  # ИЗМЕНЕНО: было GRID_SIZE
-	start_y_slider.max_value = 3 * GRID_SIZE
-	start_y_slider.step = GRID_SIZE
-	start_y_slider.value = start_point_y
-	start_y_slider.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	start_y_slider.value_changed.connect(_on_start_y_changed)
-	var start_y_value = Label.new()
-	start_y_value.text = str(start_point_y)
-	start_y_value.custom_minimum_size = Vector2(60, 0)
-	start_y_container.add_child(start_y_label)
-	start_y_container.add_child(start_y_slider)
-	start_y_container.add_child(start_y_value)
-	
-	# Кнопка применения стартовой позиции
-	var apply_start_btn = Button.new()
-	apply_start_btn.text = "Применить стартовую позицию"
-	apply_start_btn.custom_minimum_size = Vector2(300, 40)
-	apply_start_btn.pressed.connect(_on_apply_start_position)
-	
-	# Кнопка назад
-	var back_btn = Button.new()
-	back_btn.text = "Назад"
-	back_btn.custom_minimum_size = Vector2(300, 50)
-	back_btn.pressed.connect(close_settings)
-	
-	# Добавляем все элементы в контейнер
-	container.add_child(title)
-	container.add_child(mouse_sens_container)
-	container.add_child(fov_container)
-	container.add_child(brightness_container)
-	container.add_child(music_volume_container)
-	container.add_child(sfx_volume_container)
-	container.add_child(start_point_separator)
-	container.add_child(start_point_label)
-	container.add_child(start_x_container)
-	container.add_child(start_z_container)
-	container.add_child(start_y_container)
-	container.add_child(apply_start_btn)
-	container.add_child(back_btn)
-	
-	settings_menu.add_child(container)
-	add_child(settings_menu)
-
-func _on_mouse_sens_changed(value: float):
-	mouse_sensitivity = value
-	if settings_menu:
-		var container = settings_menu.get_child(0)
-		var mouse_sens_container = container.get_child(1)
-		var value_label = mouse_sens_container.get_child(2)
-		value_label.text = str(round(value * 100) / 100)
-
-func _on_fov_changed(value: float):
-	camera_fov = value
-	camera.fov = value
-	if settings_menu:
-		var container = settings_menu.get_child(0)
-		var fov_container = container.get_child(2)
-		var value_label = fov_container.get_child(2)
-		value_label.text = str(int(value))
-
-func _on_brightness_changed(value: float):
-	brightness = value
-	var env = get_node_or_null("WorldEnvironment")
-	if env and env.environment:
-		env.environment.adjustment_enabled = true
-		env.environment.adjustment_brightness = value
-	if settings_menu:
-		var container = settings_menu.get_child(0)
-		var brightness_container = container.get_child(3)
-		var value_label = brightness_container.get_child(2)
-		value_label.text = str(round(value * 100) / 100)
-
-func _on_music_volume_changed(value: float):
-	music_volume = value
-	if settings_menu:
-		var container = settings_menu.get_child(0)
-		var music_container = container.get_child(4)
-		var value_label = music_container.get_child(2)
-		value_label.text = str(int(value))
-
-func _on_sfx_volume_changed(value: float):
-	sfx_volume = value
-	if settings_menu:
-		var container = settings_menu.get_child(0)
-		var sfx_container = container.get_child(5)
-		var value_label = sfx_container.get_child(2)
-		value_label.text = str(int(value))
-
-func _on_start_x_changed(value: float):
-	start_point_x = int(value)
-	if settings_menu:
-		var container = settings_menu.get_child(0)
-		var start_x_container = container.get_child(8)
-		var value_label = start_x_container.get_child(2)
-		value_label.text = str(start_point_x)
-
-func _on_start_z_changed(value: float):
-	start_point_z = int(value)
-	if settings_menu:
-		var container = settings_menu.get_child(0)
-		var start_z_container = container.get_child(9)
-		var value_label = start_z_container.get_child(2)
-		value_label.text = str(start_point_z)
-
-func _on_start_y_changed(value: float):
-	start_point_y = int(value)
-	if settings_menu:
-		var container = settings_menu.get_child(0)
-		var start_y_container = container.get_child(10)
-		var value_label = start_y_container.get_child(2)
-		value_label.text = str(start_point_y)
-
-func _on_apply_start_position():
-	print("🎯 Применяем новую стартовую позицию: ", start_point_x, ", ", start_point_y, ", ", start_point_z)
-	if current_drone:
-		var start_pos = calculate_start_position()
-		if not is_position_within_bounds(start_pos):
-			start_pos = clamp_position_to_bounds(start_pos)
-			print("⚠️ Стартовая позиция скорректирована: ", start_pos)
-		
-		current_drone.global_position = start_pos
-		on_drone_moved()
-	save_settings()
+		print("📋 Показали меню паузы после закрытия настроек")
 
 func go_to_main_menu():
 	get_tree().paused = false
@@ -1733,50 +1190,251 @@ func go_to_main_menu():
 func quit_game():
 	get_tree().quit()
 
-# ================== НАСТРОЙКИ ==================
+# ==================== СИСТЕМА НАСТРОЕК ====================
 func save_settings():
-	var config = ConfigFile.new()
-	config.set_value("settings", "mouse_sensitivity", mouse_sensitivity)
-	config.set_value("settings", "camera_fov", camera_fov)
-	config.set_value("settings", "brightness", brightness)
-	config.set_value("settings", "music_volume", music_volume)
-	config.set_value("settings", "sfx_volume", sfx_volume)
-	config.set_value("start_position", "x", start_point_x)
-	config.set_value("start_position", "z", start_point_z)
-	config.set_value("start_position", "y", start_point_y)
-	config.set_value("colors", "highlight_color", highlight_color)
-	config.set_value("colors", "trail_color", trail_color)
-	var error = config.save("user://settings.cfg")
-	if error == OK:
-		print("Настройки сохранены")
-	else:
-		print("Ошибка сохранения настроек")
+	# Теперь сохраняется через Global.gd
+	Global.save_global_settings()
 
 func load_settings():
-	var config = ConfigFile.new()
-	var error = config.load("user://settings.cfg")
-	if error == OK:
-		mouse_sensitivity = config.get_value("settings", "mouse_sensitivity", 1.0)
-		camera_fov = config.get_value("settings", "camera_fov", 75.0)
-		brightness = config.get_value("settings", "brightness", 1.0)
-		music_volume = config.get_value("settings", "music_volume", 50.0)
-		sfx_volume = config.get_value("settings", "sfx_volume", 50.0)
-		start_point_x = config.get_value("start_position", "x", 0)
-		start_point_z = config.get_value("start_position", "z", 0)
-		start_point_y = config.get_value("start_position", "y", 0)  # ИЗМЕНЕНО: было GRID_SIZE, теперь 0
-		highlight_color = config.get_value("colors", "highlight_color", Color(0, 1, 0, 0.6))
-		trail_color = config.get_value("colors", "trail_color", Color(0, 1, 0, 0.3))
-		apply_settings()
-		print("Настройки загружены")
-	else:
-		print("Файл настроек не найден, используются настройки по умолчанию")
+	Global.load_global_settings()
+	apply_settings()
 
 func apply_settings():
-	camera.fov = camera_fov
-	camera.far = 100090.0  # Добавьте эту строку
+	# Применяем настройки из Global.gd
+	camera.fov = Global.camera_fov
+	camera.far = 100090.0
+	
 	var env = get_node_or_null("WorldEnvironment")
 	if env and env.environment:
 		env.environment.adjustment_enabled = true
-		env.environment.adjustment_brightness = brightness
+		env.environment.adjustment_brightness = Global.brightness
+	
 	if highlight_mesh and highlight_mesh.material_override:
-		highlight_mesh.material_override.albedo_color = highlight_color
+		highlight_mesh.material_override.albedo_color = Global.highlight_color
+	
+	Global.apply_global_settings()
+
+# ==================== СИСТЕМА ОСВЕЩЕНИЯ ====================
+func setup_additional_lighting():
+	lights_container = Node3D.new()
+	lights_container.name = "AdditionalLights"
+	add_child(lights_container)
+	setup_fill_light()
+	setup_accent_lights()
+	print("✅ Дополнительное освещение настроено")
+
+func setup_fill_light():
+	fill_light = OmniLight3D.new()
+	fill_light.name = "FillLight"
+	lights_container.add_child(fill_light)
+	fill_light.position = Vector3(0, 30, 0)
+	fill_light.light_color = Color(0.8, 0.85, 1)
+	fill_light.light_energy = 0.4
+	fill_light.omni_range = 60
+	fill_light.shadow_enabled = false
+
+func setup_accent_lights():
+	accent_lights = Node3D.new()
+	accent_lights.name = "AccentLights"
+	lights_container.add_child(accent_lights)
+	
+	var half_size = (GRID_CELLS_COUNT * GRID_SIZE) / 2
+	var table_width = GRID_CELLS_COUNT * GRID_SIZE + 100
+	var table_depth = GRID_CELLS_COUNT * GRID_SIZE + 100
+	
+	var corner_positions = [
+		Vector3(-table_width/2 + 50, 15, -table_depth/2 + 50),
+		Vector3(table_width/2 - 50, 15, -table_depth/2 + 50),
+		Vector3(-table_width/2 + 50, 15, table_depth/2 - 50),
+		Vector3(table_width/2 - 50, 15, table_depth/2 - 50)
+	]
+	
+	for i in range(corner_positions.size()):
+		var spot_light = SpotLight3D.new()
+		spot_light.name = "AccentLight_%d" % i
+		accent_lights.add_child(spot_light)
+		spot_light.position = corner_positions[i]
+		spot_light.look_at(Vector3(0, 0, 0), Vector3.UP)
+		spot_light.light_color = Color(0.9, 0.8, 1)
+		spot_light.light_energy = 0.6
+		spot_light.spot_range = 30
+		spot_light.spot_angle = 45
+		spot_light.shadow_enabled = false
+
+func add_reflection_probe():
+	reflection_probe = ReflectionProbe.new()
+	reflection_probe.name = "GameTableReflectionProbe"
+	add_child(reflection_probe)
+	reflection_probe.position = Vector3(0, 20, 0)
+	reflection_probe.size = Vector3(100, 40, 100)
+	reflection_probe.update_mode = ReflectionProbe.UPDATE_ALWAYS
+	print("✅ Reflection probe добавлен для стола")
+
+# ==================== СИСТЕМА СТОЛА ====================
+func create_table():
+	print("🔧 Создаем красивый игровой стол...")
+	var table_node = MeshInstance3D.new()
+	table_node.name = "GameTable"
+	
+	var table_width = GRID_CELLS_COUNT * GRID_SIZE + 100
+	var table_depth = GRID_CELLS_COUNT * GRID_SIZE + 100
+	var table_height = 15
+	
+	var table_mesh = BoxMesh.new()
+	table_mesh.size = Vector3(table_width, table_height, table_depth)
+	table_node.mesh = table_mesh
+	table_node.position = Vector3(0, -table_height/2 - 2, 0)
+	
+	var table_material = StandardMaterial3D.new()
+	table_material.albedo_color = Color(0.3, 0.2, 0.1)
+	table_material.roughness = 0.7
+	table_material.metallic = 0.1
+	
+	var wood_texture = load("res://room3d/textures/wood.jpg")
+	if wood_texture:
+		table_material.albedo_texture = wood_texture
+		table_material.uv1_scale = Vector3(4, 4, 4)
+		table_material.roughness_texture = wood_texture
+		table_material.metallic_texture = wood_texture
+	
+	table_node.material_override = table_material
+	add_child(table_node)
+	table_node.owner = get_tree().edited_scene_root
+	create_modern_table_legs(table_width, table_depth, table_height)
+	print("✅ Красивый стол создан")
+
+func create_modern_table_legs(table_width: float, table_depth: float, table_height: float):
+	var leg_height = 80
+	var leg_thickness = 12
+	var leg_material = StandardMaterial3D.new()
+	leg_material.albedo_color = Color(0.15, 0.15, 0.15)
+	leg_material.roughness = 0.8
+	leg_material.metallic = 0.3
+	
+	var leg_positions = [
+		Vector3(-table_width/2 + leg_thickness, -table_height/2 - leg_height/2, -table_depth/2 + leg_thickness),
+		Vector3(table_width/2 - leg_thickness, -table_height/2 - leg_height/2, -table_depth/2 + leg_thickness),
+		Vector3(-table_width/2 + leg_thickness, -table_height/2 - leg_height/2, table_depth/2 - leg_thickness),
+		Vector3(table_width/2 - leg_thickness, -table_height/2 - leg_height/2, table_depth/2 - leg_thickness)
+	]
+	
+	for i in range(4):
+		var leg = MeshInstance3D.new()
+		leg.name = "ModernTableLeg_" + str(i)
+		var leg_mesh = CylinderMesh.new()
+		leg_mesh.top_radius = leg_thickness / 2
+		leg_mesh.bottom_radius = leg_thickness / 2
+		leg_mesh.height = leg_height
+		leg.mesh = leg_mesh
+		leg.material_override = leg_material
+		leg.position = leg_positions[i]
+		add_child(leg)
+		leg.owner = get_tree().edited_scene_root
+
+# ==================== СИСТЕМА ПОДСВЕТКИ КЛЕТОК ====================
+func create_grid_highlight():
+	var box_mesh = BoxMesh.new()
+	box_mesh.size = Vector3(GRID_SIZE * 0.85, 0.1, GRID_SIZE * 0.85)
+	highlight_mesh = MeshInstance3D.new()
+	highlight_mesh.mesh = box_mesh
+	
+	var highlight_material = StandardMaterial3D.new()
+	highlight_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	highlight_material.albedo_color = Global.highlight_color
+	highlight_material.emission_enabled = true
+	highlight_material.emission = Global.highlight_color * 0.8
+	highlight_material.emission_energy = 0.5
+	highlight_material.metallic = 0.3
+	highlight_material.roughness = 0.2
+	
+	highlight_mesh.material_override = highlight_material
+	grid_highlight.add_child(highlight_mesh)
+	highlight_mesh.owner = get_tree().edited_scene_root
+	grid_highlight.visible = false
+	
+	var tween = create_tween()
+	tween.set_loops()
+	tween.tween_property(highlight_mesh.material_override, "emission", 
+						Global.highlight_color * 1.2, 1.0)
+	tween.tween_property(highlight_mesh.material_override, "emission", 
+						Global.highlight_color * 0.8, 1.0)
+
+func create_trail_marker(position: Vector3):
+	if not is_position_within_bounds(position):
+		return
+	
+	var trail_mesh = MeshInstance3D.new()
+	add_child(trail_mesh)
+	trail_mesh.owner = get_tree().edited_scene_root
+	trail_mesh.global_position = Vector3(position.x, 0.08, position.z)
+	
+	var cylinder_mesh = CylinderMesh.new()
+	cylinder_mesh.top_radius = GRID_SIZE * 0.35
+	cylinder_mesh.bottom_radius = GRID_SIZE * 0.35
+	cylinder_mesh.height = 0.06
+	trail_mesh.mesh = cylinder_mesh
+	
+	var trail_material = StandardMaterial3D.new()
+	trail_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	trail_material.albedo_color = Global.trail_color
+	trail_material.emission_enabled = true
+	trail_material.emission = Global.trail_color * 0.3
+	trail_mesh.material_override = trail_material
+	
+	trail_meshes.append(trail_mesh)
+	
+	if trail_meshes.size() > MAX_TRAIL_LENGTH:
+		var oldest_trail = trail_meshes.pop_front()
+		if is_instance_valid(oldest_trail):
+			oldest_trail.queue_free()
+	
+	start_trail_fade(trail_mesh)
+
+func create_preview_material():
+	preview_material = StandardMaterial3D.new()
+	preview_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	preview_material.albedo_color = Color(0.3, 0.7, 1.0, 0.5)
+	preview_material.emission_enabled = true
+	preview_material.emission = Color(0.3, 0.7, 1.0, 0.3)
+
+func create_trajectory_marker(position: Vector3, is_start: bool):
+	var marker = MeshInstance3D.new()
+	add_child(marker)
+	marker.owner = get_tree().edited_scene_root
+	marker.global_position = Vector3(position.x, 0.08, position.z)
+	
+	var cylinder_mesh = CylinderMesh.new()
+	if is_start:
+		cylinder_mesh.top_radius = GRID_SIZE * 0.4
+		cylinder_mesh.bottom_radius = GRID_SIZE * 0.4
+		cylinder_mesh.height = 0.12
+	else:
+		cylinder_mesh.top_radius = GRID_SIZE * 0.35
+		cylinder_mesh.bottom_radius = GRID_SIZE * 0.35
+		cylinder_mesh.height = 0.1
+	
+	marker.mesh = cylinder_mesh
+	
+	var marker_material = preview_material.duplicate()
+	if is_start:
+		marker_material.albedo_color = Color(0.2, 1.0, 0.3, 0.7)
+		marker_material.emission = Color(0.2, 1.0, 0.3, 0.4)
+	else:
+		marker_material.albedo_color = Color(0.3, 0.7, 1.0, 0.5)
+	
+	marker.material_override = marker_material
+	trajectory_markers.append(marker)
+
+# ==================== СИСТЕМА КАМЕРЫ ====================
+func update_camera_position():
+	var camera_position = Vector3(
+		sin(camera_rotation.y) * cos(camera_rotation.x),
+		sin(camera_rotation.x),
+		cos(camera_rotation.y) * cos(camera_rotation.x)
+	) * camera_distance
+	camera.position = camera_position
+	camera.look_at(camera_pivot.global_position, Vector3.UP)
+	
+	var time = Time.get_ticks_msec() / 1000.0
+	camera.h_offset = sin(time * 0.5) * 0.01
+	camera.v_offset = cos(time * 0.3) * 0.01

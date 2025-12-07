@@ -7,17 +7,19 @@
 
 [sub_resource type="Environment" id="Environment_anata"]
 background_mode = 1
-background_color = Color(0.16470589, 0.16470589, 0.16470589, 1)
+background_color = Color(0.039215688, 0.039215688, 0.07058824, 1)
 background_energy_multiplier = 7.65
 ambient_light_source = 2
 ambient_light_color = Color(0.22745098, 0.22745098, 0.22745098, 1)
 ambient_light_energy = 7.35
-tonemap_exposure = 0.71
-tonemap_white = 2.9
+tonemap_mode = 3
 ssao_enabled = true
-ssao_radius = 0.5
-ssao_intensity = 1.0
+ssao_radius = 1.2
+ssao_intensity = 0.6
 ssao_light_affect = 0.2
+glow_strength = 0.7
+glow_blend_mode = 1
+glow_hdr_threshold = 0.3
 adjustment_enabled = true
 adjustment_brightness = 1.71
 adjustment_contrast = 1.21
@@ -45,16 +47,15 @@ environment = SubResource("Environment_anata")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.7071068, -0.40557978, 0.579228, 0, 0.819152, 0.57357645, -0.7071068, -0.40557978, 0.579228, 0, 482.36154, 0.10998535)
-light_color = Color(1, 0.9098039, 0.8, 1)
-light_energy = 0.6
+light_color = Color(1, 0.93333334, 0.8666667, 1)
+light_energy = 0.3
 light_indirect_energy = 0.3
 light_angular_distance = 73.34
-shadow_enabled = true
-shadow_bias = 0.03
-shadow_normal_bias = 0.185
-shadow_transmittance_bias = -1.059
-shadow_opacity = 0.5
-shadow_blur = 4.564
+shadow_bias = 6.414
+shadow_normal_bias = 7.81
+shadow_transmittance_bias = -7.847
+shadow_opacity = 0.11
+shadow_blur = 3.149
 directional_shadow_max_distance = 548.0
 
 [node name="Grid" type="Node3D" parent="."]

@@ -1,9 +1,10 @@
-[gd_scene load_steps=5 format=3 uid="uid://bofqavxfukbhw"]
+[gd_scene load_steps=6 format=3 uid="uid://bofqavxfukbhw"]
 
 [ext_resource type="Script" uid="uid://c5oh5mlxm5aeu" path="res://main_script.gd" id="1_d5x1h"]
 [ext_resource type="Texture2D" uid="uid://cl438cesrvewg" path="res://bg/main_menu.png" id="2_gyfs4"]
 [ext_resource type="AudioStream" uid="uid://cs4ongwwq0ht" path="res://C418_-_Key_30921622.mp3" id="3_gyfs4"]
 [ext_resource type="FontFile" uid="uid://cjkejlnbt8pdg" path="res://fonts/Zerove/Zerove-Regular.otf" id="4_d5x1h"]
+[ext_resource type="Texture2D" uid="uid://82p0ajarkm23" path="res://imgs/settings.png" id="5_8mm7a"]
 
 [node name="Node2D" type="Node2D"]
 
@@ -30,10 +31,7 @@ grow_horizontal = 2
 grow_vertical = 2
 texture = ExtResource("2_gyfs4")
 
-[node name="AudioStreamPlayer" type="AudioStreamPlayer" parent="Control"]
-stream = ExtResource("3_gyfs4")
-
-[node name="HBoxContainer" type="HBoxContainer" parent="Control"]
+[node name="HBoxContainer" type="HBoxContainer" parent="Control/TextureRect"]
 custom_minimum_size = Vector2(300, 200)
 layout_mode = 0
 offset_left = 83.0
@@ -43,35 +41,38 @@ offset_bottom = 985.0
 theme_override_constants/separation = 149
 alignment = 1
 
-[node name="VBoxContainer" type="VBoxContainer" parent="Control/HBoxContainer"]
+[node name="VBoxContainer" type="VBoxContainer" parent="Control/TextureRect/HBoxContainer"]
 custom_minimum_size = Vector2(500, 292.595)
 layout_mode = 2
 theme_override_constants/separation = 49
 alignment = 2
 
-[node name="InvButt" type="Button" parent="Control/HBoxContainer/VBoxContainer"]
+[node name="InvButt" type="Button" parent="Control/TextureRect/HBoxContainer/VBoxContainer"]
 custom_minimum_size = Vector2(200, 80)
 layout_mode = 2
 theme_override_font_sizes/font_size = 51
 text = "Сборка дрона"
 
-[node name="GameButt" type="Button" parent="Control/HBoxContainer/VBoxContainer"]
+[node name="GameButt" type="Button" parent="Control/TextureRect/HBoxContainer/VBoxContainer"]
 custom_minimum_size = Vector2(200, 80)
 layout_mode = 2
 theme_override_font_sizes/font_size = 51
 text = "Выбор уровня"
 
-[node name="ShopButt" type="Button" parent="Control/HBoxContainer/VBoxContainer"]
+[node name="ShopButt" type="Button" parent="Control/TextureRect/HBoxContainer/VBoxContainer"]
 custom_minimum_size = Vector2(200, 80)
 layout_mode = 2
 theme_override_font_sizes/font_size = 51
 text = "Магазин"
 
-[node name="Button" type="Button" parent="Control/HBoxContainer/VBoxContainer"]
+[node name="Button" type="Button" parent="Control/TextureRect/HBoxContainer/VBoxContainer"]
 custom_minimum_size = Vector2(80, 80)
 layout_mode = 2
 theme_override_font_sizes/font_size = 51
 text = "Выйти"
+
+[node name="AudioStreamPlayer" type="AudioStreamPlayer" parent="Control"]
+stream = ExtResource("3_gyfs4")
 
 [node name="Label" type="Label" parent="Control"]
 layout_mode = 0
@@ -104,3 +105,19 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.49883658, 0, 0.05585517, 1)
 theme_override_fonts/font = ExtResource("4_d5x1h")
 theme_override_font_sizes/font_size = 65
+
+[node name="sett_button" type="Button" parent="Control"]
+custom_minimum_size = Vector2(200, 80)
+layout_mode = 0
+offset_left = 1783.0
+offset_top = 10.0
+offset_right = 2991.0
+offset_bottom = 1216.0
+scale = Vector2(0.1, 0.1)
+theme_override_font_sizes/font_size = 51
+icon = ExtResource("5_8mm7a")
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="Control"]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0

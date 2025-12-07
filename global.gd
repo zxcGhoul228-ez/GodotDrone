@@ -1,5 +1,8 @@
-# Global.gd
 extends Node
+
+# ==================== АВТОЗАГРУЗКА ====================
+# Добавьте в project.godot в секцию [autoload]:
+# Global="*res://Global.gd"
 
 # Игровые данные
 var purchased_items = ["Рама1", "Плата1", "Мотор1", "Пропеллер1"]
@@ -10,17 +13,69 @@ var levels_unlocked: int = 1
 var levels_data: Dictionary = {}
 var currency = 100
 
+# ==================== НАСТРОЙКИ ГРАФИКИ И ЗВУКА ====================
+var camera_fov: float = 75.0:
+	set(value):
+		camera_fov = value
+		emit_signal("camera_fov_changed", value)
+
+var mouse_sensitivity: float = 1.0:  # Это 50% в новой системе
+	set(value):
+		mouse_sensitivity = value
+		emit_signal("mouse_sensitivity_changed", value)
+
+var brightness: float = 1.0:  # Это 50% в новой системе
+	set(value):
+		brightness = value
+		emit_signal("brightness_changed", value)
+
+var music_volume: float = 50.0:  # Уже в процентах
+	set(value):
+		music_volume = value
+		emit_signal("music_volume_changed", value)
+
+var sfx_volume: float = 50.0:  # Уже в процентах
+	set(value):
+		sfx_volume = value
+		emit_signal("sfx_volume_changed", value)
+
+var fps_mode: int = 3:  # 0:30, 1:60, 2:120, 3:Vsync
+	set(value):
+		fps_mode = value
+		emit_signal("fps_mode_changed", value)
+
+var highlight_color: Color = Color(0.2, 0.8, 1.0, 0.6):
+	set(value):
+		highlight_color = value
+		emit_signal("highlight_color_changed", value)
+
+var trail_color: Color = Color(0.2, 0.7, 0.9, 0.5):
+	set(value):
+		trail_color = value
+		emit_signal("trail_color_changed", value)
+
+# ==================== СИГНАЛЫ НАСТРОЕК ====================
+signal mouse_sensitivity_changed(value: float)
+signal camera_fov_changed(value: float)
+signal brightness_changed(value: float)
+signal music_volume_changed(value: float)
+signal sfx_volume_changed(value: float)
+signal fps_mode_changed(value: int)
+signal highlight_color_changed(value: Color)
+signal trail_color_changed(value: Color)
+signal settings_saved
+signal settings_loaded
+
 # Система загрузки
 var loading_screen: Control = null
 
 # Временные пороги для звезд (в миллисекундах) для каждого уровня
-# [3 звезды, 2 звезды, 1 звезда] - времена ДО которых нужно уложиться
 var level_star_thresholds = {
-	1: [30, 45, 60000],   # Уровень 1: до 30 сек - 3 звезды, до 45 сек - 2 звезды, до 60 сек - 1 звезда
-	2: [45000, 60000, 90000],   # Уровень 2
-	3: [60000, 90000, 120000],  # Уровень 3
-	4: [75000, 105000, 150000], # Уровень 4
-	5: [90000, 120000, 180000], # Уровень 5
+	1: [30000, 45000, 60000],
+	2: [45000, 60000, 90000],
+	3: [60000, 90000, 120000],
+	4: [75000, 105000, 150000],
+	5: [90000, 120000, 180000],
 	6: [120000, 150000, 210000],
 	7: [150000, 180000, 240000],
 	8: [180000, 210000, 270000],
@@ -33,11 +88,11 @@ var level_star_thresholds = {
 	15: [390000, 420000, 480000]
 }
 
-# Награды за звезды (базовая валюта)
+# Награды за звезды
 var star_rewards = {
-	3: 100,  # За 3 звезды
-	2: 60,   # За 2 звезды  
-	1: 30    # За 1 звезду
+	3: 100,
+	2: 60,
+	1: 30
 }
 
 # Бонус за первое прохождение уровня
@@ -46,9 +101,75 @@ var first_time_bonus = 50
 func _ready():
 	print("=== GLOBAL INIT ===")
 	load_levels_data()
+	load_global_settings()
+	apply_global_settings()
 	print("Уровней разблокировано: ", levels_unlocked)
 
-# ФУНКЦИЯ ЗАГРУЗКИ ДЛЯ ИГРОВЫХ УРОВНЕЙ И СОЗДАНИЯ ДРОНА
+# ==================== ГЛОБАЛЬНЫЕ НАСТРОЙКИ ====================
+func save_global_settings():
+	print("💾 Сохраняем глобальные настройки...")
+	
+	var config = ConfigFile.new()
+	config.set_value("settings", "fps_mode", fps_mode)
+	config.set_value("settings", "mouse_sensitivity", mouse_sensitivity)
+	config.set_value("settings", "camera_fov", camera_fov)
+	config.set_value("settings", "brightness", brightness)
+	config.set_value("settings", "music_volume", music_volume)
+	config.set_value("settings", "sfx_volume", sfx_volume)
+	
+	var error = config.save("user://global_settings.cfg")
+	if error == OK:
+		print("✅ Глобальные настройки сохранены успешно")
+	else:
+		print("❌ Ошибка сохранения глобальных настроек: ", error)
+
+func load_global_settings():
+	var config = ConfigFile.new()
+	var error = config.load("user://global_settings.cfg")
+	if error == OK:
+		fps_mode = config.get_value("settings", "fps_mode", 3)
+		mouse_sensitivity = config.get_value("settings", "mouse_sensitivity", 1.0)
+		camera_fov = config.get_value("settings", "camera_fov", 75.0)
+		brightness = config.get_value("settings", "brightness", 1.0)
+		music_volume = config.get_value("settings", "music_volume", 50.0)
+		sfx_volume = config.get_value("settings", "sfx_volume", 50.0)
+		print("📁 Глобальные настройки загружены")
+	else:
+		print("📁 Глобальные настройки не найдены, используются значения по умолчанию")
+		save_global_settings()
+
+func apply_global_settings():
+	# Применяем настройки FPS
+	match fps_mode:
+		0:  # 30 FPS
+			Engine.max_fps = 30
+			DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+		1:  # 60 FPS
+			Engine.max_fps = 60
+			DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+		2:  # 120 FPS
+			Engine.max_fps = 120
+			DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+		3:  # VSync
+			Engine.max_fps = 0
+			DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED)
+	
+	print("✅ Глобальные настройки применены")
+
+func reset_settings_to_default():
+	fps_mode = 3
+	mouse_sensitivity = 1.0
+	camera_fov = 75.0
+	brightness = 1.0
+	music_volume = 50.0
+	sfx_volume = 50.0
+	highlight_color = Color(0.2, 0.8, 1.0, 0.6)
+	trail_color = Color(0.2, 0.7, 0.9, 0.5)
+	
+	save_global_settings()
+	print("⚙️ Настройки сброшены по умолчанию")
+
+# ==================== СИСТЕМА ЗАГРУЗКИ ====================
 func load_scene_with_loading(scene_path: String):
 	print("🌐 Начинаем загрузку: ", scene_path)
 	
@@ -104,6 +225,7 @@ func _direct_scene_load(scene_path: String):
 	
 	hide_loading_screen()
 
+# ==================== СИСТЕМА УРОВНЕЙ ====================
 func is_component_available(component_type: String, component_name: String) -> bool:
 	if component_name.begins_with("Буст"):
 		return true
@@ -139,7 +261,7 @@ func calculate_stars(level: int, actual_time_ms: int) -> int:
 	elif actual_time_ms <= thresholds[2]:
 		return 1
 	else:
-		return 0  # Время превысило все пороги - уровень пройден, но звезд нет
+		return 0
 
 func calculate_level_reward(level: int, actual_time_ms: int, first_time: bool) -> Dictionary:
 	var stars = calculate_stars(level, actual_time_ms)
@@ -251,7 +373,7 @@ func has_item(item_name: String) -> bool:
 func get_purchased_items() -> Array:
 	return purchased_items.duplicate()
 
-# Временная функция для тестирования порогов
+# ==================== ТЕСТИРОВАНИЕ ====================
 func test_level_thresholds():
 	print("=== ТЕСТИРОВАНИЕ ПОРОГОВ УРОВНЕЙ ===")
 	for level in range(1, 16):

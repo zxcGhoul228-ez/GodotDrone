@@ -1,9 +1,2 @@
-res://DroneLevels/levels/Level4.tscn
-res://DroneLevels/Drone.gd
-res://DroneScene.gd
-res://BlockProgramming.gd
+res://create_drone/create_dron.tscn
 res://create_drone/create_dron.gd
-res://component.gd
-res://create_drone/components/frame1.tscn
-res://global.gd
-res://create_drone/components/board2.tscn

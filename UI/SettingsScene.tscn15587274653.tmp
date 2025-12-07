@@ -1,0 +1,150 @@
+[gd_scene load_steps=2 format=3 uid="uid://sxdw37dtk4h"]
+
+[ext_resource type="Script" uid="uid://bdypq218utdby" path="res://UI/SettingsScene.gd" id="1_1its5"]
+
+[node name="SettingsScene" type="CanvasLayer"]
+script = ExtResource("1_1its5")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.78431374)
+
+[node name="CenterContainer" type="CenterContainer" parent="ColorRect"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="Panel" parent="ColorRect/CenterContainer"]
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="ColorRect/CenterContainer/Panel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -537.0
+offset_top = -331.5
+offset_right = 537.0
+offset_bottom = 331.5
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 59
+
+[node name="Label" type="Label" parent="ColorRect/CenterContainer/Panel/VBoxContainer"]
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="ColorRect/CenterContainer/Panel/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 874
+
+[node name="Label" type="Label" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+text = "Частота кадров:"
+
+[node name="OptionButton" type="OptionButton" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="ColorRect/CenterContainer/Panel/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 374
+
+[node name="Label" type="Label" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+text = "Чувствительность мыши"
+
+[node name="HSlider" type="HSlider" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+step = 0.1
+
+[node name="Label2" type="Label" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+
+[node name="HBoxContainer4" type="HBoxContainer" parent="ColorRect/CenterContainer/Panel/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 419
+
+[node name="Label" type="Label" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer4"]
+layout_mode = 2
+text = "Поле зрения(FOV):"
+
+[node name="HSlider" type="HSlider" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer4"]
+layout_mode = 2
+min_value = 60.0
+max_value = 120.0
+value = 60.0
+
+[node name="Label2" type="Label" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer4"]
+layout_mode = 2
+
+[node name="HBoxContainer5" type="HBoxContainer" parent="ColorRect/CenterContainer/Panel/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 489
+
+[node name="Label" type="Label" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer5"]
+layout_mode = 2
+text = "Яркость:"
+
+[node name="HSlider" type="HSlider" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer5"]
+layout_mode = 2
+min_value = 1.0
+step = 0.1
+value = 1.0
+
+[node name="Label2" type="Label" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer5"]
+layout_mode = 2
+
+[node name="HBoxContainer6" type="HBoxContainer" parent="ColorRect/CenterContainer/Panel/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 389
+
+[node name="Label" type="Label" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer6"]
+layout_mode = 2
+text = "Громкость музыки:"
+
+[node name="HSlider" type="HSlider" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer6"]
+layout_mode = 2
+step = 0.1
+
+[node name="Label2" type="Label" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer6"]
+layout_mode = 2
+
+[node name="HBoxContainer7" type="HBoxContainer" parent="ColorRect/CenterContainer/Panel/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 399
+
+[node name="Label" type="Label" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer7"]
+layout_mode = 2
+text = "Громкость звуков:"
+
+[node name="HSlider" type="HSlider" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer7"]
+layout_mode = 2
+step = 0.1
+
+[node name="Label2" type="Label" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer7"]
+layout_mode = 2
+
+[node name="HBoxContainer3" type="HBoxContainer" parent="ColorRect/CenterContainer/Panel/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 334
+alignment = 1
+
+[node name="Button" type="Button" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer3"]
+layout_mode = 2
+text = "Сохранить"
+
+[node name="Button2" type="Button" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer3"]
+layout_mode = 2
+text = "По умолчанию"
+
+[node name="Button3" type="Button" parent="ColorRect/CenterContainer/Panel/VBoxContainer/HBoxContainer3"]
+layout_mode = 2
+text = "Отмена"
