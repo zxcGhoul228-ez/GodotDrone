@@ -11,6 +11,7 @@ static var drone_data = {}
 var current_level: int = 1
 var levels_unlocked: int = 1
 var levels_data: Dictionary = {}
+var currency = 100
 
 # ==================== НАСТРОЙКИ ГРАФИКИ И ЗВУКА ====================
 var camera_fov: float = 75.0:
@@ -89,21 +90,20 @@ var level_star_thresholds = {
 
 # Награды за звезды
 var star_rewards = {
-	1: 25,   # 1 звезда - 25 очков
-	2: 50,   # 2 звезды - 50 очков
-	3: 100   # 3 звезды - 100 очков
+	3: 100,
+	2: 60,
+	1: 30
 }
 
+# Бонус за первое прохождение уровня
 var first_time_bonus = 50
 
 func _ready():
 	print("=== GLOBAL INIT ===")
-	load_game()  # Добавьте эту строку
 	load_levels_data()
 	load_global_settings()
 	apply_global_settings()
 	print("Уровней разблокировано: ", levels_unlocked)
-	print("Текущие очки: ", score)
 
 # ==================== ГЛОБАЛЬНЫЕ НАСТРОЙКИ ====================
 func save_global_settings():
@@ -263,13 +263,11 @@ func calculate_stars(level: int, actual_time_ms: int) -> int:
 	else:
 		return 0
 
-# ==================== ОБНОВЛЕННАЯ ФУНКЦИЯ РАСЧЕТА НАГРАДЫ ====================
 func calculate_level_reward(level: int, actual_time_ms: int, first_time: bool) -> Dictionary:
 	var stars = calculate_stars(level, actual_time_ms)
 	var base_reward = star_rewards.get(stars, 0)
 	var total_reward = base_reward
 	
-	# Добавляем бонус за первое прохождение, если есть хотя бы 1 звезда
 	if first_time and stars > 0:
 		total_reward += first_time_bonus
 	
@@ -277,9 +275,9 @@ func calculate_level_reward(level: int, actual_time_ms: int, first_time: bool) -
 		"stars": stars,
 		"reward": total_reward,
 		"base_reward": base_reward,
-		"bonus": first_time_bonus if (first_time and stars > 0) else 0
+		"bonus": first_time_bonus if first_time else 0
 	}
-# ==================== ОБНОВЛЕННАЯ ФУНКЦИЯ ЗАВЕРШЕНИЯ УРОВНЯ ====================
+
 func complete_level(level_number: int, time_ms: int):
 	var level_key = str(level_number)
 	if level_key in levels_data:
@@ -287,7 +285,7 @@ func complete_level(level_number: int, time_ms: int):
 		var previous_stars = levels_data[level_key].get("stars", 0)
 		var previous_best_time = levels_data[level_key].get("best_time", 0)
 		
-		# Рассчитываем награду для этого прохождения
+		# Рассчитываем звезды для этого прохождения
 		var result = calculate_level_reward(level_number, time_ms, not was_completed)
 		var stars = result["stars"]
 		var reward = result["reward"]
@@ -308,48 +306,33 @@ func complete_level(level_number: int, time_ms: int):
 			if level_number + 1 > levels_unlocked:
 				levels_unlocked = level_number + 1
 		
-		# Начисляем очки только при первом прохождении или улучшении результата
+		# Начисляем валюту только при первом прохождении или улучшении результата
 		print("🎯 Условия начисления: был завершен=%s, улучшение=%s, звезды=%d, награда=%d" % [was_completed, is_improvement, stars, reward])
-		
 		if not was_completed or is_improvement:
-			add_score(reward)  # Используем add_score вместо add_currency
-			print("🎉 Уровень %d: %d звезд, награда: %d очков" % [level_number, stars, reward])
+			add_currency(reward)
+			print("🎉 Уровень %d: %d звезд, награда: %d монет" % [level_number, stars, reward])
 		else:
-			print("ℹ️ Уровень уже был пройден без улучшения, очки не начислены")
+			print("ℹ️ Уровень уже был пройден без улучшения, валюта не начислена")
 		
 		save_levels_data()
-		save_game()  # Сохраняем игру чтобы сохранить счет
 		
 		return result
 	return {"stars": 0, "reward": 0, "base_reward": 0, "bonus": 0}
-	
-# Функция для добавления очков (замените add_currency на add_score)
-func add_score(amount: int):
-	score += amount
-	save_game()
-	print("💰 Получено очков: ", amount, ". Всего: ", score)
 
-# Функция получения очков (если нужна)
-func get_score() -> int:
-	return score
-	
+func add_currency(amount: int):
+	currency += amount
+	save_game()
+	print("💰 Получено валюты: ", amount, ". Всего: ", currency)
+
+func get_currency() -> int:
+	return currency
+
 func save_game():
 	var config = ConfigFile.new()
 	config.set_value("game", "score", score)
-	# УДАЛИТЬ: config.set_value("game", "currency", currency)
+	config.set_value("game", "currency", currency)
 	config.set_value("game", "purchased_items", purchased_items)
 	config.save("user://game_save.cfg")
-	print("💾 Игра сохранена. Очки: ", score)
-func load_game():
-	var config = ConfigFile.new()
-	var error = config.load("user://game_save.cfg")
-	if error == OK:
-		score = config.get_value("game", "score", 100000)
-		purchased_items = config.get_value("game", "purchased_items", ["Рама1", "Плата1", "Мотор1", "Пропеллер1"])
-		print("📁 Игра загружена. Очки: ", score)
-	else:
-		print("📁 Игра не найдена, используются значения по умолчанию")
-		save_game()
 
 func save_levels_data():
 	var file = FileAccess.open("user://levels_data.json", FileAccess.WRITE)
@@ -406,10 +389,3 @@ func test_level_thresholds():
 func format_test_time(ms: int) -> String:
 	var seconds = ms / 1000.0
 	return "%.1f сек" % seconds
-
-func format_time_ms(milliseconds: int) -> String:
-	var total_seconds = milliseconds / 1000
-	var minutes = total_seconds / 60
-	var seconds = total_seconds % 60
-	var ms = milliseconds % 1000
-	return "%02d:%02d.%03d" % [minutes, seconds, ms]

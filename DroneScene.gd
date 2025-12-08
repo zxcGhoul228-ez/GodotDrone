@@ -354,14 +354,35 @@ func _on_program_finished(success: bool):
 	
 	if success:
 		print("🎉 Уровень пройден! Время: ", final_time)
-		var result = Global.complete_level(Global.current_level, current_time_ms)
-		show_success_message(final_time, current_time_ms, result)
+		print("📊 Текущий уровень: ", Global.current_level)
+		print("⏱️ Текущее время (мс): ", current_time_ms)
 		
-		if best_time_ms == 0 or current_time_ms < best_time_ms:
-			best_time_ms = current_time_ms
-			save_best_time()
-			update_best_time_display()
-			print("🏆 Новый рекорд!")
+		# Получаем результат завершения уровня
+		var result = Global.complete_level(Global.current_level, current_time_ms)
+		print("📈 Результат от Global.complete_level: ", result)
+		
+		# Проверяем, что результат содержит нужные данные
+		if result.has("stars") and result.has("reward"):
+			print("✅ Данные результата корректны, показываем сообщение")
+			print("   Звезды: ", result["stars"])
+			print("   Награда: ", result["reward"])
+			print("   Базовая награда: ", result.get("base_reward", 0))
+			print("   Бонус: ", result.get("bonus", 0))
+			
+			show_success_message(final_time, current_time_ms, result)
+		else:
+			print("❌ Ошибка: результат не содержит ожидаемых данных!")
+			print("   result: ", result)
+			
+			# Создаем заглушку для теста
+			var test_result = {
+				"stars": 3,
+				"reward": 100,
+				"base_reward": 100,
+				"bonus": 0
+			}
+			print("🔄 Используем тестовые данные: ", test_result)
+			show_success_message(final_time, current_time_ms, test_result)
 	else:
 		print("❌ Программа завершена, цель не достигнута. Время: ", final_time)
 
@@ -375,10 +396,22 @@ func show_success_message(final_time: String, time_ms: int, result: Dictionary):
 	overlay.size = get_viewport().size
 	overlay.name = "Overlay"
 	
+	# Главный контейнер для центрирования всей панели
+	var main_center_container = CenterContainer.new()
+	main_center_container.name = "MainCenterContainer"
+	main_center_container.size = get_viewport().get_visible_rect().size
+	main_center_container.anchor_left = 0.5
+	main_center_container.anchor_right = 0.5
+	main_center_container.anchor_top = 0.5
+	main_center_container.anchor_bottom = 0.5
+	main_center_container.offset_left = -350  # Половина ширины панели
+	main_center_container.offset_right = 350
+	main_center_container.offset_top = -275  # Половина высоты панели
+	main_center_container.offset_bottom = 275
+	
 	var panel = Panel.new()
 	panel.name = "SuccessPanel"
-	panel.size = Vector2(700, 500)
-	panel.position = (get_viewport().get_visible_rect().size - panel.size) / 2
+	panel.size = Vector2(700, 550)
 	
 	var panel_style = StyleBoxFlat.new()
 	panel_style.bg_color = Color(0.1, 0.1, 0.1, 0.95)
@@ -393,117 +426,202 @@ func show_success_message(final_time: String, time_ms: int, result: Dictionary):
 	panel_style.corner_radius_bottom_left = 16
 	panel.add_theme_stylebox_override("panel", panel_style)
 	
-	var vbox = VBoxContainer.new()
-	vbox.name = "VBox"
-	vbox.size = panel.size
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	# Внутренний контейнер для содержимого панели
+	var content_container = VBoxContainer.new()
+	content_container.name = "ContentContainer"
+	content_container.size = panel.size
+	content_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	content_container.add_theme_constant_override("separation", 20)
 	
 	# Заголовок
+	var title_container = CenterContainer.new()
+	title_container.custom_minimum_size = Vector2(650, 50)
+	
 	var title_label = Label.new()
 	title_label.name = "TitleLabel"
 	title_label.text = get_success_title(result["stars"])
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	title_label.add_theme_font_size_override("font_size", 36)
 	title_label.add_theme_color_override("font_color", get_star_color(result["stars"]))
 	
+	title_container.add_child(title_label)
+	content_container.add_child(title_container)
+	
 	# Звезды
-	var stars_container = HBoxContainer.new()
-	stars_container.name = "StarsContainer"
-	stars_container.alignment = BoxContainer.ALIGNMENT_CENTER
-	stars_container.add_theme_constant_override("separation", 20)
+	var stars_container = CenterContainer.new()
+	stars_container.custom_minimum_size = Vector2(650, 100)
+	
+	var stars_inner_container = HBoxContainer.new()
+	stars_inner_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	stars_inner_container.add_theme_constant_override("separation", 20)
 	
 	var stars_earned = result["stars"]
+	
 	for i in range(3):
 		var star_frame = CenterContainer.new()
 		star_frame.custom_minimum_size = Vector2(80, 80)
 		var star_label = Label.new()
+		star_label.add_theme_font_size_override("font_size", 64)
+		
 		if i < stars_earned:
 			star_label.text = "★"
 			star_label.add_theme_color_override("font_color", Color.GOLD)
-			var tween = create_tween()
-			tween.tween_property(star_label, "scale", Vector2(1.5, 1.5), 0.5)
-			tween.tween_property(star_label, "scale", Vector2(1.2, 1.2), 0.3)
+			star_label.scale = Vector2(1.2, 1.2)
 		else:
 			star_label.text = "☆"
 			star_label.add_theme_color_override("font_color", Color.DARK_GRAY)
-		star_label.add_theme_font_size_override("font_size", 64)
+			star_label.scale = Vector2(1.2, 1.2)
+		
 		star_frame.add_child(star_label)
-		stars_container.add_child(star_frame)
+		stars_inner_container.add_child(star_frame)
+	
+	stars_container.add_child(stars_inner_container)
+	content_container.add_child(stars_container)
 	
 	# Время
-	var time_container = HBoxContainer.new()
-	time_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	var time_container = CenterContainer.new()
+	time_container.custom_minimum_size = Vector2(650, 50)
+	
+	var time_inner_container = HBoxContainer.new()
+	time_inner_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	time_inner_container.add_theme_constant_override("separation", 10)
+	
 	var time_icon = Label.new()
 	time_icon.text = "⏱️"
 	time_icon.add_theme_font_size_override("font_size", 24)
+	
 	var time_label = Label.new()
 	time_label.name = "TimeLabel"
-	time_label.text = final_time
+	time_label.text = "Время: " + final_time
 	time_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	time_label.add_theme_font_size_override("font_size", 28)
 	time_label.add_theme_color_override("font_color", Color.WHITE)
-	time_container.add_child(time_icon)
-	time_container.add_child(time_label)
+	
+	time_inner_container.add_child(time_icon)
+	time_inner_container.add_child(time_label)
+	time_container.add_child(time_inner_container)
+	content_container.add_child(time_container)
 	
 	# Награда
-	var reward_container = HBoxContainer.new()
-	reward_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	var reward_container = CenterContainer.new()
+	reward_container.custom_minimum_size = Vector2(650, 50)
+	
+	var reward_inner_container = HBoxContainer.new()
+	reward_inner_container.alignment = BoxContainer.ALIGNMENT_CENTER
+	reward_inner_container.add_theme_constant_override("separation", 10)
+	
 	var reward_icon = Label.new()
 	reward_icon.text = "💰"
 	reward_icon.add_theme_font_size_override("font_size", 24)
+	
 	var reward_label = Label.new()
 	reward_label.name = "RewardLabel"
-	var reward_text = "+" + str(result["reward"]) + " монет"
-	if result["bonus"] > 0:
-		reward_text += " (бонус за первое прохождение!)"
+	
+	# Формируем текст награды
+	var reward_text = ""
+	var base_reward = result.get("base_reward", 0)
+	var bonus = result.get("bonus", 0)
+	var total_reward = result.get("reward", 0)
+	
+	if stars_earned > 0:
+		if bonus > 0:
+			reward_text = "+" + str(total_reward) + " очков (" + str(base_reward) + " за звезды + " + str(bonus) + " бонус за первое прохождение)"
+		else:
+			reward_text = "+" + str(total_reward) + " очков"
+	else:
+		reward_text = "0 очков (необходимо получить хотя бы 1 звезду)"
+	
 	reward_label.text = reward_text
 	reward_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	reward_label.add_theme_font_size_override("font_size", 24)
-	reward_label.add_theme_color_override("font_color", Color.GOLD)
-	reward_container.add_child(reward_icon)
-	reward_container.add_child(reward_label)
 	
-	# Пороги времени
-	var thresholds = Global.level_star_thresholds.get(Global.current_level, [0, 0, 0])
+	if stars_earned > 0:
+		reward_label.add_theme_color_override("font_color", Color.GOLD)
+	else:
+		reward_label.add_theme_color_override("font_color", Color.LIGHT_GRAY)
+	
+	reward_inner_container.add_child(reward_icon)
+	reward_inner_container.add_child(reward_label)
+	reward_container.add_child(reward_inner_container)
+	content_container.add_child(reward_container)
+	
+	# Пороги времени для звезд
+	var thresholds_container = CenterContainer.new()
+	thresholds_container.custom_minimum_size = Vector2(650, 40)
+	
 	var thresholds_label = Label.new()
 	thresholds_label.name = "ThresholdsLabel"
+	
+	var thresholds = Global.level_star_thresholds.get(Global.current_level, [0, 0, 0])
 	thresholds_label.text = "Время для звезд: 3★ - %s, 2★ - %s, 1★ - %s" % [
 		format_time_ms(thresholds[0]),
 		format_time_ms(thresholds[1]), 
 		format_time_ms(thresholds[2])
 	]
 	thresholds_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	thresholds_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	thresholds_label.add_theme_font_size_override("font_size", 16)
 	thresholds_label.add_theme_color_override("font_color", Color.LIGHT_BLUE)
 	
+	thresholds_container.add_child(thresholds_label)
+	content_container.add_child(thresholds_container)
+	
 	# Кнопка продолжения
+	var button_container = CenterContainer.new()
+	button_container.custom_minimum_size = Vector2(650, 60)
+	
 	var continue_button = Button.new()
 	continue_button.text = "Продолжить"
 	continue_button.custom_minimum_size = Vector2(200, 50)
+	continue_button.add_theme_font_size_override("font_size", 20)
 	continue_button.pressed.connect(_on_continue_pressed.bind(canvas))
 	
-	# Добавление элементов
-	vbox.add_child(title_label)
-	vbox.add_child(stars_container)
-	vbox.add_child(time_container)
-	vbox.add_child(reward_container)
-	vbox.add_child(thresholds_label)
-	vbox.add_child(continue_button)
-	vbox.add_theme_constant_override("separation", 20)
+	button_container.add_child(continue_button)
+	content_container.add_child(button_container)
 	
-	panel.add_child(vbox)
-	overlay.add_child(panel)
+	# Добавляем контент в панель
+	panel.add_child(content_container)
+	
+	# Добавляем панель в главный контейнер центрирования
+	main_center_container.add_child(panel)
+	
+	# Собираем всю иерархию
+	overlay.add_child(main_center_container)
 	canvas.add_child(overlay)
 	add_child(canvas)
 	
-	print("✅ Финальный экран создан. Звезды: ", stars_earned, ", Награда: ", result["reward"])
+	print("✅ Финальный экран создан. Звезды: ", stars_earned, ", Награда: ", total_reward, ", Бонус: ", bonus)
+	
+	# Запускаем анимацию звезд после создания интерфейса
+	if stars_earned > 0:
+		if bonus > 0:
+			reward_text = "+" + str(total_reward) + " очков (" + str(base_reward) + " за звезды + " + str(bonus) + " бонус за первое прохождение)"
+		else:
+			reward_text = "+" + str(total_reward) + " очков"
+	else:
+		reward_text = "0 очков (необходимо получить хотя бы 1 звезду)"
 
+func animate_stars(stars_container: HBoxContainer, stars_earned: int):
+	for i in range(stars_earned):
+		if i < stars_container.get_child_count():
+			var star_frame = stars_container.get_child(i) as CenterContainer
+			if star_frame and star_frame.get_child_count() > 0:
+				var star_label = star_frame.get_child(0) as Label
+				if star_label:
+					# Ждем задержку перед анимацией каждой звезды
+					await get_tree().create_timer(i * 0.2).timeout
+					
+					# Анимация звезды
+					var tween = create_tween()
+					tween.tween_property(star_label, "scale", Vector2(1.5, 1.5), 0.5)
+					tween.tween_property(star_label, "scale", Vector2(1.2, 1.2), 0.3)
 func get_success_title(stars: int) -> String:
 	match stars:
 		3: return "🎉 ИДЕАЛЬНО! 3 ЗВЕЗДЫ! 🎉"
 		2: return "✨ ОТЛИЧНО! 2 ЗВЕЗДЫ! ✨"
 		1: return "👍 ХОРОШО! 1 ЗВЕЗДА! 👍"
-		_: return "✅ УРОВЕНЬ ПРОЙДЕН!"
+		_: return "УРОВЕНЬ ПРОЙДЕН"
 
 func get_star_color(stars: int) -> Color:
 	match stars:

@@ -256,12 +256,21 @@ func stop_execution():
 # ВОЗВРАТ НА СТАРТ
 func return_to_start():
 	print("↩️ ВОЗВРАТ НА СТАРТ")
+	
+	# Отключаем коллизии дрона на время возврата
+	set_collision_layer_value(1, false)
+	set_collision_mask_value(2, false)
+	
 	stop_propellers()
 	
 	# Создаем твин для возврата
 	var tween = create_tween()
 	tween.tween_property(self, "global_position", start_position, MOVE_SPEED * 2)
 	await tween.finished
+	
+	# Включаем коллизии обратно
+	set_collision_layer_value(1, true)
+	set_collision_mask_value(2, true)
 	
 	drone_moved.emit()
 	print("✅ Дрон вернулся на стартовую позицию")

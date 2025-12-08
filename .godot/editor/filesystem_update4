@@ -1,2 +1,5 @@
-res://create_drone/create_dron.tscn
-res://create_drone/create_dron.gd
+res://DroneScene.gd
+res://global.gd
+res://main_scene.tscn
+res://main_script.gd
+res://DroneLevels/Drone.gd

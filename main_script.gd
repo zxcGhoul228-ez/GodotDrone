@@ -108,7 +108,7 @@ func find_all_buttons(node: Node, buttons: Array):
 		find_all_buttons(child, buttons)
 
 func update_score_display():
-	score_label.text = "Счет: " + str(Global.score)
+	score_label.text = "Очки: " + str(Global.score)  # Просто используем Global.scor
 
 func apply_music_volume():
 	if audio_player:
