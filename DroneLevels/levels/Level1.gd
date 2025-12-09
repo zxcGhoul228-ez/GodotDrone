@@ -186,34 +186,111 @@ func setup_drone():
 	drone.collision_layer = 1
 	drone.collision_mask = 2
 	
-	if drone.has_signal("program_finished"):
-		drone.program_finished.connect(_on_drone_program_finished)
-		print("✅ Сигнал program_finished подключен")
-	else:
-		print("❌ Сигнал program_finished не найден")
+func reset_level():
+	print("🔄 Сброс уровня...")
+	
+	# Сбрасываем флаг достижения цели в дроне
+	var drone = drone_scene.get_drone() if drone_scene else null
+	if drone and drone.has_method("set_target_reached"):
+		drone.set_target_reached(false)
+	
+	# Сбрасываем дрона в начальную позицию
+	if drone_scene:
+		if drone_scene.has_method("reset_drone"):
+			drone_scene.reset_drone()
+		else:
+			# Альтернативный метод
+			if drone and drone.has_method("reset_to_start"):
+				drone.reset_to_start()
+	
+	# Сбрасываем флаги
+	is_level_completed = false
+	
+	# Ждем завершения сброса
+	await get_tree().create_timer(1.5).timeout
+	print("✅ Уровень сбросен")
+	
+func show_failure_message():
+	var failure_ui = CanvasLayer.new()
+	failure_ui.layer = 14
+	
+	var panel = Panel.new()
+	panel.size = Vector2(400, 150)
+	
+	# ИСПРАВЛЕНИЕ: преобразуем Vector2i в Vector2
+	var viewport_size = Vector2(get_viewport().get_visible_rect().size)
+	panel.position = (viewport_size - panel.size) / 2
+	
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0, 0, 0, 0.8)
+	style.border_color = Color.RED
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	panel.add_theme_stylebox_override("panel", style)
+	
+	var label = Label.new()
+	label.text = "НЕУДАЧА!\nДрон не достиг цели.\n\nСброс уровня..."
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.add_theme_font_size_override("font_size", 20)
+	label.add_theme_color_override("font_color", Color.RED)
+	label.size = panel.size
+	
+	panel.add_child(label)
+	failure_ui.add_child(panel)
+	add_child(failure_ui)
+	
+	await get_tree().create_timer(2.0).timeout
+	failure_ui.queue_free()
 
-func _on_drone_program_finished(success: bool):
-	print("🎯 Программа дрона завершена, успех: ", success)
-	if success:
-		complete_level()
 
 func complete_level():
 	if is_level_completed:
 		return
 		
-	is_level_completed = true
-	print("🎉 УРОВЕНЬ 1 ЗАВЕРШЕН!")
+	# Проверяем, достиг ли дрон цели
+	var drone = drone_scene.get_drone() if drone_scene else null
+	if not drone:
+		print("❌ Дрон не найден при попытке завершения уровня")
+		return
 	
-	# Добавляем эффект мигания подсветки при завершении уровня
-	if target_cell_highlight:
-		blink_target_highlight()
+	# Получаем состояние дрона
+	var has_reached_target = false
+	if drone.has_method("get_has_reached_target"):
+		has_reached_target = drone.get_has_reached_target()
 	
-	var drone_scene = $DroneScene
-	if drone_scene and drone_scene.has_method("_on_program_finished"):
-		drone_scene._on_program_finished(true)
+	# ПРОВЕРЯЕМ РАССТОЯНИЕ И СОСТОЯНИЕ
+	var distance_to_target = drone.global_position.distance_to(target_point.global_position)
+	var target_radius = 10.0  # Уменьшил радиус для более точного попадания
 	
-	# УДАЛЕНО: Global.complete_level(1, 5, 3) - теперь это делается автоматически в DroneScene
-	print("✅ Прогресс будет сохранен автоматически")
+	print("📏 Дистанция до цели: ", distance_to_target)
+	print("🎯 Состояние дрона: достиг цели = ", has_reached_target)
+	
+	# Условие завершения: дрон должен быть достаточно близко (коллизия уже проверила это)
+	if has_reached_target:
+		is_level_completed = true
+		print("🎉 УРОВЕНЬ 1 ЗАВЕРШЕН!")
+		
+		# Эффект мигания
+		if target_cell_highlight:
+			blink_target_highlight()
+		
+		# Автоматическое сохранение прогресса
+		print("✅ Прогресс будет сохранен автоматически")
+		
+		# Показываем сообщение об успехе
+		show_success_message()
+		
+		# Добавляем небольшую задержку перед возвратом, чтобы игрок увидел успех
+		await get_tree().create_timer(3.0).timeout
+		return_to_selection()
+	else:
+		print("❌ Дрон не достиг цели: расстояние = ", distance_to_target, ", радиус = ", target_radius)
+		show_failure_message()
+		await get_tree().create_timer(2.0).timeout
+		reset_level()
 
 # Функция для мигания подсветки при завершении уровня
 func blink_target_highlight():
@@ -233,7 +310,9 @@ func show_success_message():
 	
 	var panel = Panel.new()
 	panel.size = Vector2(400, 200)
-	var viewport_size = get_viewport().get_visible_rect().size
+	
+	# ИСПРАВЛЕНИЕ: преобразуем Vector2i в Vector2
+	var viewport_size = Vector2(get_viewport().get_visible_rect().size)
 	panel.position = (viewport_size - panel.size) / 2
 	
 	var style = StyleBoxFlat.new()
@@ -256,9 +335,6 @@ func show_success_message():
 	panel.add_child(label)
 	success_ui.add_child(panel)
 	add_child(success_ui)
-	
-	await get_tree().create_timer(3.0).timeout
-	return_to_selection()
 
 func _input(event):
 	if event is InputEventKey and event.pressed:

@@ -352,7 +352,26 @@ func _on_program_finished(success: bool):
 	print("🎯 Программа завершена, успех: ", success)
 	var final_time = stop_timer()
 	
-	if success:
+	# Проверяем, достиг ли дрон цели
+	var target_reached = false
+	if current_drone and current_drone.has_method("get_has_reached_target"):
+		target_reached = current_drone.get_has_reached_target()
+	
+	print("🎯 Цель достигнута: ", target_reached)
+	
+	# ПРОВЕРЯЕМ, НЕ РАЗБИЛСЯ ЛИ ДРОН
+	var is_crashed = false
+	if current_drone and current_drone.has_method("get_is_crashed"):
+		is_crashed = current_drone.get_is_crashed()
+	
+	if is_crashed:
+		print("💥 Дрон разбился! Возвращаем на старт")
+		reset_drone()
+		reset_timer()
+		show_crash_message()
+		return
+	
+	if success and target_reached:
 		print("🎉 Уровень пройден! Время: ", final_time)
 		print("📊 Текущий уровень: ", Global.current_level)
 		print("⏱️ Текущее время (мс): ", current_time_ms)
@@ -385,6 +404,34 @@ func _on_program_finished(success: bool):
 			show_success_message(final_time, current_time_ms, test_result)
 	else:
 		print("❌ Программа завершена, цель не достигнута. Время: ", final_time)
+		# Просто возвращаем дрона на старт без сообщения
+		reset_drone()
+		reset_timer()
+
+func show_crash_message():
+	"""Показывает сообщение о падении дрона"""
+	var canvas = CanvasLayer.new()
+	canvas.layer = 100
+	
+	var panel = Panel.new()
+	panel.size = Vector2(400, 200)
+	
+	# ИСПРАВЛЕНИЕ: преобразуем Vector2i в Vector2
+	var viewport_size = Vector2(get_viewport().size)
+	panel.position = (viewport_size - panel.size) / 2
+	
+	var label = Label.new()
+	label.text = "💥 ДРОН РАЗБИЛСЯ!\nПроверьте компоненты:\n- Все моторы должны иметь пропеллеры\n- Дрон должен быть сбалансирован"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	
+	panel.add_child(label)
+	canvas.add_child(panel)
+	add_child(canvas)
+	
+	# Автоматическое закрытие через 3 секунды
+	await get_tree().create_timer(3.0).timeout
+	canvas.queue_free()
 
 func show_success_message(final_time: String, time_ms: int, result: Dictionary):
 	var canvas = CanvasLayer.new()
@@ -399,7 +446,7 @@ func show_success_message(final_time: String, time_ms: int, result: Dictionary):
 	# Главный контейнер для центрирования всей панели
 	var main_center_container = CenterContainer.new()
 	main_center_container.name = "MainCenterContainer"
-	main_center_container.size = get_viewport().get_visible_rect().size
+	main_center_container.size = Vector2(get_viewport().get_visible_rect().size)
 	main_center_container.anchor_left = 0.5
 	main_center_container.anchor_right = 0.5
 	main_center_container.anchor_top = 0.5
@@ -670,25 +717,127 @@ func create_drone():
 func load_drone_from_path(path: String) -> bool:
 	var drone_scene = load(path)
 	if drone_scene:
+		print("📂 Загружаем дрон из: ", path)
 		var drone_instance = drone_scene.instantiate()
+		
+		print("   Тип загруженного объекта: ", drone_instance.get_class())
+		print("   Детей у объекта: ", drone_instance.get_child_count())
+		
+		# Проверяем метаданные
+		if drone_instance.has_meta("drone_info"):
+			var info = drone_instance.get_meta("drone_info")
+			print("   Метаданные дрона: ", info)
+		
 		drone_container.add_child(drone_instance)
 		
+		# ПРОВЕРЯЕМ, ЧТО ЭТО CharacterBody3D
 		if drone_instance is CharacterBody3D:
+			print("✅ Дрон загружен как CharacterBody3D")
 			current_drone = drone_instance
 			setup_drone(current_drone)
 			return true
 		else:
-			var drone_body = find_drone_root(drone_instance)
-			if drone_body:
-				current_drone = create_drone_from_parts(drone_body)
+			print("❌ Загруженный объект не CharacterBody3D, а: ", drone_instance.get_class())
+			
+			# Пытаемся найти CharacterBody3D в детях
+			var found_drone = find_drone_in_children(drone_instance)
+			if found_drone and found_drone is CharacterBody3D:
+				print("✅ Нашли CharacterBody3D в детях")
+				current_drone = found_drone
 				setup_drone(current_drone)
-				drone_instance.queue_free()
 				return true
-		
-		print("❌ Не удалось создать дрон из: ", path)
-		drone_instance.queue_free()
+			else:
+				print("❌ Не удалось найти CharacterBody3D")
+				drone_instance.queue_free()
+				return false
 	
 	return false
+
+func find_drone_in_children(node: Node) -> CharacterBody3D:
+	"""Рекурсивно ищет CharacterBody3D в детях"""
+	for child in node.get_children():
+		if child is CharacterBody3D:
+			return child
+		var found = find_drone_in_children(child)
+		if found:
+			return found
+	return null
+
+func create_drone_from_parts(drone_node: Node3D) -> CharacterBody3D:
+	print("🔧 Создаем CharacterBody3D из компонентов...")
+	
+	var new_drone = CharacterBody3D.new()
+	new_drone.name = "ConstructedDrone"
+	
+	var drone_script = load("res://DroneLevels/Drone.gd")
+	if drone_script:
+		new_drone.set_script(drone_script)
+	
+	# Копируем все компоненты
+	for child in drone_node.get_children():
+		if child is Node3D:
+			var child_copy = child.duplicate()
+			new_drone.add_child(child_copy)
+			child_copy.owner = new_drone
+	
+	drone_container.add_child(new_drone)
+	new_drone.owner = get_tree().edited_scene_root
+	
+	# Устанавливаем начальную позицию
+	var start_pos = calculate_start_position()
+	new_drone.global_position = start_pos
+	
+	print("✅ CharacterBody3D создан из компонентов")
+	return new_drone
+	
+func count_nodes_by_name(root: Node, name_part: String) -> int:
+	var count = 0
+	for child in root.get_children():
+		if name_part in child.name:
+			count += 1
+		count += count_nodes_by_name(child, name_part)
+	return count
+
+func create_character_body_from_node(drone_node: Node3D) -> CharacterBody3D:
+	"""Создает CharacterBody3D из Node3D с компонентами"""
+	print("🔧 Создаем CharacterBody3D из компонентов...")
+	
+	var new_drone = CharacterBody3D.new()
+	new_drone.name = "LoadedDrone"
+	
+	var drone_script = load("res://DroneLevels/Drone.gd")
+	if drone_script:
+		new_drone.set_script(drone_script)
+	
+	# Копируем все меши из исходного узла
+	copy_meshes_to_drone(drone_node, new_drone)
+	
+	drone_container.add_child(new_drone)
+	new_drone.owner = get_tree().edited_scene_root
+	
+	# Устанавливаем начальную позицию
+	var start_pos = calculate_start_position()
+	new_drone.global_position = start_pos
+	
+	print("✅ CharacterBody3D создан из компонентов")
+	return new_drone
+
+func copy_meshes_to_drone(source: Node, target: CharacterBody3D):
+	"""Копирует все меши из source в target"""
+	for child in source.get_children():
+		if child is MeshInstance3D or child is Node3D:
+			var child_copy = child.duplicate()
+			target.add_child(child_copy)
+			child_copy.owner = target
+			
+			# Копируем имя для идентификации
+			if "Motor" in child.name:
+				print("🔧 Скопирован мотор: ", child.name)
+			elif "Propeller" in child.name:
+				print("🌀 Скопирован пропеллер: ", child.name)
+		
+		# Рекурсивно копируем детей
+		copy_meshes_to_drone(child, target)
 
 func find_drone_root(root_node: Node) -> Node3D:
 	if root_node is CharacterBody3D:
@@ -714,46 +863,7 @@ func has_drone_components(node: Node3D) -> bool:
 			mesh_count += 1
 	return mesh_count > 0
 
-func create_drone_from_parts(drone_node: Node3D) -> CharacterBody3D:
-	print("🔧 Создаем дрон из частей...")
-	var new_drone = CharacterBody3D.new()
-	new_drone.name = "Drone"
-	
-	var drone_script = load("res://DroneLevels/Drone.gd")
-	if drone_script:
-		new_drone.set_script(drone_script)
-		print("✅ Добавлен скрипт Drone.gd")
-	
-	drone_container.add_child(new_drone)
-	new_drone.owner = get_tree().edited_scene_root
-	
-	if drone_node is Node3D:
-		print("📦 Копируем компоненты дрона...")
-		var children_to_copy = []
-		for child in drone_node.get_children():
-			children_to_copy.append(child)
-		for child in children_to_copy:
-			if child is Node3D:
-				var relative_transform = child.transform
-				var child_name = child.name
-				drone_node.remove_child(child)
-				new_drone.add_child(child)
-				child.owner = get_tree().edited_scene_root
-				child.transform = relative_transform
-				child.name = child_name
-	
-	var start_pos = calculate_start_position()
-	if not is_position_within_bounds(start_pos):
-		start_pos = clamp_position_to_bounds(start_pos)
-		print("⚠️ Стартовая позиция скорректирована: ", start_pos)
-	
-	new_drone.global_position = start_pos
-	
-	if drone_node.get_parent() and drone_node.get_parent() != drone_container:
-		drone_node.queue_free()
-	
-	print("✅ Дрон создан из частей")
-	return new_drone
+
 
 func calculate_start_position() -> Vector3:
 	@warning_ignore("integer_division")
@@ -787,7 +897,8 @@ func setup_drone(drone_node: CharacterBody3D):
 	drone_node.global_position = start_pos
 	drone_node.scale = Vector3(6, 6, 6)
 	
-	var target_pos = Vector3(GRID_SIZE * 2, 0, GRID_SIZE * 2)
+	# Установите целевую позицию для текущего уровня
+	var target_pos = get_target_for_level(Global.current_level)
 	if drone_node.has_method("set_target_position"):
 		drone_node.set_target_position(target_pos)
 		print("🎯 Установлена целевая позиция для дрона: ", target_pos)
@@ -1556,3 +1667,59 @@ func update_camera_position():
 	var time = Time.get_ticks_msec() / 1000.0
 	camera.h_offset = sin(time * 0.5) * 0.01
 	camera.v_offset = cos(time * 0.3) * 0.01
+
+func reset_drone():
+	print("🔄 Сбрасываем дрона...")
+	
+	if current_drone:
+		# Возвращаем дрона в начальную позицию
+		var start_pos = calculate_start_position()
+		if not is_position_within_bounds(start_pos):
+			start_pos = clamp_position_to_bounds(start_pos)
+		
+		var tween = create_tween()
+		tween.tween_property(current_drone, "global_position", start_pos, 1.0)
+		tween.tween_property(current_drone, "rotation_degrees", Vector3.ZERO, 0.5)
+		
+		# Останавливаем пропеллеры если есть метод
+		if current_drone.has_method("stop_propellers"):
+			current_drone.stop_propellers()
+		
+		print("✅ Дрон сброшен в позицию: ", start_pos)
+	else:
+		print("❌ Нет дрона для сброса")
+		
+func reset_program():
+	"""Сбрасывает программу дрона и таймер"""
+	print("🔄 Сбрасываем программу...")
+	
+	# Сбрасываем таймер
+	reset_timer()
+	
+	# Очищаем предпросмотр траектории
+	clear_trajectory_preview()
+	
+	# Останавливаем дрона если он выполняет программу
+	if current_drone and current_drone.has_method("stop_execution"):
+		current_drone.stop_execution()
+
+func get_target_for_level(level: int) -> Vector3:
+	# Здесь установите цели для каждого уровня
+	var targets = {
+		1: Vector3(GRID_SIZE * 3, 0, GRID_SIZE * 3),
+		2: Vector3(GRID_SIZE * 5, GRID_SIZE * 2, GRID_SIZE * 5),
+		3: Vector3(GRID_SIZE * 8, 0, -GRID_SIZE * 4),
+		4: Vector3(GRID_SIZE * 10, GRID_SIZE * 1, 0),
+		5: Vector3(GRID_SIZE * 6, GRID_SIZE * 3, GRID_SIZE * 6),
+		6: Vector3(GRID_SIZE * 4, 0, GRID_SIZE * 8),
+		7: Vector3(-GRID_SIZE * 5, GRID_SIZE * 2, GRID_SIZE * 7),
+		8: Vector3(GRID_SIZE * 12, GRID_SIZE * 1, -GRID_SIZE * 5),
+		9: Vector3(GRID_SIZE * 9, GRID_SIZE * 4, GRID_SIZE * 9),
+		10: Vector3(0, GRID_SIZE * 2, GRID_SIZE * 12),
+		11: Vector3(-GRID_SIZE * 7, 0, GRID_SIZE * 7),
+		12: Vector3(GRID_SIZE * 15, GRID_SIZE * 3, 0),
+		13: Vector3(GRID_SIZE * 8, GRID_SIZE * 5, GRID_SIZE * 8),
+		14: Vector3(-GRID_SIZE * 10, GRID_SIZE * 1, -GRID_SIZE * 8),
+		15: Vector3(GRID_SIZE * 20, GRID_SIZE * 4, GRID_SIZE * 15)
+	}
+	return targets.get(level, Vector3(GRID_SIZE * 2, 0, GRID_SIZE * 2))

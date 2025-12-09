@@ -1562,8 +1562,8 @@ func load_slots_info():
 func create_slot_menu(is_save_mode: bool, title: String) -> Panel:
 	var menu_panel = Panel.new()
 	menu_panel.name = "SlotMenu"
-	var viewport_size = Vector2(get_viewport().get_visible_rect().size)
-	menu_panel.position = (viewport_size - menu_panel.size) / 2
+	menu_panel.size = Vector2(800, 400)
+	menu_panel.position = (get_viewport().get_visible_rect().size - menu_panel.size) / 2
 	menu_panel.z_index = 100
 	
 	var style = StyleBoxFlat.new()
@@ -1847,8 +1847,7 @@ func show_slot_action_message(slot_index: int, is_save_mode: bool):
 	var message_panel = Panel.new()
 	message_panel.name = "SlotActionMessage"
 	message_panel.size = Vector2(400, 150)
-	var viewport_size = Vector2(get_viewport().get_visible_rect().size)
-	message_panel.position = (viewport_size - message_panel.size) / 2
+	message_panel.position = (get_viewport().get_visible_rect().size - message_panel.size) / 2
 	message_panel.z_index = 101
 	
 	var style = StyleBoxFlat.new()
@@ -1887,198 +1886,16 @@ func export_drone_scene():
 	# Рассчитываем физические параметры
 	var physics_data = calculate_physics_data()
 	
-	# СОЗДАЕМ КОРНЕВОЙ УЗЕЛ ДРОНА КАК CharacterBody3D
-	var drone_root = CharacterBody3D.new()
-	drone_root.name = "ExportedDrone"
-	
-	# ДОБАВЛЯЕМ СКРИПТ ДРОНА
-	var drone_script = load("res://DroneLevels/Drone.gd")
-	if drone_script:
-		drone_root.set_script(drone_script)
-	
-	# КОПИРУЕМ ВСЕ КОМПОНЕНТЫ ИЗ $Components В ДРОНА
-	copy_components_to_drone(drone_root)
-	
-	# Сохраняем физические данные
-	drone_root.set_meta("drone_physics", physics_data)
-	
-	# Сохраняем информацию о количестве компонентов
-	var drone_info = {
-		"frame_type": current_frame_type,
-		"board_type": current_board_type,
-		"motor_type": current_motor_type,
-		"propeller_type": current_propeller_type,
-		"motor_count": motors.size(),
-		"propeller_count": propellers.size(),
-		"motors": [],
-		"propellers": []
-	}
-	
-	# Сохраняем позиции моторов
-	for motor in motors:
-		if is_instance_valid(motor):
-			drone_info["motors"].append({
-				"position": motor.global_position,
-				"rotation": motor.rotation,
-				"type": current_motor_type
-			})
-	
-	# Сохраняем позиции пропеллеров
-	for propeller in propellers:
-		if is_instance_valid(propeller):
-			drone_info["propellers"].append({
-				"position": propeller.global_position,
-				"rotation": propeller.rotation,
-				"type": current_propeller_type
-			})
-	
-	# Сохраняем информацию о дроне
-	drone_root.set_meta("drone_info", drone_info)
-	
-	# Сохраняем сцену
-	var packed_scene = PackedScene.new()
-	var result = packed_scene.pack(drone_root)
-	
-	if result == OK:
-		# Сохраняем в двух местах для надежности
-		ResourceSaver.save(packed_scene, "user://exported_drone.tscn")
-		ResourceSaver.save(packed_scene, "res://exported_drone.tscn")
-		
-		print("✅ Дрон экспортирован!")
-		print("📊 Информация о дроне:")
-		print("   - Тип ноды: ", drone_root.get_class())
-		print("   - Моторов: ", motors.size())
-		print("   - Пропеллеров: ", propellers.size())
-		print("   - Компонентов детей: ", drone_root.get_child_count())
-		
-		# Показываем сообщение об успехе
-		show_export_success_message()
-		return true
-	else:
-		print("❌ Ошибка при упаковке сцены дрона")
-		return false
-		
-func copy_components_to_drone(drone_root: CharacterBody3D):
-	"""Копирует все компоненты из $Components в корень дрона"""
-	# Копируем все дети из $Components
-	for child in $Components.get_children():
-		if is_instance_valid(child):
-			var child_copy = child.duplicate()
-			drone_root.add_child(child_copy)
-			child_copy.owner = drone_root
-			print("✅ Скопирован компонент: ", child.name)
-	
-	# Убедимся, что у пропеллеров есть метаданные
-	for i in range(propellers.size()):
-		var propeller = propellers[i]
-		if is_instance_valid(propeller):
-			# Ищем скопированный пропеллер по имени
-			for drone_child in drone_root.get_children():
-				if drone_child.name == propeller.name:
-					drone_child.set_meta("is_drone_propeller", true)
-					drone_child.set_meta("propeller_index", i)
-					drone_child.set_meta("propeller_type", current_propeller_type)
-					if not drone_child.is_in_group("drone_propellers"):
-						drone_child.add_to_group("drone_propellers")
-					break
-
-func create_drone_node_for_export() -> Node3D:
-	"""Создает узел дрона для экспорта"""
-	var drone_node = Node3D.new()
-	drone_node.name = "ExportedDrone"
-	
-	# Добавляем фрейм
-	if drone_frame and is_instance_valid(drone_frame):
-		var frame_copy = drone_frame.duplicate()
-		drone_node.add_child(frame_copy)
-		frame_copy.owner = drone_node
-	
-	# Добавляем плату
-	if drone_board and is_instance_valid(drone_board):
-		var board_copy = drone_board.duplicate()
-		drone_node.add_child(board_copy)
-		board_copy.owner = drone_node
-	
-	# Добавляем моторы
-	for i in range(motors.size()):
-		var motor = motors[i]
-		if is_instance_valid(motor):
-			var motor_copy = motor.duplicate()
-			motor_copy.name = "Motor_%d" % i
-			drone_node.add_child(motor_copy)
-			motor_copy.owner = drone_node
-			print("🔧 Добавлен мотор ", i, ": ", motor_copy.name)
-	
-	# Добавляем пропеллеры
-	for i in range(propellers.size()):
-		var propeller = propellers[i]
-		if is_instance_valid(propeller):
-			var propeller_copy = propeller.duplicate()
-			propeller_copy.name = "Propeller_%d" % i
-			drone_node.add_child(propeller_copy)
-			propeller_copy.owner = drone_node
-	
-	# Добавляем метаданные
-	var drone_info = {
-		"motor_count": motors.size(),
-		"propeller_count": propellers.size(),
-		"frame_type": current_frame_type,
-		"board_type": current_board_type,
-		"motor_type": current_motor_type,
-		"propeller_type": current_propeller_type
-	}
-	
-	drone_node.set_meta("drone_info", drone_info)
-	
-	print("📦 Создан узел дрона для экспорта:")
-	print("   - Детей: ", drone_node.get_child_count())
-	print("   - Моторов: ", motors.size())
-	print("   - Пропеллеров: ", propellers.size())
-	
-	return drone_node
-
-func show_export_success_message():
-	"""Показывает сообщение об успешном экспорте"""
-	var canvas = CanvasLayer.new()
-	canvas.layer = 100
-	
-	var panel = Panel.new()
-	panel.size = Vector2(500, 300)
-	
-	# ИСПРАВЛЕНИЕ: преобразуем Vector2i в Vector2
-	var viewport_size = Vector2(get_viewport().size)
-	panel.position = (viewport_size - panel.size) / 2
-	
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.1, 0.1, 0.1, 0.95)
-	style.border_color = Color(0, 1, 0)
-	style.border_width_left = 3
-	style.border_width_top = 3
-	style.border_width_right = 3
-	style.border_width_bottom = 3
-	panel.add_theme_stylebox_override("panel", style)
-	
-	var label = Label.new()
-	label.text = "✅ ДРОН УСПЕШНО ЭКСПОРТИРОВАН!\n\n"
-	label.text += "Компоненты:\n"
-	label.text += "• Рама: %s\n" % current_frame_type
-	label.text += "• Моторов: %d\n" % motors.size()
-	label.text += "• Пропеллеров: %d\n\n" % propellers.size()
-
-	label.text += "Теперь можно запускать на уровне!"
-	
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.size = panel.size
-	label.add_theme_font_size_override("font_size", 16)
-	
-	panel.add_child(label)
-	canvas.add_child(panel)
-	add_child(canvas)
-	
-	# Автоматическое закрытие через 4 секунды
-	await get_tree().create_timer(4.0).timeout
-	canvas.queue_free()
+	# Сохраняем физические данные в метаданные дрона
+	# ВАЖНО: Используем напрямую контейнер компонентов
+	var drone_root = $Components  # Заменяем get_drone_root_node() на $Components
+	if drone_root:
+		drone_root.set_meta("drone_physics", physics_data)
+		print("📊 Физические данные дрона сохранены:")
+		print("   Масса: ", physics_data["total_mass"])
+		print("   Центр масс: ", physics_data["center_of_mass"])
+		print("   Активных моторов: ", physics_data["active_motors"])
+		print("   Стабильность: ", physics_data["stability"])
 
 func get_drone_root_node() -> Node3D:
 	"""Возвращает корневой узел дрона"""
@@ -2089,20 +1906,13 @@ func ensure_propellers_marked():
 	for i in range(propellers.size()):
 		var propeller = propellers[i]
 		if is_instance_valid(propeller):
-			# Убедимся, что у пропеллера понятное имя
-			if not propeller.name.begins_with("Propeller_"):
-				propeller.name = "Propeller_" + str(i)
+			propeller.name = "propeller_" + str(i)
 			
-			# Добавляем метаданные
-			propeller.set_meta("is_drone_propeller", true)
-			propeller.set_meta("propeller_index", i)
-			propeller.set_meta("propeller_type", current_propeller_type)
+			if not propeller.has_meta("is_drone_propeller"):
+				propeller.set_meta("is_drone_propeller", true)
 			
-			# Добавляем в группу
 			if not propeller.is_in_group("drone_propellers"):
 				propeller.add_to_group("drone_propellers")
-			
-			print("✅ Помечен пропеллер: ", propeller.name, " (тип: ", current_propeller_type, ")")
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ СИСТЕМЫ ====================
 func init_ui_components():

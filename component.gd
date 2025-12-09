@@ -5,25 +5,97 @@ extends Node3D
 @export var component_variant: int = 1  # 1, 2 или 3
 @export var can_attach_to: PackedStringArray = []
 
+# ФИЗИЧЕСКИЕ СВОЙСТВА
+@export var component_mass: float = 0.0  # Масса компонента в кг
+@export var component_thrust: float = 0.0  # Тяга (только для моторов и пропеллеров)
+@export var component_size: Vector3 = Vector3(1, 1, 1)  # Габариты
+@export var component_strength: float = 1.0  # Прочность (0-1)
+
 var is_attached: bool = false
+var attached_position: Vector3 = Vector3.ZERO
+var is_active: bool = true  # Активен ли компонент
 
 func _ready():
+	# Инициализируем физические свойства в зависимости от типа
+	match component_type:
+		"frame":
+			component_mass = get_frame_mass(component_variant)
+			component_name = "Рама%d" % component_variant
+			can_attach_to = ["board", "motor"]
+		"board":
+			component_mass = 0.3
+			component_name = "Плата%d" % component_variant
+			can_attach_to = []
+		"motor":
+			component_mass = get_motor_mass(component_variant)
+			component_thrust = get_motor_thrust(component_variant)
+			component_name = "Мотор%d" % component_variant
+			can_attach_to = ["propeller"]
+		"propeller":
+			component_mass = 0.1
+			component_thrust = get_propeller_thrust(component_variant)
+			component_name = "Пропеллер%d" % component_variant
+			can_attach_to = []
+	
 	setup_component()
 	
 	# ДОБАВЛЯЕМ МАРКИРОВКУ ДЛЯ ПРОПЕЛЛЕРОВ
 	if component_type == "propeller":
 		mark_as_propeller()
+		
+func get_frame_mass(variant: int) -> float:
+	match variant:
+		1: return 1.0  # Легкая
+		2: return 1.5  # Средняя
+		3: return 2.0  # Тяжелая
+		_: return 1.0
+
+func get_motor_mass(variant: int) -> float:
+	match variant:
+		1: return 0.2  # Легкий
+		2: return 0.3  # Средний
+		3: return 0.4  # Мощный
+		_: return 0.3
+
+func get_motor_thrust(variant: int) -> float:
+	match variant:
+		1: return 8.0  # Слабая тяга
+		2: return 12.0 # Средняя тяга
+		3: return 16.0 # Сильная тяга
+		_: return 12.0
+
+func get_propeller_thrust(variant: int) -> float:
+	match variant:
+		1: return 1.0  # Маленький
+		2: return 1.2  # Средний
+		3: return 1.5  # Большой
+		_: return 1.2
 
 func mark_as_propeller():
-	# Добавляем метаданные для легкого поиска в Drone.gd
 	set_meta("is_drone_propeller", true)
 	add_to_group("drone_propellers")
 	
-	# Также маркируем всех детей (меши)
 	for child in get_children():
 		if child is MeshInstance3D or child is Node3D:
 			child.set_meta("is_drone_propeller", true)
 			child.add_to_group("drone_propellers")
+
+func get_component_type() -> String:
+	return component_type
+
+func get_component_mass() -> float:
+	return component_mass
+
+func get_component_thrust() -> float:
+	return component_thrust
+
+func set_active(active: bool):
+	is_active = active
+	# Можно добавить визуальные эффекты для неактивных компонентов
+
+func is_functional() -> bool:
+	return is_active and is_attached
+
 
 func setup_component():
 	print("DEBUG: Setting up component: ", component_type, " variant: ", component_variant)
@@ -311,8 +383,7 @@ func find_mesh_instance(node: Node) -> MeshInstance3D:
 func can_attach(component_type_to_attach: String) -> bool:
 	return component_type_to_attach in can_attach_to
 
-func get_component_type() -> String:
-	return component_type
+
 
 func get_component_name() -> String:
 	return component_name
