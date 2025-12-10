@@ -889,13 +889,27 @@ func adjust_drone_height(relative_change: float):
 
 func setup_drone(drone_node: CharacterBody3D):
 	print("🔧 Настраиваем дрон...")
+	
+	# ВЫРАВНИВАЕМ ПО СЕТКЕ ПРИ ЗАГРУЗКЕ
 	var start_pos = calculate_start_position()
+	
+	# Принудительное выравнивание по сетке
+	@warning_ignore("integer_division")
+	var aligned_x = floor((start_pos.x + GRID_SIZE / 2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE / 2
+	@warning_ignore("integer_division")
+	var aligned_z = floor((start_pos.z + GRID_SIZE / 2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE / 2
+	
+	start_pos = Vector3(aligned_x, START_POINT_Y, aligned_z)
+	
 	if not is_position_within_bounds(start_pos):
 		start_pos = clamp_position_to_bounds(start_pos)
 		print("⚠️ Стартовая позиция скорректирована: ", start_pos)
 	
 	drone_node.global_position = start_pos
 	drone_node.scale = Vector3(6, 6, 6)
+	
+	# Сбрасываем вращение, чтобы дрон был ровно
+	drone_node.rotation_degrees = Vector3.ZERO
 	
 	# Установите целевую позицию для текущего уровня
 	var target_pos = get_target_for_level(Global.current_level)
@@ -917,7 +931,8 @@ func setup_drone(drone_node: CharacterBody3D):
 		drone_node.set_boundaries(grid_boundary_min, grid_boundary_max)
 		print("✅ Границы установлены для дрона")
 	
-	print("✅ Дрон настроен: ", drone_node.name)
+	print("🚁 Дрон установлен на позицию: ", drone_node.global_position)
+	
 
 func add_collision_if_needed(drone_node: CharacterBody3D):
 	if drone_node.get_node_or_null("CollisionShape3D") == null:
@@ -1001,24 +1016,37 @@ func create_grid_line(from: Vector3, to: Vector3, material: Material, thickness:
 	mesh_instance.owner = get_tree().edited_scene_root
 
 func update_grid_highlight():
+	# Проверяем, что дрон и подсветка существуют
 	if not current_drone or not grid_highlight:
 		return
 	
+	# Получаем точную позицию дрона
 	var drone_pos = current_drone.global_position
+	
+	# Устанавливаем подсветку ПРЯМО ПОД ДРОНОМ
+	grid_highlight.global_position = Vector3(drone_pos.x, 0.15, drone_pos.z)
+	grid_highlight.visible = true
+	
+	# Выбираем цвет в зависимости от позиции
 	if is_position_within_bounds(drone_pos):
-		grid_highlight.global_position = Vector3(drone_pos.x, 0.15, drone_pos.z)
-		grid_highlight.visible = true
 		highlight_mesh.material_override.albedo_color = Global.highlight_color
 		highlight_mesh.material_override.emission = Global.highlight_color * 0.6
 	else:
-		grid_highlight.global_position = Vector3(drone_pos.x, 0.15, drone_pos.z)
-		grid_highlight.visible = true
 		highlight_mesh.material_override.albedo_color = HIGHLIGHT_COLOR_WARNING
 		highlight_mesh.material_override.emission = HIGHLIGHT_COLOR_WARNING * 0.8
 	
-	var new_cell_position = Vector3(drone_pos.x, 0, drone_pos.z)
+	# Для создания трейла все еще используем округление до центра клетки
+	@warning_ignore("integer_division")
+	var cell_x = floor((drone_pos.x + GRID_SIZE / 2) / GRID_SIZE) * GRID_SIZE
+	@warning_ignore("integer_division")
+	var cell_z = floor((drone_pos.z + GRID_SIZE / 2) / GRID_SIZE) * GRID_SIZE
+	
+	var new_cell_position = Vector3(cell_x, 0, cell_z)
+	
+	# Создаем трейл только при переходе в новую клетку
 	if new_cell_position != current_cell_position and current_cell_position != Vector3.ZERO:
 		create_trail_marker(current_cell_position)
+	
 	current_cell_position = new_cell_position
 
 func create_wooden_floor():
@@ -1563,7 +1591,7 @@ func create_modern_table_legs(table_width: float, table_depth: float, table_heig
 # ==================== СИСТЕМА ПОДСВЕТКИ КЛЕТОК ====================
 func create_grid_highlight():
 	var box_mesh = BoxMesh.new()
-	box_mesh.size = Vector3(GRID_SIZE * 0.85, 0.1, GRID_SIZE * 0.85)
+	box_mesh.size = Vector3(GRID_SIZE, 0.1, GRID_SIZE)  # Полный размер клетки
 	highlight_mesh = MeshInstance3D.new()
 	highlight_mesh.mesh = box_mesh
 	
@@ -1581,12 +1609,20 @@ func create_grid_highlight():
 	highlight_mesh.owner = get_tree().edited_scene_root
 	grid_highlight.visible = false
 	
-	var tween = create_tween()
-	tween.set_loops()
-	tween.tween_property(highlight_mesh.material_override, "emission", 
-						Global.highlight_color * 1.2, 1.0)
-	tween.tween_property(highlight_mesh.material_override, "emission", 
-						Global.highlight_color * 0.8, 1.0)
+	# Убеждаемся, что нет твина, который может мешать
+	# Убираем старые твины если они есть
+	var tweens = get_tree().get_nodes_in_group("highlight_tween")
+	for tween in tweens:
+		if is_instance_valid(tween):
+			tween.kill()
+	
+	# Создаем новый твин для плавного свечения
+	var glow_tween = create_tween()
+	glow_tween.set_loops()
+	glow_tween.tween_property(highlight_mesh.material_override, "emission", 
+							Global.highlight_color * 1.2, 0.5)
+	glow_tween.tween_property(highlight_mesh.material_override, "emission", 
+							Global.highlight_color * 0.8, 0.5)
 
 func create_trail_marker(position: Vector3):
 	if not is_position_within_bounds(position):

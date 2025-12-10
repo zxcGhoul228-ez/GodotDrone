@@ -46,6 +46,9 @@ func _ready():
 	# Если пропеллеров нет, показываем предупреждение
 	if propellers.size() == 0:
 		print("⚠️ ВНИМАНИЕ: Дрон без пропеллеров! Физика может работать некорректно.")
+		
+		show_imbalance_visualization()
+		
 
 
 func get_has_reached_target() -> bool:
@@ -428,6 +431,11 @@ func perform_movement_with_physics(direction: int) -> bool:
 		print("❌ Дрон разбился! Невозможно двигаться")
 		return false
 	
+	# Проверяем, что дрон все еще находится в дереве сцены
+	if not is_inside_tree():
+		print("❌ Дрон был удален из дерева сцены")
+		return false
+	
 	var target_pos = global_position
 	
 	# Рассчитываем базовое направление
@@ -455,17 +463,20 @@ func perform_movement_with_physics(direction: int) -> bool:
 		var start_pos = global_position
 		
 		while time_elapsed < move_duration:
-			if is_crashed:
+			# Проверяем, что дрон все еще активен
+			if not is_inside_tree() or is_crashed:
+				print("❌ Дрон был удален или разбился во время движения")
 				return false
 			
 			var t = time_elapsed / move_duration
 			var base_pos = start_pos.lerp(target_pos, t)
 			
-			# Применяем физику
-			var physics_pos = drone_physics.apply_physics(
-				get_process_delta_time(), 
-				global_position, 
-				base_pos
+			# Применяем улучшенную физику с учетом направления
+			var physics_pos = drone_physics.apply_movement_physics(
+				direction,
+				global_position,
+				base_pos,
+				get_process_delta_time()
 			)
 			
 			# Проверяем, не упал ли дрон
@@ -476,28 +487,48 @@ func perform_movement_with_physics(direction: int) -> bool:
 				emit_crash_effect()
 				return false
 			
-			global_position = physics_pos
-			drone_moved.emit()
+			# Безопасно обновляем позицию
+			if is_inside_tree():
+				global_position = physics_pos
+				drone_moved.emit()
+			else:
+				return false
 			
 			time_elapsed += get_process_delta_time()
 			await get_tree().process_frame
 		
-		# Финальная позиция
-		global_position = drone_physics.apply_physics(
-			get_process_delta_time(), 
-			global_position, 
-			target_pos
-		)
+		# Финальная позиция (только если дрон все еще в дереве)
+		if is_inside_tree():
+			var final_pos = drone_physics.apply_movement_physics(
+				direction,
+				global_position,
+				target_pos,
+				get_process_delta_time()
+			)
+			
+			# Проверяем финальную позицию на падение
+			if drone_physics.check_crash_condition(final_pos):
+				print("💥 Дрон падает в конце движения!")
+				is_crashed = true
+				crash_position = final_pos
+				emit_crash_effect()
+				return false
+			
+			global_position = final_pos
 	else:
-		# Без физики - обычное движение
-		var tween = create_tween()
-		tween.tween_property(self, "global_position", target_pos, MOVE_SPEED)
-		await tween.finished
+		# Без физики - обычное движение (с проверкой)
+		if is_inside_tree():
+			var tween = create_tween()
+			tween.tween_property(self, "global_position", target_pos, MOVE_SPEED)
+			await tween.finished
+		else:
+			return false
 	
-	# Проверяем достижение цели
-	check_target_proximity()
+	# Проверяем достижение цели (только если дрон активен)
+	if is_inside_tree():
+		check_target_proximity()
+		drone_moved.emit()
 	
-	drone_moved.emit()
 	return true
 
 func get_direction_name(direction: int) -> String:
@@ -548,30 +579,28 @@ func check_target_proximity():
 		
 func emit_crash_effect():
 	"""Эффект падения дрона"""
+	# Проверяем, что дрон все еще в дереве
+	if not is_inside_tree():
+		print("❌ Дрон уже удален, не могу создать эффект падения")
+		return
+	
 	print("💥💥💥 ДРОН РАЗБИЛСЯ!")
 	
 	# Останавливаем пропеллеры
 	stop_propellers()
 	
+	# Показываем сообщение о разбитии
+	show_crash_message()
+	
 	# Визуальный эффект падения
 	var crash_tween = create_tween()
-	crash_tween.tween_property(self, "rotation_degrees", 
-		Vector3(randf_range(-45, 45), randf_range(0, 360), randf_range(-45, 45)), 
-		0.5
-	)
+	crash_tween.tween_property(self, "rotation_degrees", Vector3(randf_range(-45, 45), randf_range(0, 360), randf_range(-45, 45)), 0.5)
 	
 	# Эффект "падения" на место
-	if crash_position.y > 0:
+	if crash_position.y > 0 and is_inside_tree():
 		var fall_tween = create_tween()
-		fall_tween.tween_property(self, "global_position:y", 
-			crash_position.y - 2.0, 0.3
-		)
-		fall_tween.tween_property(self, "global_position:y", 
-			crash_position.y, 0.2
-		)
-	
-	# Звуковой эффект (если есть)
-	# $CrashSound.play()
+		fall_tween.tween_property(self, "global_position:y", crash_position.y - 2.0, 0.3)
+		fall_tween.tween_property(self, "global_position:y", crash_position.y, 0.2)
 
 
 # ОСТАНОВКА
@@ -583,15 +612,23 @@ func stop_execution():
 	if current_tween:
 		current_tween.kill()
 	
-	# Принудительный возврат на старт при остановке
-	print("↩️ Принудительный возврат на старт")
-	await return_to_start()
-	
-	program_finished.emit(false)
+	# Проверяем, что дрон все еще в дереве
+	if is_inside_tree():
+		# Принудительный возврат на старт при остановке
+		print("↩️ Принудительный возврат на старт")
+		await return_to_start()
+		program_finished.emit(false)
+	else:
+		print("❌ Дрон уже удален")
 
 # ВОЗВРАТ НА СТАРТ
 func return_to_start():
 	"""Возвращает дрон на старт после падения"""
+	# Проверяем, что дрон все еще в дереве сцены
+	if not is_inside_tree():
+		print("❌ Дрон был удален, не могу вернуть на старт")
+		return
+	
 	print("↩️ ВОЗВРАТ НА СТАРТ ИЗ-ЗА ПАДЕНИЯ")
 	
 	# Сбрасываем состояние падения
@@ -606,8 +643,11 @@ func return_to_start():
 	return_tween.tween_property(self, "global_position", start_position, MOVE_SPEED * 1.5)
 	await return_tween.finished
 	
-	drone_moved.emit()
-	print("✅ Дрон восстановлен и вернулся на старт")
+	if is_inside_tree():
+		drone_moved.emit()
+		print("✅ Дрон восстановлен и вернулся на старт")
+	else:
+		print("❌ Дрон был удален во время возврата на старт")
 
 # ВИЗУАЛИЗАЦИЯ БАЛАНСА (опционально)
 func show_balance_visualization():
@@ -659,9 +699,119 @@ func reset_to_start():
 	return_tween.parallel().tween_property(self, "rotation_degrees", Vector3.ZERO, 0.5)
 	await return_tween.finished
 	
-	print("✅ Дрон вернулся на старт: ", start_position)
+	
+	print("✅ Дрон вернулся на старт и отцентрирован: ", global_position)
 	
 func set_target_reached(reached: bool):
 	has_reached_target = reached
 	if reached:
 		print("🎯 Дрон: цель достигнута!")
+
+
+func show_imbalance_visualization():
+	"""Показывает визуализацию разбалансировки дрона"""
+	if not drone_physics:
+		return
+	
+	# Создаем стрелки, показывающие направление крена
+	for i in range(4):
+		var arrow = MeshInstance3D.new()
+		var arrow_mesh = CylinderMesh.new()
+		arrow_mesh.top_radius = 0.05
+		arrow_mesh.bottom_radius = 0.05
+		arrow_mesh.height = 0.5
+		arrow.mesh = arrow_mesh
+		
+		var material = StandardMaterial3D.new()
+		
+		# Цвет стрелки в зависимости от стороны
+		match i:
+			0:  # Передняя
+				material.albedo_color = Color.GREEN
+				arrow.position = Vector3(0, 0.3, 0.5)
+			1:  # Задняя
+				material.albedo_color = Color.BLUE
+				arrow.position = Vector3(0, 0.3, -0.5)
+			2:  # Левая
+				material.albedo_color = Color.YELLOW
+				arrow.position = Vector3(-0.5, 0.3, 0)
+			3:  # Правая
+				material.albedo_color = Color.RED
+				arrow.position = Vector3(0.5, 0.3, 0)
+		
+		arrow.material_override = material
+		add_child(arrow)
+		
+		# Анимация стрелки в зависимости от разбалансировки
+		var imbalance = drone_physics.get_direction_imbalance(i)
+		if imbalance.length() > 0.1:
+			var tween = create_tween()
+			tween.set_loops()
+			tween.tween_property(arrow, "rotation_degrees:x", 20.0, 0.5)
+			tween.tween_property(arrow, "rotation_degrees:x", 0.0, 0.5)
+
+
+func show_crash_message():
+	"""Показывает сообщение о разбитии дрона"""
+	# Проверяем, что дрон все еще в дереве
+	if not is_inside_tree():
+		return
+	
+	print("📢 Показываем сообщение о разбитии дрона")
+	
+	# Создаем CanvasLayer для сообщения
+	var crash_canvas = CanvasLayer.new()
+	crash_canvas.layer = 20
+	crash_canvas.name = "CrashMessageCanvas"
+	
+	# Полупрозрачный фон
+	var overlay = ColorRect.new()
+	overlay.color = Color(0, 0, 0, 0.5)
+	overlay.size = get_viewport().size
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	# Панель сообщения
+	var message_panel = Panel.new()
+	message_panel.size = Vector2(400, 200)
+	
+	# Центрируем панель
+	var viewport_size = Vector2(get_viewport().get_visible_rect().size)
+	message_panel.position = (viewport_size - message_panel.size) / 2
+	
+	# Стиль панели
+	var panel_style = StyleBoxFlat.new()
+	panel_style.bg_color = Color(0.2, 0, 0, 0.9)
+	panel_style.border_color = Color.RED
+	panel_style.border_width_left = 4
+	panel_style.border_width_top = 4
+	panel_style.border_width_right = 4
+	panel_style.border_width_bottom = 4
+	panel_style.corner_radius_top_left = 10
+	panel_style.corner_radius_top_right = 10
+	panel_style.corner_radius_bottom_right = 10
+	panel_style.corner_radius_bottom_left = 10
+	message_panel.add_theme_stylebox_override("panel", panel_style)
+	
+	# Текст сообщения
+	var message_label = Label.new()
+	message_label.text = "💥 ДРОН РАЗБИЛСЯ!\n\nПричина: дисбаланс или отсутствие двигателей\nДрон будет возвращен на старт"
+	message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	message_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	message_label.add_theme_font_size_override("font_size", 18)
+	message_label.add_theme_color_override("font_color", Color.WHITE)
+	message_label.size = message_panel.size
+	
+	message_panel.add_child(message_label)
+	overlay.add_child(message_panel)
+	crash_canvas.add_child(overlay)
+	
+	# Добавляем канвас к родителю дрона
+	if get_parent():
+		get_parent().add_child(crash_canvas)
+	else:
+		add_child(crash_canvas)
+	
+	# Автоматическое скрытие через 3 секунды
+	await get_tree().create_timer(3.0).timeout
+	if is_instance_valid(crash_canvas):
+		crash_canvas.queue_free()

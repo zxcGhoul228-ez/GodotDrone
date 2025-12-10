@@ -1,7 +1,4 @@
-res://DroneLevels/levels/Level1.gd
 res://DroneLevels/Drone.gd
-res://DroneScene.gd
-res://component.gd
-res://DroneLoader.gd
 res://DroneLevels/DronePhysics.gd
-res://create_drone/create_dron.gd
+res://DroneScene.gd
+res://DroneLevels/levels/Level1.gd
