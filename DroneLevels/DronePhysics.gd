@@ -238,35 +238,35 @@ func get_direction_imbalance(direction: int) -> Vector3:
 		0:  # Вперед
 			if missing_sides["front"]:
 				# Если отсутствуют передние моторы, дрон будет крениться вперед
-				imbalance.z = -0.3
+				imbalance.z = -0.8  # Было -0.5
 			if missing_sides["left"] and not missing_sides["right"]:
-				imbalance.x = 0.2  # Крен вправо
+				imbalance.x = 0.6   # Было 0.4
 			elif missing_sides["right"] and not missing_sides["left"]:
-				imbalance.x = -0.2  # Крен влево
+				imbalance.x = -0.6  # Было -0.4
 				
 		1:  # Назад
 			if missing_sides["back"]:
-				imbalance.z = 0.3
+				imbalance.z = 0.8   # Было 0.5
 			if missing_sides["left"] and not missing_sides["right"]:
-				imbalance.x = 0.2
+				imbalance.x = 0.6   # Было 0.4
 			elif missing_sides["right"] and not missing_sides["left"]:
-				imbalance.x = -0.2
+				imbalance.x = -0.6  # Было -0.4
 				
 		2:  # Влево
 			if missing_sides["left"]:
-				imbalance.x = -0.3
+				imbalance.x = -0.8  # Было -0.5
 			if missing_sides["front"] and not missing_sides["back"]:
-				imbalance.z = -0.2
+				imbalance.z = -0.6  # Было -0.4
 			elif missing_sides["back"] and not missing_sides["front"]:
-				imbalance.z = 0.2
+				imbalance.z = 0.6   # Было 0.4
 				
 		3:  # Вправо
 			if missing_sides["right"]:
-				imbalance.x = 0.3
+				imbalance.x = 0.8   # Было 0.5
 			if missing_sides["front"] and not missing_sides["back"]:
-				imbalance.z = -0.2
+				imbalance.z = -0.6  # Было -0.4
 			elif missing_sides["back"] and not missing_sides["front"]:
-				imbalance.z = 0.2
+				imbalance.z = 0.6   # Было 0.4
 	
 	return imbalance
 
@@ -276,47 +276,25 @@ func calculate_tilt_effect(direction: int, current_pos: Vector3, target_pos: Vec
 	var tilt_effect = Vector3.ZERO
 	
 	# Базовый вектор крена из-за разбалансировки
-	tilt_effect += thrust_imbalance * TILT_RESPONSE
+	tilt_effect += thrust_imbalance * TILT_RESPONSE * 3.0  # Было 2.0
 	
 	# Дополнительный крен из-за отсутствия моторов в направлении движения
 	var direction_imbalance = get_direction_imbalance(direction)
-	tilt_effect += direction_imbalance * 2.0
+	tilt_effect += direction_imbalance * 4.0  # Было 3.0
 	
-	# Ограничиваем максимальный крен
+	# Ограничиваем максимальный крен, но теперь более либерально
 	var tilt_magnitude = tilt_effect.length()
-	if tilt_magnitude > MAX_TILT_ANGLE / 90.0:  # Нормализуем к 0-1
-		tilt_effect = tilt_effect.normalized() * (MAX_TILT_ANGLE / 90.0)
+	if tilt_magnitude > MAX_TILT_ANGLE / 30.0:  # Было 45.0
+		tilt_effect = tilt_effect.normalized() * (MAX_TILT_ANGLE / 30.0)
 	
 	return tilt_effect
 
-func apply_movement_physics(direction: int, current_pos: Vector3, target_pos: Vector3, delta: float) -> Vector3:
-	"""Применяет физику движения с учетом конфигурации дрона"""
-	if not can_take_off():
-		return current_pos + Vector3(0, -GRAVITY * delta, 0)
-	
-	# Базовое движение
-	var movement = (target_pos - current_pos).normalized() * delta * 10.0
-	
-	# Эффект крена
-	var tilt_effect = calculate_tilt_effect(direction, current_pos, target_pos)
-	
-	# Применяем крен к движению
-	movement += tilt_effect * delta * 5.0
-	
-	# Учитываем стабильность
-	var stability_factor = get_stability_factor()
-	movement *= stability_factor
-	
-	# Добавляем случайные колебания при низкой стабильности
-	if stability_factor < 0.7:
-		var turbulence = Vector3(
-			randf_range(-0.1, 0.1) * (1.0 - stability_factor),
-			randf_range(-0.05, 0.05) * (1.0 - stability_factor),
-			randf_range(-0.1, 0.1) * (1.0 - stability_factor)
-		)
-		movement += turbulence
-	
-	return current_pos + movement
+
+# Старая функция для обратной совместимости
+func apply_movement_physics_old(direction: int, current_pos: Vector3, target_pos: Vector3, delta: float) -> Vector3:
+	"""Совместимость со старым кодом"""
+	print("⚠️ Используется устаревшая функция apply_movement_physics, используйте apply_movement_physics с параметром speed")
+	return apply_movement_physics(direction, current_pos, target_pos, delta, 32.0)
 
 func get_stability_factor() -> float:
 	"""Возвращает коэффициент стабильности от 0 до 1"""
@@ -419,11 +397,6 @@ func calculate_lift_and_balance():
 	if propellers.size() < motors.size():
 		lift_capacity *= float(propellers.size()) / float(motors.size())
 
-# Старые функции для обратной совместимости
-func apply_physics(delta: float, current_position: Vector3, target_position: Vector3) -> Vector3:
-	"""Совместимость со старым кодом"""
-	print("⚠️ Используется устаревшая функция apply_physics, используйте apply_movement_physics")
-	return apply_movement_physics(0, current_position, target_position, delta)
 
 func check_crash_condition(current_position: Vector3, ground_level: float = 0.0) -> bool:
 	"""Проверяет, не упал ли дрон"""
@@ -451,3 +424,50 @@ func check_crash_condition(current_position: Vector3, ground_level: float = 0.0)
 	# Для простоты пока пропустим
 	
 	return false
+
+# Добавим параметр скорости в функцию
+func apply_movement_physics(direction: int, current_pos: Vector3, target_pos: Vector3, delta: float, speed: float = 32.0) -> Vector3:
+	"""Применяет физику движения с учетом конфигурации дрона и скорости"""
+	if not can_take_off():
+		return current_pos + Vector3(0, -GRAVITY * delta, 0)
+	
+	# Базовое движение с переданной скоростью
+	var movement = (target_pos - current_pos).normalized() * delta * speed
+	
+	# Эффект крена
+	var tilt_effect = calculate_tilt_effect(direction, current_pos, target_pos)
+	
+	# Применяем динамический множитель разбалансировки
+	var imbalance_multiplier = get_imbalance_multiplier()
+	movement += tilt_effect * delta * speed * 0.2 * imbalance_multiplier
+	
+	# Учитываем стабильность
+	var stability_factor = get_stability_factor()
+	movement *= stability_factor
+	
+	# Дополнительное влияние: при недостающих моторах снижаем общую скорость
+	var active_motors = get_active_motors_count()
+	if active_motors < 4:
+		movement *= float(active_motors) / 4.0
+	
+	# Добавляем случайные колебания при низкой стабильности
+	if stability_factor < 0.7:
+		var turbulence_multiplier = 1.0 + (1.0 - stability_factor) * 2.0
+		var turbulence = Vector3(
+			randf_range(-0.2, 0.2) * turbulence_multiplier,
+			randf_range(-0.1, 0.1) * turbulence_multiplier,
+			randf_range(-0.2, 0.2) * turbulence_multiplier
+		) * speed * 0.05 * imbalance_multiplier
+		movement += turbulence
+	
+	return current_pos + movement
+
+func get_imbalance_multiplier() -> float:
+	"""Возвращает множитель разбалансировки в зависимости от отсутствующих моторов"""
+	var missing_count = 4 - get_active_motors_count()
+	match missing_count:
+		1: return 3  # 50% усиление при 1 отсутствующем моторе
+		2: return 4 # 100% усиление при 2 отсутствующих моторах
+		3: return 5 # 200% усиление при 3 отсутствующих моторах
+		4: return 1  # 300% усиление при всех отсутствующих моторах
+		_: return 1.0  # Нормальный множитель

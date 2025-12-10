@@ -457,6 +457,9 @@ func perform_movement_with_physics(direction: int) -> bool:
 			emit_crash_effect()
 			return false
 		
+		# Рассчитываем скорость (расстояние / время)
+		var move_speed = GRID_SIZE / MOVE_SPEED
+		
 		# Симулируем движение с физикой
 		var time_elapsed = 0.0
 		var move_duration = MOVE_SPEED
@@ -471,12 +474,13 @@ func perform_movement_with_physics(direction: int) -> bool:
 			var t = time_elapsed / move_duration
 			var base_pos = start_pos.lerp(target_pos, t)
 			
-			# Применяем улучшенную физику с учетом направления
+			# Применяем улучшенную физику с учетом направления И СКОРОСТИ
 			var physics_pos = drone_physics.apply_movement_physics(
 				direction,
 				global_position,
 				base_pos,
-				get_process_delta_time()
+				get_process_delta_time(),
+				move_speed  # Передаем рассчитанную скорость
 			)
 			
 			# Проверяем, не упал ли дрон
@@ -503,7 +507,8 @@ func perform_movement_with_physics(direction: int) -> bool:
 				direction,
 				global_position,
 				target_pos,
-				get_process_delta_time()
+				get_process_delta_time(),
+				move_speed  # Передаем рассчитанную скорость
 			)
 			
 			# Проверяем финальную позицию на падение
@@ -572,9 +577,17 @@ func perform_movement(direction: int) -> bool:
 func check_target_proximity():
 	if target_position != Vector3.ZERO:
 		var distance = global_position.distance_to(target_position)
-		if distance < GRID_SIZE:
+		var proximity_threshold = GRID_SIZE * 1.5  # ВОССТАНАВЛИВАЕМ ОРИГИНАЛЬНОЕ
+		
+		if distance < proximity_threshold:
 			has_reached_target = true
-			print("🎯 Достигнута цель! Расстояние: ", distance)
+			print("🎯 Достигнута цель! Расстояние: ", distance, " (порог: ", proximity_threshold, ")")
+			# Дополнительно: принудительно перемещаем дрон к цели для визуального эффекта
+			if distance > GRID_SIZE * 0.5:  # Если дрон близко, но не точно в цели
+				var snap_tween = create_tween()
+				snap_tween.tween_property(self, "global_position", target_position, 0.3)
+		else:
+			print("📏 Расстояние до цели: ", distance, " (порог: ", proximity_threshold, ")")
 
 		
 func emit_crash_effect():

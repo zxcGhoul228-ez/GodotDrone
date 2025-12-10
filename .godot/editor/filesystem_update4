@@ -1,4 +1,3 @@
 res://DroneLevels/Drone.gd
 res://DroneLevels/DronePhysics.gd
-res://DroneScene.gd
 res://DroneLevels/levels/Level1.gd

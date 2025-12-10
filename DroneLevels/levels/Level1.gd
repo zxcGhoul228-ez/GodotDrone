@@ -245,7 +245,6 @@ func show_failure_message():
 	await get_tree().create_timer(2.0).timeout
 	failure_ui.queue_free()
 
-
 func complete_level():
 	if is_level_completed:
 		return
@@ -263,7 +262,7 @@ func complete_level():
 	
 	# ПРОВЕРЯЕМ РАССТОЯНИЕ И СОСТОЯНИЕ
 	var distance_to_target = drone.global_position.distance_to(target_point.global_position)
-	var target_radius = 10.0  # Уменьшил радиус для более точного попадания
+	var target_radius = 10.0  # ВОССТАНАВЛИВАЕМ ОРИГИНАЛЬНОЕ
 	
 	print("📏 Дистанция до цели: ", distance_to_target)
 	print("🎯 Состояние дрона: достиг цели = ", has_reached_target)
