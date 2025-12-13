@@ -1,101 +1,136 @@
-[gd_scene load_steps=5 format=3 uid="uid://drx1viol8ntcc"]
+[gd_scene load_steps=4 format=3 uid="uid://drx1viol8ntcc"]
 
-[ext_resource type="Script" uid="uid://dbrcvb058nfje" path="res://create_drone/create_dron.gd" id="1_22kpt"]
-[ext_resource type="Script" uid="uid://bxjqfxylx2xxc" path="res://create_drone/back_butt.gd" id="1_caali"]
-[ext_resource type="FontFile" uid="uid://cjkejlnbt8pdg" path="res://fonts/Zerove/Zerove-Regular.otf" id="3_mghl4"]
+[ext_resource type="Script" uid="uid://dbrcvb058nfje" path="res://create_drone/create_dron.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://5ak2s4ydvk7y" path="res://room3d/garage_to_create_drone/garage.glb" id="2"]
 
-[sub_resource type="Environment" id="Environment_22kpt"]
+[sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
-background_color = Color(0.06666667, 0.06666667, 0.06666667, 1)
+background_color = Color(0.06, 0.06, 0.08, 1)
 ambient_light_source = 2
-ambient_light_color = Color(0.2, 0.2, 0.2, 1)
-ambient_light_energy = 0.4
-tonemap_mode = 3
-tonemap_exposure = 0.9
-ssao_enabled = true
-ssao_radius = 1.2
-ssao_intensity = 0.6
-glow_enabled = true
-glow_intensity = 0.2
-glow_strength = 0.5
-glow_bloom = 0.1
-fog_enabled = true
-fog_mode = 1
-fog_light_color = Color(0.101960786, 0.101960786, 0.101960786, 1)
-fog_density = 1.0
-fog_depth_curve = 0.11152405
-fog_depth_begin = 12.0
-fog_depth_end = 60.0
-volumetric_fog_enabled = true
-volumetric_fog_density = 0.0335
+ambient_light_color = Color(0.6, 0.65, 0.75, 1)
+ambient_light_energy = 0.35
+tonemap_mode = 2
+adjustment_enabled = true
 
-[node name="create_dron" type="Node3D"]
-script = ExtResource("1_22kpt")
+[node name="create_drone" type="Node3D"]
+script = ExtResource("1")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
-environment = SubResource("Environment_22kpt")
+environment = SubResource("Environment_1")
 
-[node name="Grid" type="GridMap" parent="."]
+[node name="Grid" type="Node3D" parent="."]
 
 [node name="Components" type="Node3D" parent="."]
 
 [node name="CameraPivot" type="Node3D" parent="."]
 
 [node name="Camera3D" type="Camera3D" parent="CameraPivot"]
+current = true
+far = 200.0
+
+[node name="GarageRoom" parent="." instance=ExtResource("2")]
+transform = Transform3D(6, 0, 0, 0, 6, 0, 0, 0, 6, 10, 0, 0)
+
+[node name="LightsContainer" type="Node3D" parent="."]
+
+[node name="MainLight" type="DirectionalLight3D" parent="LightsContainer"]
+transform = Transform3D(0.8660254, -0.43301272, 0.24999999, 0, 0.49999997, 0.86602545, -0.5, -0.75, 0.43301266, 0, 0, 0)
+light_energy = 0.85
+shadow_enabled = true
+
+[node name="FillLight" type="OmniLight3D" parent="LightsContainer"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 0)
+light_energy = 0.35
+omni_range = 12.0
 
 [node name="UI" type="CanvasLayer" parent="."]
 
 [node name="OpenClose" type="Button" parent="UI"]
-offset_left = 1620.0
-offset_right = 1920.0
-offset_bottom = 112.0
-theme_override_fonts/font = ExtResource("3_mghl4")
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 260.0
+offset_bottom = 60.0
 text = "Показать список"
 
+[node name="SaveLoadContainer" type="HBoxContainer" parent="UI"]
+offset_left = 720.0
+offset_top = 15.0
+offset_right = 1200.0
+offset_bottom = 65.0
+
+[node name="SaveButton" type="Button" parent="UI/SaveLoadContainer"]
+custom_minimum_size = Vector2(150, 45)
+layout_mode = 2
+text = "Сохранить"
+
+[node name="LoadButton" type="Button" parent="UI/SaveLoadContainer"]
+custom_minimum_size = Vector2(150, 45)
+layout_mode = 2
+text = "Загрузить"
+
+[node name="ExportButton" type="Button" parent="UI/SaveLoadContainer"]
+custom_minimum_size = Vector2(150, 45)
+layout_mode = 2
+text = "Экспорт"
+
 [node name="Hierarchy" type="Panel" parent="UI"]
-offset_left = 1620.0
-offset_top = 111.0
-offset_right = 1920.0
-offset_bottom = 511.0
+visible = false
+offset_left = 20.0
+offset_top = 80.0
+offset_right = 360.0
+offset_bottom = 520.0
 
-[node name="Complist" type="ItemList" parent="UI/Hierarchy"]
+[node name="Title" type="Label" parent="UI/Hierarchy"]
 layout_mode = 0
-offset_left = 10.0
-offset_top = 91.0
-offset_right = 290.0
-offset_bottom = 391.0
-
-[node name="Label" type="Label" parent="UI/Hierarchy"]
-layout_mode = 0
-offset_top = 4.0
-offset_right = 300.0
-offset_bottom = 84.0
-theme_override_fonts/font = ExtResource("3_mghl4")
-theme_override_font_sizes/font_size = 56
+offset_left = 12.0
+offset_top = 8.0
+offset_right = 328.0
+offset_bottom = 40.0
 text = "Структура"
 horizontal_alignment = 1
 
+[node name="Complist" type="ItemList" parent="UI/Hierarchy"]
+layout_mode = 0
+offset_left = 12.0
+offset_top = 45.0
+offset_right = 328.0
+offset_bottom = 488.0
+
+[node name="BalanceWarning" type="Label" parent="UI"]
+offset_left = 20.0
+offset_top = 70.0
+offset_right = 700.0
+offset_bottom = 95.0
+
+[node name="StatsPanel" type="Panel" parent="UI"]
+offset_left = 1552.0
+offset_top = 872.0
+offset_right = 1892.0
+offset_bottom = 1052.0
+
+[node name="Label" type="Label" parent="UI/StatsPanel"]
+layout_mode = 0
+offset_left = 12.0
+offset_top = 12.0
+offset_right = 328.0
+offset_bottom = 168.0
+
 [node name="Control" type="Control" parent="UI"]
 layout_mode = 3
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_right = -1688.0
-offset_bottom = -952.0
-grow_horizontal = 2
-grow_vertical = 2
-script = ExtResource("1_caali")
+anchors_preset = 0
+offset_left = 20.0
+offset_top = 850.0
+offset_right = 220.0
+offset_bottom = 930.0
 
 [node name="back_butt" type="Button" parent="UI/Control"]
-self_modulate = Color(1, 1, 1, 0.76862746)
 layout_mode = 0
-offset_right = 225.0
-offset_bottom = 128.0
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_fonts/font = ExtResource("3_mghl4")
-theme_override_font_sizes/font_size = 30
-text = " вернуться"
-icon_alignment = 1
-expand_icon = true
+offset_right = 200.0
+offset_bottom = 80.0
+text = "вернуться"
 
 [connection signal="pressed" from="UI/OpenClose" to="." method="_on_open_close_pressed"]
+[connection signal="pressed" from="UI/SaveLoadContainer/SaveButton" to="." method="show_save_menu"]
+[connection signal="pressed" from="UI/SaveLoadContainer/LoadButton" to="." method="show_load_menu"]
+[connection signal="pressed" from="UI/SaveLoadContainer/ExportButton" to="." method="export_drone_scene"]
+[connection signal="item_clicked" from="UI/Hierarchy/Complist" to="." method="_on_component_list_item_clicked"]

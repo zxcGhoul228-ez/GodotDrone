@@ -1,48 +1,45 @@
 extends Node3D
 
 # ==================== КОНСТАНТЫ И ПЕРЕМЕННЫЕ ====================
-const ROTATION_SPEED = 0.01
-const ZOOM_SPEED = 0.1
-const MIN_DISTANCE = 3.0
-const MAX_DISTANCE = 20.0
-const FRICTION = 0.92
-const MIN_VERTICAL_ANGLE = 0.0
-const MAX_VERTICAL_ANGLE = PI/2 - 0.2
+const ROTATION_SPEED: float = 0.01
+const ZOOM_SPEED: float = 0.1
+const MIN_DISTANCE: float = 3.0
+const MAX_DISTANCE: float = 20.0
+const FRICTION: float = 0.92
+const MIN_VERTICAL_ANGLE: float = 0.0
+const MAX_VERTICAL_ANGLE: float = PI / 2.0 - 0.2
 
-# Переменные для управления камерой
-var camera_rotation = Vector2(0, 0)
-var camera_distance = 8.0
-var is_rotating = false
-var last_mouse_pos = Vector2(0, 0)
-var rotation_velocity = Vector2(0, 0)
-var is_dragging_camera = false
+const BOUNDS_MIN: Vector3 = Vector3(-5, 0, -5)
+const BOUNDS_MAX: Vector3 = Vector3(5, 3, 5)
 
-@onready var camera_pivot = $CameraPivot
-@onready var camera = $CameraPivot/Camera3D
+# Камера
+var camera_rotation: Vector2 = Vector2.ZERO
+var camera_distance: float = 8.0
+var is_rotating: bool = false
+var last_mouse_pos: Vector2 = Vector2.ZERO
+var rotation_velocity: Vector2 = Vector2.ZERO
+var is_dragging_camera: bool = false
+
+@onready var camera_pivot: Node3D = $CameraPivot
+@onready var camera: Camera3D = $CameraPivot/Camera3D
+
+# UI (узлы берём из сцены, НЕ создаём дубликаты)
+var open_close_button: Button = null
+var list_panel: Panel = null
+var component_list: ItemList = null
 
 # Система сохранения
-var save_slots = [null, null, null]
-var current_save_ui = null
-
-# Ссылки на узлы UI
-var components_container
-var list_panel
-var component_list
-
-# Массивы для кнопок компонентов
-var frame_buttons = []
-var board_buttons = []
-var motor_buttons = []
-var propeller_buttons = []
+var save_slots: Array = [null, null, null]
+var current_save_ui: Control = null
 
 # Хранение компонентов
-var drone_frame = null
-var drone_board = null
-var motors = []
-var propellers = []
+var drone_frame: Node3D = null
+var drone_board: Node3D = null
+var motors: Array[Node3D] = []
+var propellers: Array[Node3D] = []
 
 # Характеристики дрона
-var drone_stats = {
+var drone_stats: Dictionary = {
 	"total_mass": 0.0,
 	"total_thrust": 0.0,
 	"is_balanced": true,
@@ -50,7 +47,7 @@ var drone_stats = {
 }
 
 # Параметры компонентов
-var component_stats = {
+var component_stats: Dictionary = {
 	"frame": {
 		"Рама1": {"mass": 1.0, "durability": 100},
 		"Рама2": {"mass": 1.5, "durability": 150},
@@ -74,137 +71,137 @@ var component_stats = {
 }
 
 # Префабы компонентов
-var frame_prefabs = {
+var frame_prefabs: Dictionary = {
 	"Рама1": preload("res://create_drone/components/frame1.tscn"),
 	"Рама2": preload("res://create_drone/components/frame2.tscn"),
 	"Рама3": preload("res://create_drone/components/frame3.tscn")
 }
-
-var board_prefabs = {
+var board_prefabs: Dictionary = {
 	"Плата1": preload("res://create_drone/components/board1.tscn"),
 	"Плата2": preload("res://create_drone/components/board2.tscn"),
 	"Плата3": preload("res://create_drone/components/board3.tscn")
 }
-
-var motor_prefabs = {
+var motor_prefabs: Dictionary = {
 	"Мотор1": preload("res://create_drone/components/motor1.tscn"),
 	"Мотор2": preload("res://create_drone/components/motor2.tscn"),
 	"Мотор3": preload("res://create_drone/components/motor3.tscn")
 }
-
-var propeller_prefabs = {
+var propeller_prefabs: Dictionary = {
 	"Пропеллер1": preload("res://create_drone/components/propeller1.tscn"),
 	"Пропеллер2": preload("res://create_drone/components/propeller2.tscn"),
 	"Пропеллер3": preload("res://create_drone/components/propeller3.tscn")
 }
 
 # Текущие выбранные типы компонентов
-var current_frame_type = "Рама1"
-var current_board_type = "Плата1"
-var current_motor_type = "Мотор1"
-var current_propeller_type = "Пропеллер1"
+var current_frame_type: String = "Рама1"
+var current_board_type: String = "Плата1"
+var current_motor_type: String = "Мотор1"
+var current_propeller_type: String = "Пропеллер1"
 
-# Система перетаскивания компонентов
-var dragged_component = null
-var is_dragging_component = false
-var drag_offset = Vector3.ZERO
-var original_component_position = Vector3.ZERO
-var child_relative_positions = {}
-var attachment_points = []
-var motor_propeller_map = {}
-var green_material = StandardMaterial3D.new()
-var red_material = StandardMaterial3D.new()
+# Перетаскивание
+var dragged_component: Node3D = null
+var is_dragging_component: bool = false
+var drag_offset: Vector3 = Vector3.ZERO
+var original_component_position: Vector3 = Vector3.ZERO
+var child_relative_positions: Dictionary = {}
+var attachment_points: Array[Node3D] = []
+var motor_propeller_map: Dictionary = {} # motor(Node3D) -> propeller(Node3D)
 
-# Меню настроек
-var settings_menu: CanvasLayer = null
+var green_material: StandardMaterial3D = StandardMaterial3D.new()
+var red_material: StandardMaterial3D = StandardMaterial3D.new()
 
-# Границы перемещения
-const BOUNDS_MIN = Vector3(-5, 0, -5)
-const BOUNDS_MAX = Vector3(5, 3, 5)
+# Меню настроек (оставляем Variant, чтобы не было ошибок стат.типизации по методам open/is_open)
+var settings_menu = null
+
+# Кнопки выбора (создаются кодом, но строго 1 раз)
+var frame_buttons: Array[Button] = []
+var board_buttons: Array[Button] = []
+var motor_buttons: Array[Button] = []
+var propeller_buttons: Array[Button] = []
 
 # ==================== ОСНОВНЫЕ ФУНКЦИИ ====================
-func _ready():
-	# Инициализация всех систем
+func _ready() -> void:
+	# Системы окружения
 	load_settings_menu()
 	add_room()
 	setup_lighting()
 	add_reflection_probe()
-	
-	# Инициализация UI
+
+	# UI / ссылки из сцены (без дубликатов)
 	init_ui_components()
+	setup_hierarchy_panel()
+
+	# UI, который делается кодом (но с защитой от дублей)
 	create_component_selectors_ui()
+	add_save_load_buttons()
+
+	# Мир
 	create_grid()
 	create_floor_line()
-	add_save_load_buttons()
-	setup_hierarchy_panel()
-	
-	# Инициализация камеры и настроек
+
+	# Камера / материалы / настройки
 	update_camera_position()
 	add_to_group("drone_creator")
 	create_attachment_materials()
 	apply_global_settings()
-	print("🔍 Проверка UI после инициализации:")
-	print("   - Всего детей в UI:", $UI.get_child_count())
-	for i in range($UI.get_child_count()):
-		var child = $UI.get_child(i)
-		print("     ", i, ". ", child.name, " (", child.get_class(), ")")
-	
-	set_process_input(true)
-	print("✅ Сцена готова!")
 
-func _process(delta):
-	# Обновление инерции камеры
-	if not is_dragging_camera and (rotation_velocity.x != 0 or rotation_velocity.y != 0):
+	set_process_input(true)
+	print("✅ create_dron.gd готов.")
+
+func _process(delta: float) -> void:
+	# Инерция камеры
+	if (not is_dragging_camera) and (rotation_velocity.x != 0.0 or rotation_velocity.y != 0.0):
 		camera_rotation.x += rotation_velocity.x
 		camera_rotation.y += rotation_velocity.y
 		camera_rotation.x = clamp(camera_rotation.x, MIN_VERTICAL_ANGLE, MAX_VERTICAL_ANGLE)
 		rotation_velocity *= FRICTION
-		
+
 		if abs(rotation_velocity.x) < 0.0001 and abs(rotation_velocity.y) < 0.0001:
-			rotation_velocity = Vector2(0, 0)
-		
+			rotation_velocity = Vector2.ZERO
+
 		update_camera_position()
 
 # ==================== УПРАВЛЕНИЕ КАМЕРОЙ ====================
-func update_camera_position():
-	var target_position = Vector3.ZERO
-	var camera_position = Vector3(
+func update_camera_position() -> void:
+	var target_position: Vector3 = Vector3.ZERO
+	var camera_position: Vector3 = Vector3(
 		sin(camera_rotation.y) * cos(camera_rotation.x),
 		sin(camera_rotation.x),
 		cos(camera_rotation.y) * cos(camera_rotation.x)
 	) * camera_distance
-	
+
 	camera.position = camera_position
 	camera.look_at(target_position, Vector3.UP)
 
 # ==================== ОБРАБОТКА ВВОДА ====================
-func _input(event):
-	# Обработка ESC для меню настроек
+func _input(event: InputEvent) -> void:
+	# ESC -> меню настроек
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		if settings_menu and settings_menu.is_open():
-			return
-		else:
-			settings_menu.open()
-			get_viewport().set_input_as_handled()
-			return
-	
-	if settings_menu and settings_menu.is_open():
+		if settings_menu != null:
+			if settings_menu.has_method("is_open") and bool(settings_menu.call("is_open")):
+				return
+			if settings_menu.has_method("open"):
+				settings_menu.call("open")
+				get_viewport().set_input_as_handled()
+				return
+
+	if settings_menu != null and settings_menu.has_method("is_open") and bool(settings_menu.call("is_open")):
 		return
-	
-	# Вращение камеры правой кнопкой мыши
+
+	# Вращение камеры ПКМ
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_RIGHT:
 		if event.pressed:
 			is_rotating = true
 			is_dragging_camera = true
 			last_mouse_pos = event.position
-			rotation_velocity = Vector2(0, 0)
+			rotation_velocity = Vector2.ZERO
 		else:
 			is_rotating = false
 			is_dragging_camera = false
-	
-	# Вращение камеры при движении мыши
+
+	# Вращение камеры мышью
 	if event is InputEventMouseMotion and is_rotating:
-		var mouse_delta = event.position - last_mouse_pos
+		var mouse_delta: Vector2 = event.position - last_mouse_pos
 		rotation_velocity = Vector2(
 			-mouse_delta.y * ROTATION_SPEED * 0.5,
 			-mouse_delta.x * ROTATION_SPEED * 0.5
@@ -214,206 +211,223 @@ func _input(event):
 		camera_rotation.x = clamp(camera_rotation.x, MIN_VERTICAL_ANGLE, MAX_VERTICAL_ANGLE)
 		last_mouse_pos = event.position
 		update_camera_position()
-	
-	# Зум колесиком
+
+	# Зум колесом
 	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
 			camera_distance = clamp(camera_distance - ZOOM_SPEED, MIN_DISTANCE, MAX_DISTANCE)
 			update_camera_position()
-		if event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+		if event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
 			camera_distance = clamp(camera_distance + ZOOM_SPEED, MIN_DISTANCE, MAX_DISTANCE)
 			update_camera_position()
-	
-	# Перетаскивание компонентов левой кнопкой мыши
+
+	# Перетаскивание ЛКМ
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
-			var component = get_component_under_mouse(event.position)
-			if component and is_component_draggable(component):
-				start_component_dragging(component, event.position)
+			var comp: Node3D = get_component_under_mouse(event.position)
+			if comp != null and is_component_draggable(comp):
+				start_component_dragging(comp, event.position)
 		else:
 			if is_dragging_component:
 				stop_component_dragging()
-	
+
 	# Движение при перетаскивании
-	if event is InputEventMouseMotion and is_dragging_component and dragged_component:
+	if event is InputEventMouseMotion and is_dragging_component and dragged_component != null:
 		update_component_dragging(event.position)
 
-# ==================== СИСТЕМА ПЕРЕТАСКИВАНИЯ КОМПОНЕНТОВ ====================
+# ==================== ПОИСК КОМПОНЕНТА ПОД МЫШЬЮ ====================
 func get_component_under_mouse(mouse_position: Vector2) -> Node3D:
-	var from = camera.project_ray_origin(mouse_position)
-	var ray_dir = camera.project_ray_normal(mouse_position)
-	
-	var all_components = get_all_drone_components()
-	var closest_component = null
-	var closest_distance = INF
-	
-	for component in all_components:
-		if not is_instance_valid(component):
+	var from: Vector3 = camera.project_ray_origin(mouse_position)
+	var ray_dir: Vector3 = camera.project_ray_normal(mouse_position)
+
+	var all_components: Array = get_all_drone_components()
+	var closest_component: Node3D = null
+	var closest_distance: float = INF
+
+	for c in all_components:
+		var component: Node3D = c as Node3D
+		if component == null or not is_instance_valid(component):
 			continue
-		
-		var component_pos = component.global_position
-		var to_comp = component_pos - from
-		var projection = to_comp.dot(ray_dir)
-		
-		if projection > 0:
-			var closest_point = from + ray_dir * projection
-			var distance = closest_point.distance_to(component_pos)
-			
-			var component_radius = get_component_radius(component)
-			
-			if distance < component_radius and distance < closest_distance:
-				closest_distance = distance
+
+		var component_pos: Vector3 = component.global_position
+		var to_comp: Vector3 = component_pos - from
+		var projection: float = to_comp.dot(ray_dir)
+
+		if projection > 0.0:
+			var closest_point: Vector3 = from + ray_dir * projection
+			var dist: float = closest_point.distance_to(component_pos)
+			var component_radius: float = get_component_radius(component)
+
+			if dist < component_radius and dist < closest_distance:
+				closest_distance = dist
 				closest_component = component
-	
+
 	return closest_component
 
-func get_component_radius(component) -> float:
-	var component_type = get_component_type(component)
+func get_component_radius(component: Node3D) -> float:
+	var component_type: String = get_component_type(component)
 	match component_type:
-		"frame": return 2.0
-		"board": return 0.5
-		"motor": return 0.3
-		"propeller": return 0.4
-		_: return 0.5
+		"frame":
+			return 2.0
+		"board":
+			return 0.5
+		"motor":
+			return 0.3
+		"propeller":
+			return 0.4
+		_:
+			return 0.5
 
 func get_all_drone_components() -> Array:
-	var components = []
-	
-	if drone_frame and is_instance_valid(drone_frame):
+	var components: Array = []
+	if drone_frame != null and is_instance_valid(drone_frame):
 		components.append(drone_frame)
-	if drone_board and is_instance_valid(drone_board):
+	if drone_board != null and is_instance_valid(drone_board):
 		components.append(drone_board)
-	
-	for motor in motors:
-		if is_instance_valid(motor):
+
+	for m in motors:
+		var motor: Node3D = m as Node3D
+		if motor != null and is_instance_valid(motor):
 			components.append(motor)
-	
-	for propeller in propellers:
-		if is_instance_valid(propeller):
-			components.append(propeller)
-	
+
+	for p in propellers:
+		var prop: Node3D = p as Node3D
+		if prop != null and is_instance_valid(prop):
+			components.append(prop)
+
 	return components
 
-func is_component_draggable(component):
+func is_component_draggable(component: Node3D) -> bool:
 	if component == null or not is_instance_valid(component):
 		return false
-	return (component == drone_frame or 
-			component == drone_board or 
-			motors.has(component) or 
-			propellers.has(component))
+	return (component == drone_frame
+		or component == drone_board
+		or motors.has(component)
+		or propellers.has(component))
 
-func start_component_dragging(component, mouse_position):
-	if not is_instance_valid(component):
+# ==================== ПЕРЕТАСКИВАНИЕ ====================
+func start_component_dragging(component: Node3D, mouse_position: Vector2) -> void:
+	if component == null or not is_instance_valid(component):
 		return
-		
+
 	dragged_component = component
 	original_component_position = component.global_position
 	is_dragging_component = true
-	
+
 	save_child_relative_positions(component)
-	
-	var component_type = get_component_type(component)
+
+	var component_type: String = get_component_type(component)
 	show_attachment_points(component_type)
-	
-	var from = camera.project_ray_origin(mouse_position)
-	var ray_dir = camera.project_ray_normal(mouse_position)
-	
-	var drag_plane = Plane(Vector3.UP, component.global_position.y)
-	var intersection = drag_plane.intersects_ray(from, from + ray_dir * 1000)
-	
-	if intersection:
+
+	var from: Vector3 = camera.project_ray_origin(mouse_position)
+	var ray_dir: Vector3 = camera.project_ray_normal(mouse_position)
+
+	var drag_plane: Plane = Plane(Vector3.UP, component.global_position.y)
+	var hit = drag_plane.intersects_ray(from, ray_dir)
+
+	if hit is Vector3:
+		var intersection: Vector3 = hit
 		drag_offset = component.global_position - intersection
 	else:
 		drag_offset = Vector3.ZERO
 
-func save_child_relative_positions(parent):
+func save_child_relative_positions(parent: Node3D) -> void:
 	child_relative_positions.clear()
-	
-	var children = get_direct_children(parent)
-	for child in children:
-		if is_instance_valid(child):
-			var relative_pos = child.global_position - parent.global_position
+
+	var children: Array = get_direct_children(parent)
+	for c in children:
+		var child: Node3D = c as Node3D
+		if child != null and is_instance_valid(child):
+			var relative_pos: Vector3 = child.global_position - parent.global_position
 			child_relative_positions[child] = relative_pos
 			save_grandchildren_relative_positions(child, parent)
 
-func save_grandchildren_relative_positions(child, original_parent):
-	var grandchildren = get_direct_children(child)
-	for grandchild in grandchildren:
-		if is_instance_valid(grandchild):
-			var relative_pos = grandchild.global_position - original_parent.global_position
+func save_grandchildren_relative_positions(child: Node3D, original_parent: Node3D) -> void:
+	var grandchildren: Array = get_direct_children(child)
+	for g in grandchildren:
+		var grandchild: Node3D = g as Node3D
+		if grandchild != null and is_instance_valid(grandchild):
+			var relative_pos: Vector3 = grandchild.global_position - original_parent.global_position
 			child_relative_positions[grandchild] = relative_pos
 
-func get_direct_children(parent):
-	var children = []
-	
+func get_direct_children(parent: Node3D) -> Array:
+	var children: Array = []
+
 	if parent == drone_frame:
-		if drone_board and is_instance_valid(drone_board):
+		if drone_board != null and is_instance_valid(drone_board):
 			children.append(drone_board)
-		for motor in motors:
-			if is_instance_valid(motor):
+		for m in motors:
+			var motor: Node3D = m as Node3D
+			if motor != null and is_instance_valid(motor):
 				children.append(motor)
-	elif parent in motors:
-		for propeller in propellers:
-			if is_instance_valid(propeller) and is_propeller_attached_to_motor(propeller, parent):
-				children.append(propeller)
-	
+
+	elif motors.has(parent):
+		for p in propellers:
+			var prop: Node3D = p as Node3D
+			if prop != null and is_instance_valid(prop) and is_propeller_attached_to_motor(prop, parent):
+				children.append(prop)
+
 	return children
 
-func is_propeller_attached_to_motor(propeller, motor) -> bool:
+func is_propeller_attached_to_motor(propeller: Node3D, motor: Node3D) -> bool:
+	if propeller == null or motor == null:
+		return false
 	if not is_instance_valid(propeller) or not is_instance_valid(motor):
 		return false
-	
-	var distance = propeller.global_position.distance_to(motor.global_position)
-	return distance < 1.0
+	var d: float = propeller.global_position.distance_to(motor.global_position)
+	return d < 1.0
 
-func update_component_dragging(mouse_position):
-	if not dragged_component or not is_instance_valid(dragged_component):
+func update_component_dragging(mouse_position: Vector2) -> void:
+	if dragged_component == null or not is_instance_valid(dragged_component):
 		stop_component_dragging()
 		return
-	
-	var from = camera.project_ray_origin(mouse_position)
-	var ray_dir = camera.project_ray_normal(mouse_position)
-	
-	var drag_plane = Plane(Vector3.UP, original_component_position.y)
-	var intersection = drag_plane.intersects_ray(from, from + ray_dir * 1000)
-	
-	if intersection:
-		var new_position = intersection + drag_offset
+
+	var from: Vector3 = camera.project_ray_origin(mouse_position)
+	var ray_dir: Vector3 = camera.project_ray_normal(mouse_position)
+
+	var drag_plane: Plane = Plane(Vector3.UP, original_component_position.y)
+	var hit = drag_plane.intersects_ray(from, ray_dir)
+
+	if hit is Vector3:
+		var intersection: Vector3 = hit
+		var new_position: Vector3 = intersection + drag_offset
 		new_position.y = original_component_position.y
-		
+
 		new_position = clamp_position(new_position)
-		
-		var component_type = get_component_type(dragged_component)
+
+		var component_type: String = get_component_type(dragged_component)
+
 		match component_type:
 			"board":
-				var snapped_position = find_closest_board_attachment_point(new_position)
-				dragged_component.global_position = snapped_position
+				var snapped_board: Vector3 = find_closest_board_attachment_point(new_position)
+				dragged_component.global_position = snapped_board
 			"motor":
-				var snapped_position = find_closest_motor_attachment_point(new_position)
-				dragged_component.global_position = snapped_position
+				var snapped_motor: Vector3 = find_closest_motor_attachment_point(new_position)
+				dragged_component.global_position = snapped_motor
 			"propeller":
-				var closest_motor = find_closest_motor_for_propeller(new_position)
-				if closest_motor:
-					var target_pos = closest_motor.global_position + Vector3(0, 0.3, 0)
+				var closest_motor: Node3D = find_closest_motor_for_propeller(new_position)
+				if closest_motor != null:
+					var target_pos: Vector3 = closest_motor.global_position + Vector3(0, 0.3, 0)
 					dragged_component.global_position = target_pos
 				else:
 					dragged_component.global_position = new_position
 			_:
 				dragged_component.global_position = new_position
-		
+
 		move_children_with_parent()
 
-func move_children_with_parent():
-	for child in child_relative_positions:
-		if is_instance_valid(child) and child != dragged_component:
-			var relative_pos = child_relative_positions[child]
-			var new_child_position = dragged_component.global_position + relative_pos
+func move_children_with_parent() -> void:
+	for k in child_relative_positions.keys():
+		var child: Node3D = k as Node3D
+		if child != null and is_instance_valid(child) and child != dragged_component:
+			var relative_pos: Vector3 = child_relative_positions[child]
+			var new_child_position: Vector3 = dragged_component.global_position + relative_pos
 			new_child_position = clamp_position(new_child_position)
 			child.global_position = new_child_position
 
-func stop_component_dragging():
-	if dragged_component and is_instance_valid(dragged_component):
-		var component_type = get_component_type(dragged_component)
+func stop_component_dragging() -> void:
+	if dragged_component != null and is_instance_valid(dragged_component):
+		var component_type: String = get_component_type(dragged_component)
 		match component_type:
 			"board":
 				snap_board_to_frame(dragged_component)
@@ -421,430 +435,487 @@ func stop_component_dragging():
 				update_motor_propeller_connection(dragged_component)
 			"propeller":
 				snap_propeller_to_motor(dragged_component)
-		
+
 		hide_attachment_points()
 		update_component_list()
-	
+		calculate_drone_stats()
+
 	is_dragging_component = false
 	dragged_component = null
 	child_relative_positions.clear()
 
-func update_motor_propeller_connection(motor):
-	var old_propeller = motor_propeller_map.get(motor)
-	
-	var closest_propeller = null
-	var closest_distance = INF
-	
-	for propeller in propellers:
-		if is_instance_valid(propeller) and propeller != dragged_component and propeller.global_position.distance_to(motor.global_position) < 1.0:
-			var distance = propeller.global_position.distance_to(motor.global_position)
-			if distance < closest_distance:
-				closest_distance = distance
-				closest_propeller = propeller
-	
-	if closest_propeller and closest_propeller != old_propeller:
-		if old_propeller and is_instance_valid(old_propeller):
+func update_motor_propeller_connection(motor: Node3D) -> void:
+	var old_propeller: Node3D = null
+	if motor_propeller_map.has(motor):
+		old_propeller = motor_propeller_map[motor] as Node3D
+
+	var closest_propeller: Node3D = null
+	var closest_distance: float = INF
+
+	for p in propellers:
+		var prop: Node3D = p as Node3D
+		if prop == null or not is_instance_valid(prop):
+			continue
+		if prop == dragged_component:
+			continue
+
+		var d: float = prop.global_position.distance_to(motor.global_position)
+		if d < 1.0 and d < closest_distance:
+			closest_distance = d
+			closest_propeller = prop
+
+	if closest_propeller != null and closest_propeller != old_propeller:
+		if old_propeller != null and is_instance_valid(old_propeller):
 			motor_propeller_map.erase(motor)
-		
 		motor_propeller_map[motor] = closest_propeller
 
-func snap_board_to_frame(board):
-	if not drone_frame or not is_instance_valid(drone_frame):
+func snap_board_to_frame(board: Node3D) -> void:
+	if drone_frame == null or not is_instance_valid(drone_frame):
 		return
-	
-	var target_pos = drone_frame.global_position + Vector3(0, 0.3, 0.1)
-	var current_pos = board.global_position
-	
+
+	var target_pos: Vector3 = drone_frame.global_position + Vector3(0, 0.3, 0.1)
+	var current_pos: Vector3 = board.global_position
+
 	if current_pos.distance_to(target_pos) < 1.0:
 		board.global_position = target_pos
 		board.rotation = drone_frame.rotation
 		drone_board = board
 
-func snap_propeller_to_motor(propeller):
-	var closest_motor = null
-	var closest_distance = INF
-	
-	for motor in motors:
-		if is_instance_valid(motor):
-			var distance = propeller.global_position.distance_to(motor.global_position)
-			if distance < closest_distance:
-				closest_distance = distance
-				closest_motor = motor
-	
-	if closest_motor and closest_distance < 1.0:
-		for motor in motor_propeller_map:
-			if motor_propeller_map[motor] == propeller:
-				motor_propeller_map.erase(motor)
+func snap_propeller_to_motor(propeller: Node3D) -> void:
+	var closest_motor: Node3D = null
+	var closest_distance: float = INF
+
+	for m in motors:
+		var motor: Node3D = m as Node3D
+		if motor == null or not is_instance_valid(motor):
+			continue
+		var d: float = propeller.global_position.distance_to(motor.global_position)
+		if d < closest_distance:
+			closest_distance = d
+			closest_motor = motor
+
+	if closest_motor != null and closest_distance < 1.0:
+		# убрать старую связь (без удаления во время итерации)
+		var key_to_erase: Node3D = null
+		for k in motor_propeller_map.keys():
+			var mot: Node3D = k as Node3D
+			if mot != null and motor_propeller_map[mot] == propeller:
+				key_to_erase = mot
 				break
-		
+		if key_to_erase != null:
+			motor_propeller_map.erase(key_to_erase)
+
 		motor_propeller_map[closest_motor] = propeller
 		propeller.global_position = closest_motor.global_position + Vector3(0, 0.3, 0)
 		propeller.rotation = closest_motor.rotation
 
-func get_component_type(component):
+func get_component_type(component: Node3D) -> String:
 	if component == drone_frame:
 		return "frame"
-	elif component == drone_board:
+	if component == drone_board:
 		return "board"
-	elif motors.has(component):
+	if motors.has(component):
 		return "motor"
-	elif propellers.has(component):
+	if propellers.has(component):
 		return "propeller"
-	else:
-		return "unknown"
+	return "unknown"
 
-func get_component_name(component):
+func get_component_name(component: Node3D) -> String:
 	if component == drone_frame:
 		return "Рама"
-	elif component == drone_board:
+	if component == drone_board:
 		return "Плата"
-	elif motors.has(component):
-		var index = motors.find(component)
-		return "Двигатель " + str(index + 1)
-	elif propellers.has(component):
-		var index = propellers.find(component)
-		return "Пропеллер " + str(index + 1)
-	else:
-		return "Неизвестный компонент"
+	if motors.has(component):
+		var idx: int = motors.find(component)
+		return "Двигатель " + str(idx + 1)
+	if propellers.has(component):
+		var idx2: int = propellers.find(component)
+		return "Пропеллер " + str(idx2 + 1)
+	return "Неизвестный компонент"
 
-# ==================== СИСТЕМА ТОЧЕК КРЕПЛЕНИЯ ====================
-func create_attachment_materials():
+# ==================== ТОЧКИ КРЕПЛЕНИЯ ====================
+func create_attachment_materials() -> void:
 	green_material.albedo_color = Color(0, 1, 0, 0.7)
-	green_material.flags_unshaded = true
-	green_material.flags_transparent = true
-	
-	red_material.albedo_color = Color(1, 0, 0, 0.7)
-	red_material.flags_unshaded = true
-	red_material.flags_transparent = true
+	green_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	green_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 
-func show_attachment_points(component_type: String):
+	red_material.albedo_color = Color(1, 0, 0, 0.7)
+	red_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	red_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+
+func show_attachment_points(component_type: String) -> void:
 	hide_attachment_points()
-	
+
 	match component_type:
-		"frame":
-			pass
 		"board":
 			show_board_attachment_points()
 		"motor":
 			show_motor_attachment_points()
 		"propeller":
 			show_propeller_attachment_points()
+		_:
+			pass
 
-func show_board_attachment_points():
-	if not drone_frame or not is_instance_valid(drone_frame):
+func show_board_attachment_points() -> void:
+	if drone_frame == null or not is_instance_valid(drone_frame):
 		return
-	
-	var point = MeshInstance3D.new()
-	var sphere = SphereMesh.new()
+
+	var point: MeshInstance3D = MeshInstance3D.new()
+	var sphere: SphereMesh = SphereMesh.new()
 	sphere.radius = 0.08
 	sphere.height = 0.16
 	point.mesh = sphere
-	
+
 	add_child(point)
-	
-	var world_position = drone_frame.global_position + Vector3(0, 0.6, 0)
+
+	var world_position: Vector3 = drone_frame.global_position + Vector3(0, 0.6, 0)
 	point.global_position = world_position
-	
-	var point_free = (drone_board == null or not is_instance_valid(drone_board) or drone_board == dragged_component)
-	
+
+	var point_free: bool = (drone_board == null or not is_instance_valid(drone_board) or drone_board == dragged_component)
 	point.material_override = green_material if point_free else red_material
-	
+
 	attachment_points.append(point)
 
-func show_motor_attachment_points():
-	if not drone_frame or not is_instance_valid(drone_frame):
+func show_motor_attachment_points() -> void:
+	if drone_frame == null or not is_instance_valid(drone_frame):
 		return
-	
-	var motor_points = [
+
+	var motor_points: Array = [
 		Vector3(0, 0.2, 2.1),
 		Vector3(0, 0.2, -2.1),
 		Vector3(2.1, 0.2, 0),
 		Vector3(-2.1, 0.2, 0)
 	]
-	
+
 	for i in range(motor_points.size()):
-		var point = MeshInstance3D.new()
-		var sphere = SphereMesh.new()
+		var point: MeshInstance3D = MeshInstance3D.new()
+		var sphere: SphereMesh = SphereMesh.new()
 		sphere.radius = 0.1
 		sphere.height = 0.2
 		point.mesh = sphere
-		
 		add_child(point)
-		
-		var world_position = drone_frame.global_position + motor_points[i]
-		point.global_position = world_position
-		
-		var point_free = true
-		for motor in motors:
-			if is_instance_valid(motor) and motor != dragged_component and motor.global_position.distance_to(world_position) < 0.5:
-				point_free = false
-				break
-		
-		point.material_override = green_material if point_free else red_material
-		
+
+		var wp: Vector3 = drone_frame.global_position + motor_points[i]
+		point.global_position = wp
+
+		var is_free: bool = true
+		for m in motors:
+			var motor: Node3D = m as Node3D
+			if motor != null and is_instance_valid(motor) and motor != dragged_component:
+				if motor.global_position.distance_to(wp) < 0.5:
+					is_free = false
+					break
+
+		point.material_override = green_material if is_free else red_material
 		attachment_points.append(point)
 
-func show_propeller_attachment_points():
-	for motor in motors:
-		if is_instance_valid(motor):
-			var point = MeshInstance3D.new()
-			var sphere = SphereMesh.new()
-			sphere.radius = 0.08
-			sphere.height = 0.16
-			point.mesh = sphere
-			
-			add_child(point)
-			
-			var world_position = motor.global_position + Vector3(0, 0.3, 0)
-			point.global_position = world_position
-			
-			var motor_free = true
-			for propeller in propellers:
-				if is_instance_valid(propeller) and propeller != dragged_component and motor_propeller_map.get(motor) == propeller:
-					motor_free = false
-					break
-			
-			point.material_override = green_material if motor_free else red_material
-			
-			attachment_points.append(point)
+func show_propeller_attachment_points() -> void:
+	for m in motors:
+		var motor: Node3D = m as Node3D
+		if motor == null or not is_instance_valid(motor):
+			continue
 
-func hide_attachment_points():
-	for point in attachment_points:
-		if is_instance_valid(point):
+		var point: MeshInstance3D = MeshInstance3D.new()
+		var sphere: SphereMesh = SphereMesh.new()
+		sphere.radius = 0.08
+		sphere.height = 0.16
+		point.mesh = sphere
+		add_child(point)
+
+		var wp: Vector3 = motor.global_position + Vector3(0, 0.3, 0)
+		point.global_position = wp
+
+		var motor_free: bool = true
+		if motor_propeller_map.has(motor):
+			var already: Node3D = motor_propeller_map[motor] as Node3D
+			if already != null and is_instance_valid(already) and already != dragged_component:
+				motor_free = false
+
+		point.material_override = green_material if motor_free else red_material
+		attachment_points.append(point)
+
+func hide_attachment_points() -> void:
+	for p in attachment_points:
+		var point: Node3D = p as Node3D
+		if point != null and is_instance_valid(point):
 			point.queue_free()
 	attachment_points.clear()
 
 func find_closest_motor_attachment_point(position: Vector3) -> Vector3:
-	if not drone_frame or not is_instance_valid(drone_frame):
+	if drone_frame == null or not is_instance_valid(drone_frame):
 		return position
-	
-	var closest_point = null
-	var closest_distance = INF
-	
-	var motor_points = [
+
+	var candidates: Array = [
 		drone_frame.global_position + Vector3(0, 0.4, 2.1),
 		drone_frame.global_position + Vector3(0, 0.4, -2.1),
 		drone_frame.global_position + Vector3(2.1, 0.4, 0),
 		drone_frame.global_position + Vector3(-2.1, 0.4, 0)
 	]
-	
-	for point in motor_points:
-		var point_free = true
-		for motor in motors:
-			if is_instance_valid(motor) and motor != dragged_component and motor.global_position.distance_to(point) < 0.5:
-				point_free = false
-				break
-		
-		if point_free:
-			var distance = position.distance_to(point)
-			if distance < closest_distance:
-				closest_distance = distance
-				closest_point = point
-	
-	return closest_point if closest_point and closest_distance < 2.0 else position
+
+	var best: Vector3 = position
+	var best_dist: float = INF
+	var found: bool = false
+
+	for c in candidates:
+		var pt: Vector3 = c
+		var free_point: bool = true
+
+		for m in motors:
+			var motor: Node3D = m as Node3D
+			if motor != null and is_instance_valid(motor) and motor != dragged_component:
+				if motor.global_position.distance_to(pt) < 0.5:
+					free_point = false
+					break
+
+		if free_point:
+			var d: float = position.distance_to(pt)
+			if d < best_dist:
+				best_dist = d
+				best = pt
+				found = true
+
+	if found and best_dist < 2.0:
+		return best
+	return position
 
 func find_closest_board_attachment_point(position: Vector3) -> Vector3:
-	if not drone_frame or not is_instance_valid(drone_frame):
+	if drone_frame == null or not is_instance_valid(drone_frame):
 		return position
-	
-	var board_point = drone_frame.global_position + Vector3(0, 0.3, 0.1)
-	
-	var point_free = (drone_board == null or not is_instance_valid(drone_board) or drone_board == dragged_component)
-	
-	if point_free:
-		var distance = position.distance_to(board_point)
-		if distance < 1.5:
+
+	var board_point: Vector3 = drone_frame.global_position + Vector3(0, 0.3, 0.1)
+	var free_point: bool = (drone_board == null or not is_instance_valid(drone_board) or drone_board == dragged_component)
+
+	if free_point:
+		var d: float = position.distance_to(board_point)
+		if d < 1.5:
 			return board_point
-	
+
 	return position
 
 func find_closest_motor_for_propeller(position: Vector3) -> Node3D:
-	var closest_motor = null
-	var closest_distance = INF
-	
-	for motor in motors:
-		if is_instance_valid(motor):
-			var motor_free = true
-			for propeller in propellers:
-				if is_instance_valid(propeller) and propeller != dragged_component and motor_propeller_map.get(motor) == propeller:
-					motor_free = false
-					break
-			
-			if motor_free:
-				var distance = position.distance_to(motor.global_position)
-				if distance < closest_distance:
-					closest_distance = distance
-					closest_motor = motor
-	
-	return closest_motor if closest_motor and closest_distance < 2.0 else null
+	var best_motor: Node3D = null
+	var best_dist: float = INF
+
+	for m in motors:
+		var motor: Node3D = m as Node3D
+		if motor == null or not is_instance_valid(motor):
+			continue
+
+		var motor_free: bool = true
+		if motor_propeller_map.has(motor):
+			var already: Node3D = motor_propeller_map[motor] as Node3D
+			if already != null and is_instance_valid(already) and already != dragged_component:
+				motor_free = false
+
+		if motor_free:
+			var d: float = position.distance_to(motor.global_position)
+			if d < best_dist:
+				best_dist = d
+				best_motor = motor
+
+	if best_motor != null and best_dist < 2.0:
+		return best_motor
+	return null
 
 # ==================== СИСТЕМА КОМПОНЕНТОВ ====================
-func add_frame():
+func add_frame() -> void:
 	if not Global.is_component_available("frame", current_frame_type):
 		return
-		
-	if drone_frame == null:
-		var frame_prefab = frame_prefabs.get(current_frame_type)
-		if frame_prefab:
-			var new_frame = frame_prefab.instantiate()
-			$Components.add_child(new_frame)
-			calculate_drone_stats()
-			
-			var mouse_pos = get_viewport().get_mouse_position()
-			var world_pos = screen_to_world_position(mouse_pos)
-			new_frame.position = world_pos
-			
-			drone_frame = new_frame
-			update_component_list()
-			start_component_dragging(drone_frame, mouse_pos)
+	if drone_frame != null and is_instance_valid(drone_frame):
+		return
 
-func add_board():
+	var frame_prefab: PackedScene = frame_prefabs.get(current_frame_type, null)
+	if frame_prefab == null:
+		return
+
+	var new_frame: Node3D = frame_prefab.instantiate() as Node3D
+	$Components.add_child(new_frame)
+	drone_frame = new_frame
+
+	var mouse_pos: Vector2 = get_viewport().get_mouse_position()
+	var world_pos: Vector3 = screen_to_world_position(mouse_pos)
+	new_frame.position = world_pos
+
+	calculate_drone_stats()
+	update_component_list()
+	start_component_dragging(drone_frame, mouse_pos)
+
+func add_board() -> void:
 	if not Global.is_component_available("board", current_board_type):
 		return
-		
-	if drone_frame != null and drone_board == null:
-		var board_prefab = board_prefabs.get(current_board_type)
-		if board_prefab:
-			var new_board = board_prefab.instantiate()
-			$Components.add_child(new_board)
-			calculate_drone_stats()
-			
-			var mouse_pos = get_viewport().get_mouse_position()
-			var world_pos = screen_to_world_position(mouse_pos)
-			new_board.position = world_pos
-			
-			drone_board = new_board
-			update_component_list()
-			start_component_dragging(drone_board, mouse_pos)
+	if drone_frame == null or not is_instance_valid(drone_frame):
+		return
+	if drone_board != null and is_instance_valid(drone_board):
+		return
 
-func add_motor():
+	var board_prefab: PackedScene = board_prefabs.get(current_board_type, null)
+	if board_prefab == null:
+		return
+
+	var new_board: Node3D = board_prefab.instantiate() as Node3D
+	$Components.add_child(new_board)
+	drone_board = new_board
+
+	var mouse_pos: Vector2 = get_viewport().get_mouse_position()
+	var world_pos: Vector3 = screen_to_world_position(mouse_pos)
+	new_board.position = world_pos
+
+	calculate_drone_stats()
+	update_component_list()
+	start_component_dragging(drone_board, mouse_pos)
+
+func add_motor() -> void:
 	if not Global.is_component_available("motor", current_motor_type):
 		return
-		
-	if drone_frame != null and motors.size() < 4:
-		var motor_prefab = motor_prefabs.get(current_motor_type)
-		if motor_prefab:
-			var new_motor = motor_prefab.instantiate()
-			$Components.add_child(new_motor)
-			calculate_drone_stats()
-			
-			var mouse_pos = get_viewport().get_mouse_position()
-			var world_pos = screen_to_world_position(mouse_pos)
-			new_motor.position = world_pos
-			
-			motors.append(new_motor)
-			update_component_list()
-			start_component_dragging(new_motor, mouse_pos)
+	if drone_frame == null or not is_instance_valid(drone_frame):
+		return
+	if motors.size() >= 4:
+		return
 
-func add_propeller():
+	var motor_prefab: PackedScene = motor_prefabs.get(current_motor_type, null)
+	if motor_prefab == null:
+		return
+
+	var new_motor: Node3D = motor_prefab.instantiate() as Node3D
+	$Components.add_child(new_motor)
+
+	# Запоминаем тип именно этого мотора (чтобы не ломать будущие расширения)
+	new_motor.set_meta("component_type", current_motor_type)
+
+	var mouse_pos: Vector2 = get_viewport().get_mouse_position()
+	var world_pos: Vector3 = screen_to_world_position(mouse_pos)
+	new_motor.position = world_pos
+
+	motors.append(new_motor)
+
+	calculate_drone_stats()
+	update_component_list()
+	start_component_dragging(new_motor, mouse_pos)
+
+func add_propeller() -> void:
 	if not Global.is_component_available("propeller", current_propeller_type):
 		return
-		
-	if motors.size() > 0 and propellers.size() < motors.size():
-		var propeller_prefab = propeller_prefabs.get(current_propeller_type)
-		if propeller_prefab:
-			var new_propeller = propeller_prefab.instantiate()
-			$Components.add_child(new_propeller)
-			calculate_drone_stats()
-			
-			var mouse_pos = get_viewport().get_mouse_position()
-			var world_pos = screen_to_world_position(mouse_pos)
-			new_propeller.position = world_pos
-			
-			propellers.append(new_propeller)
-			update_component_list()
-			start_component_dragging(new_propeller, mouse_pos)
+	if motors.size() <= 0:
+		return
+	if propellers.size() >= motors.size():
+		return
 
-func delete_frame():
-	if drone_frame and is_instance_valid(drone_frame):
+	var prop_prefab: PackedScene = propeller_prefabs.get(current_propeller_type, null)
+	if prop_prefab == null:
+		return
+
+	var new_prop: Node3D = prop_prefab.instantiate() as Node3D
+	$Components.add_child(new_prop)
+
+	new_prop.set_meta("component_type", current_propeller_type)
+
+	var mouse_pos: Vector2 = get_viewport().get_mouse_position()
+	var world_pos: Vector3 = screen_to_world_position(mouse_pos)
+	new_prop.position = world_pos
+
+	propellers.append(new_prop)
+
+	calculate_drone_stats()
+	update_component_list()
+	start_component_dragging(new_prop, mouse_pos)
+
+func delete_frame() -> void:
+	if drone_frame != null and is_instance_valid(drone_frame):
 		delete_board()
-		
 		while motors.size() > 0:
 			delete_motor(0)
-		
-		drone_frame.queue_free()
-		drone_frame = null
-		update_component_list()
-		calculate_drone_stats()
-
-func delete_board():
-	if drone_board and is_instance_valid(drone_board):
-		drone_board.queue_free()
-		drone_board = null
-		update_component_list()
-		calculate_drone_stats()
-
-func delete_motor(index: int):
-	if index >= 0 and index < motors.size() and is_instance_valid(motors[index]):
-		var motor = motors[index]
-		if motor_propeller_map.has(motor):
-			var propeller = motor_propeller_map[motor]
-			if is_instance_valid(propeller):
-				propellers.erase(propeller)
-				propeller.queue_free()
-			motor_propeller_map.erase(motor)
-		
-		motors[index].queue_free()
-		motors.remove_at(index)
-		update_component_list()
-		calculate_drone_stats()
-
-func delete_propeller(index: int):
-	if index >= 0 and index < propellers.size() and is_instance_valid(propellers[index]):
-		for motor in motor_propeller_map:
-			if motor_propeller_map[motor] == propellers[index]:
-				motor_propeller_map.erase(motor)
-				break
-		
-		propellers[index].queue_free()
-		propellers.remove_at(index)
-		update_component_list()
-		calculate_drone_stats()
-
-func clear_drone():
-	if drone_frame and is_instance_valid(drone_frame):
 		drone_frame.queue_free()
 	drone_frame = null
-	
-	if drone_board and is_instance_valid(drone_board):
+	calculate_drone_stats()
+	update_component_list()
+
+func delete_board() -> void:
+	if drone_board != null and is_instance_valid(drone_board):
 		drone_board.queue_free()
 	drone_board = null
-	
-	for motor in motors:
-		if is_instance_valid(motor):
+	calculate_drone_stats()
+	update_component_list()
+
+func delete_motor(index: int) -> void:
+	if index < 0 or index >= motors.size():
+		return
+
+	var motor: Node3D = motors[index]
+	if motor != null and is_instance_valid(motor):
+		if motor_propeller_map.has(motor):
+			var prop: Node3D = motor_propeller_map[motor] as Node3D
+			if prop != null and is_instance_valid(prop):
+				propellers.erase(prop)
+				prop.queue_free()
+			motor_propeller_map.erase(motor)
+
+		motor.queue_free()
+
+	motors.remove_at(index)
+	calculate_drone_stats()
+	update_component_list()
+
+func delete_propeller(index: int) -> void:
+	if index < 0 or index >= propellers.size():
+		return
+
+	var prop: Node3D = propellers[index]
+	if prop != null and is_instance_valid(prop):
+		var key_to_erase: Node3D = null
+		for k in motor_propeller_map.keys():
+			var mot: Node3D = k as Node3D
+			if mot != null and motor_propeller_map[mot] == prop:
+				key_to_erase = mot
+				break
+		if key_to_erase != null:
+			motor_propeller_map.erase(key_to_erase)
+
+		prop.queue_free()
+
+	propellers.remove_at(index)
+	calculate_drone_stats()
+	update_component_list()
+
+func clear_drone() -> void:
+	if drone_frame != null and is_instance_valid(drone_frame):
+		drone_frame.queue_free()
+	drone_frame = null
+
+	if drone_board != null and is_instance_valid(drone_board):
+		drone_board.queue_free()
+	drone_board = null
+
+	for m in motors:
+		var motor: Node3D = m as Node3D
+		if motor != null and is_instance_valid(motor):
 			motor.queue_free()
 	motors.clear()
-	
-	for propeller in propellers:
-		if is_instance_valid(propeller):
-			propeller.queue_free()
+
+	for p in propellers:
+		var prop: Node3D = p as Node3D
+		if prop != null and is_instance_valid(prop):
+			prop.queue_free()
 	propellers.clear()
-	
+
 	motor_propeller_map.clear()
-	
+
 	current_frame_type = "Рама1"
-	current_board_type = "Плата1" 
-	current_motor_type ="Мотор1"
+	current_board_type = "Плата1"
+	current_motor_type = "Мотор1"
 	current_propeller_type = "Пропеллер1"
-	
+
+	calculate_drone_stats()
 	update_component_list()
 
 func screen_to_world_position(screen_pos: Vector2) -> Vector3:
-	var from = camera.project_ray_origin(screen_pos)
-	var ray_dir = camera.project_ray_normal(screen_pos)
-	
-	var drag_plane = Plane(Vector3.UP, 0.5)
-	var intersection = drag_plane.intersects_ray(from, from + ray_dir * 1000)
-	
-	if intersection:
-		return intersection
-	else:
-		return Vector3(0, 0.5, 0)
+	var from: Vector3 = camera.project_ray_origin(screen_pos)
+	var ray_dir: Vector3 = camera.project_ray_normal(screen_pos)
 
-func is_position_within_bounds(position: Vector3) -> bool:
-	return (position.x >= BOUNDS_MIN.x and position.x <= BOUNDS_MAX.x and
-			position.y >= BOUNDS_MIN.y and position.y <= BOUNDS_MAX.y and
-			position.z >= BOUNDS_MIN.z and position.z <= BOUNDS_MAX.z)
+	var drag_plane: Plane = Plane(Vector3.UP, 0.5)
+	var hit = drag_plane.intersects_ray(from, ray_dir)
+	if hit is Vector3:
+		return hit
+	return Vector3(0, 0.5, 0)
 
 func clamp_position(position: Vector3) -> Vector3:
 	return Vector3(
@@ -853,63 +924,81 @@ func clamp_position(position: Vector3) -> Vector3:
 		clamp(position.z, BOUNDS_MIN.z, BOUNDS_MAX.z)
 	)
 
-func calculate_drone_stats():
+# ==================== СТАТЫ ====================
+func calculate_drone_stats() -> void:
 	drone_stats["total_mass"] = 0.0
 	drone_stats["total_thrust"] = 0.0
 	drone_stats["missing_motors"] = 0
-	
-	if drone_frame and is_instance_valid(drone_frame):
-		var frame_stat = component_stats["frame"][current_frame_type]
-		drone_stats["total_mass"] += frame_stat["mass"]
-	
-	if drone_board and is_instance_valid(drone_board):
-		var board_stat = component_stats["board"][current_board_type]
-		drone_stats["total_mass"] += board_stat["mass"]
-	
-	var motor_count = 0
-	for motor in motors:
-		if is_instance_valid(motor):
-			var motor_stat = component_stats["motor"][current_motor_type]
-			drone_stats["total_mass"] += motor_stat["mass"]
-			drone_stats["total_thrust"] += motor_stat["thrust"]
+
+	if drone_frame != null and is_instance_valid(drone_frame):
+		var frame_stat: Dictionary = component_stats["frame"][current_frame_type]
+		drone_stats["total_mass"] = float(drone_stats["total_mass"]) + float(frame_stat["mass"])
+
+	if drone_board != null and is_instance_valid(drone_board):
+		var board_stat: Dictionary = component_stats["board"][current_board_type]
+		drone_stats["total_mass"] = float(drone_stats["total_mass"]) + float(board_stat["mass"])
+
+	var motor_count: int = 0
+	for m in motors:
+		var motor: Node3D = m as Node3D
+		if motor != null and is_instance_valid(motor):
+			var motor_type: String = current_motor_type
+			if motor.has_meta("component_type"):
+				motor_type = str(motor.get_meta("component_type"))
+
+			var motor_stat: Dictionary = component_stats["motor"][motor_type]
+			drone_stats["total_mass"] = float(drone_stats["total_mass"]) + float(motor_stat["mass"])
+			drone_stats["total_thrust"] = float(drone_stats["total_thrust"]) + float(motor_stat["thrust"])
 			motor_count += 1
-	
-	for propeller in propellers:
-		if is_instance_valid(propeller):
-			var propeller_stat = component_stats["propeller"][current_propeller_type]
-			drone_stats["total_mass"] += propeller_stat["mass"]
-	
+
+	for p in propellers:
+		var prop: Node3D = p as Node3D
+		if prop != null and is_instance_valid(prop):
+			var prop_type: String = current_propeller_type
+			if prop.has_meta("component_type"):
+				prop_type = str(prop.get_meta("component_type"))
+
+			var prop_stat: Dictionary = component_stats["propeller"][prop_type]
+			drone_stats["total_mass"] = float(drone_stats["total_mass"]) + float(prop_stat["mass"])
+
 	drone_stats["missing_motors"] = 4 - motor_count
 	drone_stats["is_balanced"] = (motor_count == 4) and (propellers.size() == 4)
-	
-	update_stats_display()
 
-func update_stats_display():
-	var stats_panel = $UI.get_node_or_null("StatsPanel")
-	if not stats_panel:
+	update_stats_display()
+	update_balance_warning()
+
+func update_stats_display() -> void:
+	var stats_panel: Panel = $UI.get_node_or_null("StatsPanel") as Panel
+	if stats_panel == null:
 		stats_panel = create_stats_panel()
-	
-	var stats_text = "ХАРАКТЕРИСТИКИ ДРОНА:\n"
-	stats_text += "Масса: %.1f кг\n" % drone_stats["total_mass"]
-	stats_text += "Тяга: %.1f ед.\n" % drone_stats["total_thrust"]
-	stats_text += "Соотношение: %.2f\n" % (drone_stats["total_thrust"] / max(drone_stats["total_mass"], 0.1))
-	
-	if not drone_stats["is_balanced"]:
+
+	var mass: float = float(drone_stats["total_mass"])
+	var thrust: float = float(drone_stats["total_thrust"])
+	var ratio: float = thrust / max(mass, 0.1)
+
+	var stats_text: String = "ХАРАКТЕРИСТИКИ ДРОНА:\n"
+	stats_text += "Масса: %.1f кг\n" % mass
+	stats_text += "Тяга: %.1f ед.\n" % thrust
+	stats_text += "Соотношение: %.2f\n" % ratio
+
+	if not bool(drone_stats["is_balanced"]):
 		stats_text += "⚠️ НЕСБАЛАНСИРОВАН!\n"
-		stats_text += "Отсутствует моторов: %d\n" % drone_stats["missing_motors"]
+		stats_text += "Отсутствует моторов: %d\n" % int(drone_stats["missing_motors"])
 		stats_text += "Дрон будет заваливаться в полете!"
 	else:
 		stats_text += "✅ Сбалансирован"
-	
-	stats_panel.get_node("Label").text = stats_text
+
+	var label: Label = stats_panel.get_node("Label") as Label
+	if label != null:
+		label.text = stats_text
 
 func create_stats_panel() -> Panel:
-	var panel = Panel.new()
+	var panel: Panel = Panel.new()
 	panel.name = "StatsPanel"
 	panel.size = Vector2(300, 180)
 	panel.position = Vector2(20, 150)
-	
-	var style = StyleBoxFlat.new()
+
+	var style: StyleBoxFlat = StyleBoxFlat.new()
 	style.bg_color = Color(0, 0, 0, 0.8)
 	style.border_color = Color(1, 1, 1, 0.5)
 	style.border_width_left = 2
@@ -917,640 +1006,576 @@ func create_stats_panel() -> Panel:
 	style.border_width_right = 2
 	style.border_width_bottom = 2
 	panel.add_theme_stylebox_override("panel", style)
-	
-	var label = Label.new()
+
+	var label: Label = Label.new()
 	label.name = "Label"
 	label.size = panel.size
 	label.add_theme_font_size_override("font_size", 14)
 	label.add_theme_color_override("font_color", Color.WHITE)
-	
+
 	panel.add_child(label)
 	$UI.add_child(panel)
 	return panel
 
-# ==================== ИЕРАРХИЯ КОМПОНЕНТОВ ====================
-func setup_hierarchy_panel():
-	if not has_node("UI/Hierarchy"):
-		var hierarchy_panel = Panel.new()
-		hierarchy_panel.name = "Hierarchy"
-		hierarchy_panel.custom_minimum_size = Vector2(300, 400)
-		hierarchy_panel.position = Vector2(20, 80)
-		hierarchy_panel.visible = false
-		
-		var style = StyleBoxFlat.new()
-		style.bg_color = Color(0.1, 0.1, 0.1, 0.9)
-		style.border_color = Color(0.3, 0.3, 0.3)
-		style.border_width_left = 2
-		style.border_width_top = 2
-		style.border_width_right = 2
-		style.border_width_bottom = 2
-		hierarchy_panel.add_theme_stylebox_override("panel", style)
-		
-		# Кнопка закрытия (крестик)
-		var close_button = Button.new()
-		close_button.name = "CloseButton"
-		close_button.text = "✕"
-		close_button.custom_minimum_size = Vector2(30, 30)
-		close_button.position = Vector2(260, 10)
-		close_button.add_theme_font_size_override("font_size", 16)
-		close_button.pressed.connect(_on_hierarchy_close_pressed)
-		
-		# Заголовок
-		var title_label = Label.new()
-		title_label.name = "TitleLabel"
-		title_label.text = "СОСТАВ ДРОНА"
-		title_label.position = Vector2(10, 15)
-		title_label.add_theme_font_size_override("font_size", 16)
-		title_label.add_theme_color_override("font_color", Color.WHITE)
-		
-		# Список компонентов
-		component_list = ItemList.new()
-		component_list.name = "Complist"
-		component_list.size = Vector2(280, 350)
-		component_list.position = Vector2(10, 40)
-		component_list.item_clicked.connect(_on_component_list_item_clicked)
-		
-		hierarchy_panel.add_child(close_button)
-		hierarchy_panel.add_child(title_label)
-		hierarchy_panel.add_child(component_list)
-		
-		$UI.add_child(hierarchy_panel)
-	
-	list_panel = $UI/Hierarchy
-	component_list = $UI/Hierarchy/Complist
+func update_balance_warning() -> void:
+	var warning_label: Label = $UI.get_node_or_null("BalanceWarning") as Label
+	if warning_label == null:
+		warning_label = Label.new()
+		warning_label.name = "BalanceWarning"
+		warning_label.position = Vector2(20, 100)
+		warning_label.add_theme_font_size_override("font_size", 16)
+		$UI.add_child(warning_label)
 
-func update_component_list():
+	if not bool(drone_stats["is_balanced"]):
+		warning_label.add_theme_color_override("font_color", Color.RED)
+		warning_label.text = "⚠️ ДРОН НЕСБАЛАНСИРОВАН! Добавьте %d моторов" % int(drone_stats["missing_motors"])
+	else:
+		warning_label.add_theme_color_override("font_color", Color.GREEN)
+		warning_label.text = "✅ Дрон сбалансирован"
+
+# ==================== ИЕРАРХИЯ / СПИСОК ====================
+func init_ui_components() -> void:
+	open_close_button = get_node_or_null("UI/OpenClose") as Button
+	list_panel = get_node_or_null("UI/Hierarchy") as Panel
+	component_list = get_node_or_null("UI/Hierarchy/Complist") as ItemList
+
+	if list_panel != null:
+		list_panel.visible = false
+
+	# OpenClose уже подключён в сцене, но на всякий — без дублей
+	if open_close_button != null:
+		var cb: Callable = Callable(self, "_on_open_close_pressed")
+		if not open_close_button.is_connected("pressed", cb):
+			open_close_button.pressed.connect(_on_open_close_pressed)
+
+	if component_list != null:
+		var cb2: Callable = Callable(self, "_on_component_list_item_clicked")
+		if not component_list.is_connected("item_clicked", cb2):
+			component_list.item_clicked.connect(_on_component_list_item_clicked)
+
+func setup_hierarchy_panel() -> void:
+	# НИЧЕГО НЕ СОЗДАЁМ — панель и список уже есть в твоей сцене
+	list_panel = get_node_or_null("UI/Hierarchy") as Panel
+	component_list = get_node_or_null("UI/Hierarchy/Complist") as ItemList
+
+func _on_open_close_pressed() -> void:
+	if list_panel == null:
+		return
+
+	list_panel.visible = not list_panel.visible
+
+	if open_close_button != null:
+		open_close_button.text = "📋 Скрыть список" if list_panel.visible else "📋 Показать список"
+
+	if list_panel.visible:
+		update_component_list()
+
+func update_component_list() -> void:
 	if component_list == null:
 		return
-		
-	component_list.clear()
-	
-	if drone_frame and is_instance_valid(drone_frame):
-		component_list.add_item("Рама: " + current_frame_type)
-	if drone_board and is_instance_valid(drone_board):
-		component_list.add_item("Плата: " + current_board_type)
-	
-	for i in range(motors.size()):
-		if i < motors.size() and is_instance_valid(motors[i]):
-			component_list.add_item("Двигатель " + str(i+1) + ": " + current_motor_type)
-	
-	for i in range(propellers.size()):
-		if i < propellers.size() and is_instance_valid(propellers[i]):
-			component_list.add_item("Пропеллер " + str(i+1) + ": " + current_propeller_type)
 
-func _on_component_list_item_clicked(index: int, at_position: Vector2, mouse_button_index: int):
+	component_list.clear()
+
+	if drone_frame != null and is_instance_valid(drone_frame):
+		component_list.add_item("Рама: " + current_frame_type)
+	if drone_board != null and is_instance_valid(drone_board):
+		component_list.add_item("Плата: " + current_board_type)
+
+	for i in range(motors.size()):
+		var motor: Node3D = motors[i]
+		if motor != null and is_instance_valid(motor):
+			component_list.add_item("Двигатель " + str(i + 1) + ": " + current_motor_type)
+
+	for i2 in range(propellers.size()):
+		var prop: Node3D = propellers[i2]
+		if prop != null and is_instance_valid(prop):
+			component_list.add_item("Пропеллер " + str(i2 + 1) + ": " + current_propeller_type)
+
+func _on_component_list_item_clicked(index: int, at_position: Vector2, mouse_button_index: int) -> void:
 	if mouse_button_index == MOUSE_BUTTON_LEFT:
 		delete_component_by_index(index)
 
-func delete_component_by_index(index: int):
+func delete_component_by_index(index: int) -> void:
 	if component_list == null:
 		return
-	
-	var item_count = component_list.item_count
-	if index < 0 or index >= item_count:
+
+	if index < 0 or index >= component_list.item_count:
 		return
-	
-	var item_text = component_list.get_item_text(index)
-	
+
+	var item_text: String = component_list.get_item_text(index)
+
 	if item_text.begins_with("Рама:"):
 		delete_frame()
 	elif item_text.begins_with("Плата:"):
 		delete_board()
 	elif item_text.begins_with("Двигатель"):
-		var motor_number = extract_number_from_text(item_text)
+		var motor_number: int = extract_number_from_text(item_text)
 		if motor_number != -1:
 			delete_motor(motor_number - 1)
 	elif item_text.begins_with("Пропеллер"):
-		var propeller_number = extract_number_from_text(item_text)
-		if propeller_number != -1:
-			delete_propeller(propeller_number - 1)
+		var prop_number: int = extract_number_from_text(item_text)
+		if prop_number != -1:
+			delete_propeller(prop_number - 1)
 
 func extract_number_from_text(text: String) -> int:
-	var regex = RegEx.new()
+	var regex: RegEx = RegEx.new()
 	regex.compile("(\\d+)")
-	var result = regex.search(text)
-	if result:
-		return result.get_string(1).to_int()
+	var result: RegExMatch = regex.search(text)
+	if result != null:
+		return int(result.get_string(1))
 	return -1
 
-# ==================== ВЫПАДАЮЩИЕ МЕНЮ КОМПОНЕНТОВ ====================
-func create_component_selectors_ui():
-	var component_selectors = VBoxContainer.new()
+# ==================== ВЫБОР КОМПОНЕНТОВ (UI, создаётся 1 раз) ====================
+func create_component_selectors_ui() -> void:
+	if $UI.has_node("ComponentSelectors"):
+		return
+
+	var component_selectors: VBoxContainer = VBoxContainer.new()
 	component_selectors.name = "ComponentSelectors"
-	
+
 	component_selectors.anchors_preset = Control.PRESET_BOTTOM_LEFT
 	component_selectors.anchor_left = 0.0
 	component_selectors.anchor_bottom = 1.0
 	component_selectors.anchor_right = 0.0
 	component_selectors.anchor_top = 1.0
-	
+
 	component_selectors.offset_left = 20
 	component_selectors.offset_bottom = -20
 	component_selectors.offset_right = 320
 	component_selectors.offset_top = -620
-	
+
 	create_frame_section(component_selectors)
 	create_board_section(component_selectors)
 	create_motor_section(component_selectors)
 	create_propeller_section(component_selectors)
-	
+
 	$UI.add_child(component_selectors)
 
-func create_frame_section(parent: VBoxContainer):
-	var frame_section = VBoxContainer.new()
+func create_frame_section(parent: VBoxContainer) -> void:
+	var frame_section: VBoxContainer = VBoxContainer.new()
 	frame_section.name = "FrameSelector"
 	frame_section.custom_minimum_size = Vector2(0, 50)
 	frame_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	
-	var frame_button = Button.new()
+
+	var frame_button: Button = Button.new()
 	frame_button.name = "FrameButton"
 	frame_button.text = "Рамы"
 	frame_button.custom_minimum_size = Vector2(0, 40)
 	frame_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	frame_button.add_theme_font_size_override("font_size", 16)
 	frame_button.pressed.connect(_on_frame_menu_toggled)
-	
-	var frame_options_container = VBoxContainer.new()
-	frame_options_container.name = "FrameOptionsContainer"
-	frame_options_container.custom_minimum_size = Vector2(0, 0)
-	frame_options_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	frame_options_container.visible = false
-	
+
+	var options: VBoxContainer = VBoxContainer.new()
+	options.name = "FrameOptionsContainer"
+	options.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	options.visible = false
+
 	frame_section.add_child(frame_button)
-	frame_section.add_child(frame_options_container)
+	frame_section.add_child(options)
 	parent.add_child(frame_section)
 
-func create_board_section(parent: VBoxContainer):
-	var board_section = VBoxContainer.new()
-	board_section.name = "BoardSelector"
-	board_section.custom_minimum_size = Vector2(0, 50)
-	board_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	
-	var board_button = Button.new()
-	board_button.name = "BoardButton"
-	board_button.text = "Платы"
-	board_button.custom_minimum_size = Vector2(0, 40)
-	board_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	board_button.add_theme_font_size_override("font_size", 16)
-	board_button.pressed.connect(_on_board_menu_toggled)
-	
-	var board_options_container = VBoxContainer.new()
-	board_options_container.name = "BoardOptionsContainer"
-	board_options_container.custom_minimum_size = Vector2(0, 0)
-	board_options_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	board_options_container.visible = false
-	
-	board_section.add_child(board_button)
-	board_section.add_child(board_options_container)
-	parent.add_child(board_section)
+func create_board_section(parent: VBoxContainer) -> void:
+	var sec: VBoxContainer = VBoxContainer.new()
+	sec.name = "BoardSelector"
+	sec.custom_minimum_size = Vector2(0, 50)
+	sec.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 
-func create_motor_section(parent: VBoxContainer):
-	var motor_section = VBoxContainer.new()
-	motor_section.name = "MotorSelector"
-	motor_section.custom_minimum_size = Vector2(0, 50)
-	motor_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	
-	var motor_button = Button.new()
-	motor_button.name = "MotorButton"
-	motor_button.text = "Двигатели"
-	motor_button.custom_minimum_size = Vector2(0, 40)
-	motor_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	motor_button.add_theme_font_size_override("font_size", 16)
-	motor_button.pressed.connect(_on_motor_menu_toggled)
-	
-	var motor_options_container = VBoxContainer.new()
-	motor_options_container.name = "MotorOptionsContainer"
-	motor_options_container.custom_minimum_size = Vector2(0, 0)
-	motor_options_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	motor_options_container.visible = false
-	
-	motor_section.add_child(motor_button)
-	motor_section.add_child(motor_options_container)
-	parent.add_child(motor_section)
+	var b: Button = Button.new()
+	b.name = "BoardButton"
+	b.text = "Платы"
+	b.custom_minimum_size = Vector2(0, 40)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.add_theme_font_size_override("font_size", 16)
+	b.pressed.connect(_on_board_menu_toggled)
 
-func create_propeller_section(parent: VBoxContainer):
-	var propeller_section = VBoxContainer.new()
-	propeller_section.name = "PropellerSelector"
-	propeller_section.custom_minimum_size = Vector2(0, 50)
-	propeller_section.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	
-	var propeller_button = Button.new()
-	propeller_button.name = "PropellerButton"
-	propeller_button.text = "Пропеллеры"
-	propeller_button.custom_minimum_size = Vector2(0, 40)
-	propeller_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	propeller_button.add_theme_font_size_override("font_size", 16)
-	propeller_button.pressed.connect(_on_propeller_menu_toggled)
-	
-	var propeller_options_container = VBoxContainer.new()
-	propeller_options_container.name = "PropellerOptionsContainer"
-	propeller_options_container.custom_minimum_size = Vector2(0, 0)
-	propeller_options_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	propeller_options_container.visible = false
-	
-	propeller_section.add_child(propeller_button)
-	propeller_section.add_child(propeller_options_container)
-	parent.add_child(propeller_section)
+	var options: VBoxContainer = VBoxContainer.new()
+	options.name = "BoardOptionsContainer"
+	options.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	options.visible = false
 
-func _on_frame_menu_toggled():
+	sec.add_child(b)
+	sec.add_child(options)
+	parent.add_child(sec)
+
+func create_motor_section(parent: VBoxContainer) -> void:
+	var sec: VBoxContainer = VBoxContainer.new()
+	sec.name = "MotorSelector"
+	sec.custom_minimum_size = Vector2(0, 50)
+	sec.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var b: Button = Button.new()
+	b.name = "MotorButton"
+	b.text = "Двигатели"
+	b.custom_minimum_size = Vector2(0, 40)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.add_theme_font_size_override("font_size", 16)
+	b.pressed.connect(_on_motor_menu_toggled)
+
+	var options: VBoxContainer = VBoxContainer.new()
+	options.name = "MotorOptionsContainer"
+	options.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	options.visible = false
+
+	sec.add_child(b)
+	sec.add_child(options)
+	parent.add_child(sec)
+
+func create_propeller_section(parent: VBoxContainer) -> void:
+	var sec: VBoxContainer = VBoxContainer.new()
+	sec.name = "PropellerSelector"
+	sec.custom_minimum_size = Vector2(0, 50)
+	sec.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+
+	var b: Button = Button.new()
+	b.name = "PropellerButton"
+	b.text = "Пропеллеры"
+	b.custom_minimum_size = Vector2(0, 40)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.add_theme_font_size_override("font_size", 16)
+	b.pressed.connect(_on_propeller_menu_toggled)
+
+	var options: VBoxContainer = VBoxContainer.new()
+	options.name = "PropellerOptionsContainer"
+	options.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	options.visible = false
+
+	sec.add_child(b)
+	sec.add_child(options)
+	parent.add_child(sec)
+
+func _on_frame_menu_toggled() -> void:
 	_close_other_menus("frame")
-	
-	var options_container = $UI/ComponentSelectors/FrameSelector/FrameOptionsContainer
-	options_container.visible = !options_container.visible
-	
-	if options_container.visible and options_container.get_child_count() == 0:
+	var options: VBoxContainer = $UI/ComponentSelectors/FrameSelector/FrameOptionsContainer
+	options.visible = not options.visible
+	if options.visible and options.get_child_count() == 0:
 		create_frame_options()
 
-func _on_board_menu_toggled():
+func _on_board_menu_toggled() -> void:
 	_close_other_menus("board")
-	
-	var options_container = $UI/ComponentSelectors/BoardSelector/BoardOptionsContainer
-	options_container.visible = !options_container.visible
-	
-	if options_container.visible and options_container.get_child_count() == 0:
+	var options: VBoxContainer = $UI/ComponentSelectors/BoardSelector/BoardOptionsContainer
+	options.visible = not options.visible
+	if options.visible and options.get_child_count() == 0:
 		create_board_options()
 
-func _on_motor_menu_toggled():
+func _on_motor_menu_toggled() -> void:
 	_close_other_menus("motor")
-	
-	var options_container = $UI/ComponentSelectors/MotorSelector/MotorOptionsContainer
-	options_container.visible = !options_container.visible
-	
-	if options_container.visible and options_container.get_child_count() == 0:
+	var options: VBoxContainer = $UI/ComponentSelectors/MotorSelector/MotorOptionsContainer
+	options.visible = not options.visible
+	if options.visible and options.get_child_count() == 0:
 		create_motor_options()
 
-func _on_propeller_menu_toggled():
+func _on_propeller_menu_toggled() -> void:
 	_close_other_menus("propeller")
-	
-	var options_container = $UI/ComponentSelectors/PropellerSelector/PropellerOptionsContainer
-	options_container.visible = !options_container.visible
-	
-	if options_container.visible and options_container.get_child_count() == 0:
+	var options: VBoxContainer = $UI/ComponentSelectors/PropellerSelector/PropellerOptionsContainer
+	options.visible = not options.visible
+	if options.visible and options.get_child_count() == 0:
 		create_propeller_options()
 
-func _close_other_menus(except_menu: String):
-	var menus = {
+func _close_other_menus(except_menu: String) -> void:
+	var menus: Dictionary = {
 		"frame": $UI/ComponentSelectors/FrameSelector/FrameOptionsContainer,
 		"board": $UI/ComponentSelectors/BoardSelector/BoardOptionsContainer,
 		"motor": $UI/ComponentSelectors/MotorSelector/MotorOptionsContainer,
 		"propeller": $UI/ComponentSelectors/PropellerSelector/PropellerOptionsContainer
 	}
-	
-	for menu_name in menus:
-		if menu_name != except_menu:
-			menus[menu_name].visible = false
+	for k in menus.keys():
+		if str(k) != except_menu:
+			var node: Node = menus[k]
+			if node != null:
+				(node as CanvasItem).visible = false
 
-func create_frame_options():
-	var options_container = $UI/ComponentSelectors/FrameSelector/FrameOptionsContainer
-	
-	for child in options_container.get_children():
+func create_frame_options() -> void:
+	var options: VBoxContainer = $UI/ComponentSelectors/FrameSelector/FrameOptionsContainer
+	for child in options.get_children():
 		child.queue_free()
-	
 	frame_buttons.clear()
-	
+
 	for frame_name in frame_prefabs.keys():
-		var button = Button.new()
-		button.text = frame_name
+		var button: Button = Button.new()
+		button.text = str(frame_name)
 		button.custom_minimum_size = Vector2(0, 35)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.add_theme_font_size_override("font_size", 14)
-		
-		if Global.is_component_available("frame", frame_name):
+
+		if Global.is_component_available("frame", button.text):
 			button.disabled = false
-			button.connect("pressed", _on_frame_selected.bind(frame_name))
+			button.pressed.connect(_on_frame_selected.bind(button.text))
 		else:
 			button.disabled = true
 			button.add_theme_color_override("font_color", Color(1, 0, 0))
 			button.tooltip_text = "Не куплено в магазине"
-		
-		options_container.add_child(button)
+
+		options.add_child(button)
 		frame_buttons.append(button)
-	
+
 	update_frame_selection()
 
-func create_board_options():
-	var options_container = $UI/ComponentSelectors/BoardSelector/BoardOptionsContainer
-	
-	for child in options_container.get_children():
+func create_board_options() -> void:
+	var options: VBoxContainer = $UI/ComponentSelectors/BoardSelector/BoardOptionsContainer
+	for child in options.get_children():
 		child.queue_free()
-	
 	board_buttons.clear()
-	
+
 	for board_name in board_prefabs.keys():
-		var button = Button.new()
-		button.text = board_name
+		var button: Button = Button.new()
+		button.text = str(board_name)
 		button.custom_minimum_size = Vector2(0, 35)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.add_theme_font_size_override("font_size", 14)
-		
-		if Global.is_component_available("board", board_name):
+
+		if Global.is_component_available("board", button.text):
 			button.disabled = false
-			button.connect("pressed", _on_board_selected.bind(board_name))
+			button.pressed.connect(_on_board_selected.bind(button.text))
 		else:
 			button.disabled = true
 			button.add_theme_color_override("font_color", Color(1, 0, 0))
 			button.tooltip_text = "Не куплено в магазине"
-		
-		options_container.add_child(button)
+
+		options.add_child(button)
 		board_buttons.append(button)
-	
+
 	update_board_selection()
 
-func create_motor_options():
-	var options_container = $UI/ComponentSelectors/MotorSelector/MotorOptionsContainer
-	
-	for child in options_container.get_children():
+func create_motor_options() -> void:
+	var options: VBoxContainer = $UI/ComponentSelectors/MotorSelector/MotorOptionsContainer
+	for child in options.get_children():
 		child.queue_free()
-	
 	motor_buttons.clear()
-	
+
 	for motor_name in motor_prefabs.keys():
-		var button = Button.new()
-		button.text = motor_name
+		var button: Button = Button.new()
+		button.text = str(motor_name)
 		button.custom_minimum_size = Vector2(0, 35)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.add_theme_font_size_override("font_size", 14)
-		
-		if Global.is_component_available("motor", motor_name):
+
+		if Global.is_component_available("motor", button.text):
 			button.disabled = false
-			button.connect("pressed", _on_motor_selected.bind(motor_name))
+			button.pressed.connect(_on_motor_selected.bind(button.text))
 		else:
 			button.disabled = true
 			button.add_theme_color_override("font_color", Color(1, 0, 0))
 			button.tooltip_text = "Не куплено в магазине"
-		
-		options_container.add_child(button)
+
+		options.add_child(button)
 		motor_buttons.append(button)
-	
+
 	update_motor_selection()
 
-func create_propeller_options():
-	var options_container = $UI/ComponentSelectors/PropellerSelector/PropellerOptionsContainer
-	
-	for child in options_container.get_children():
+func create_propeller_options() -> void:
+	var options: VBoxContainer = $UI/ComponentSelectors/PropellerSelector/PropellerOptionsContainer
+	for child in options.get_children():
 		child.queue_free()
-	
 	propeller_buttons.clear()
-	
-	for propeller_name in propeller_prefabs.keys():
-		var button = Button.new()
-		button.text = propeller_name
+
+	for prop_name in propeller_prefabs.keys():
+		var button: Button = Button.new()
+		button.text = str(prop_name)
 		button.custom_minimum_size = Vector2(0, 35)
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.add_theme_font_size_override("font_size", 14)
-		
-		if Global.is_component_available("propeller", propeller_name):
+
+		if Global.is_component_available("propeller", button.text):
 			button.disabled = false
-			button.connect("pressed", _on_propeller_selected.bind(propeller_name))
+			button.pressed.connect(_on_propeller_selected.bind(button.text))
 		else:
 			button.disabled = true
 			button.add_theme_color_override("font_color", Color(1, 0, 0))
 			button.tooltip_text = "Не куплено в магазине"
-		
-		options_container.add_child(button)
+
+		options.add_child(button)
 		propeller_buttons.append(button)
-	
+
 	update_propeller_selection()
 
-func _on_frame_selected(frame_name: String):
+func _on_frame_selected(frame_name: String) -> void:
 	if Global.is_component_available("frame", frame_name):
 		current_frame_type = frame_name
 		update_frame_selection()
 		$UI/ComponentSelectors/FrameSelector/FrameOptionsContainer.visible = false
 		add_frame()
 
-func _on_board_selected(board_name: String):
+func _on_board_selected(board_name: String) -> void:
 	if Global.is_component_available("board", board_name):
 		current_board_type = board_name
 		update_board_selection()
 		$UI/ComponentSelectors/BoardSelector/BoardOptionsContainer.visible = false
 		add_board()
 
-func _on_motor_selected(motor_name: String):
+func _on_motor_selected(motor_name: String) -> void:
 	if Global.is_component_available("motor", motor_name):
 		current_motor_type = motor_name
 		update_motor_selection()
 		$UI/ComponentSelectors/MotorSelector/MotorOptionsContainer.visible = false
 		add_motor()
 
-func _on_propeller_selected(propeller_name: String):
+func _on_propeller_selected(propeller_name: String) -> void:
 	if Global.is_component_available("propeller", propeller_name):
 		current_propeller_type = propeller_name
 		update_propeller_selection()
 		$UI/ComponentSelectors/PropellerSelector/PropellerOptionsContainer.visible = false
 		add_propeller()
 
-func update_frame_selection():
-	var frame_button = $UI/ComponentSelectors/FrameSelector/FrameButton
-	frame_button.text = "Рамы: " + current_frame_type
-	
-	for button in frame_buttons:
-		if button.text == current_frame_type:
-			button.add_theme_color_override("font_color", Color(0, 1, 0))
+func update_frame_selection() -> void:
+	var b: Button = $UI/ComponentSelectors/FrameSelector/FrameButton
+	b.text = "Рамы: " + current_frame_type
+	for bt in frame_buttons:
+		if bt.text == current_frame_type:
+			bt.add_theme_color_override("font_color", Color(0, 1, 0))
 		else:
-			button.add_theme_color_override("font_color", Color(1, 1, 1))
+			bt.add_theme_color_override("font_color", Color(1, 1, 1))
 
-func update_board_selection():
-	var board_button = $UI/ComponentSelectors/BoardSelector/BoardButton
-	board_button.text = "Платы: " + current_board_type
-	
-	for button in board_buttons:
-		if button.text == current_board_type:
-			button.add_theme_color_override("font_color", Color(0, 1, 0))
+func update_board_selection() -> void:
+	var b: Button = $UI/ComponentSelectors/BoardSelector/BoardButton
+	b.text = "Платы: " + current_board_type
+	for bt in board_buttons:
+		if bt.text == current_board_type:
+			bt.add_theme_color_override("font_color", Color(0, 1, 0))
 		else:
-			button.add_theme_color_override("font_color", Color(1, 1, 1))
+			bt.add_theme_color_override("font_color", Color(1, 1, 1))
 
-func update_motor_selection():
-	var motor_button = $UI/ComponentSelectors/MotorSelector/MotorButton
-	motor_button.text = "Двигатели: " + current_motor_type
-	
-	for button in motor_buttons:
-		if button.text == current_motor_type:
-			button.add_theme_color_override("font_color", Color(0, 1, 0))
+func update_motor_selection() -> void:
+	var b: Button = $UI/ComponentSelectors/MotorSelector/MotorButton
+	b.text = "Двигатели: " + current_motor_type
+	for bt in motor_buttons:
+		if bt.text == current_motor_type:
+			bt.add_theme_color_override("font_color", Color(0, 1, 0))
 		else:
-			button.add_theme_color_override("font_color", Color(1, 1, 1))
+			bt.add_theme_color_override("font_color", Color(1, 1, 1))
 
-func update_propeller_selection():
-	var propeller_button = $UI/ComponentSelectors/PropellerSelector/PropellerButton
-	propeller_button.text = "Пропеллеры: " + current_propeller_type
-	
-	for button in propeller_buttons:
-		if button.text == current_propeller_type:
-			button.add_theme_color_override("font_color", Color(0, 1, 0))
+func update_propeller_selection() -> void:
+	var b: Button = $UI/ComponentSelectors/PropellerSelector/PropellerButton
+	b.text = "Пропеллеры: " + current_propeller_type
+	for bt in propeller_buttons:
+		if bt.text == current_propeller_type:
+			bt.add_theme_color_override("font_color", Color(0, 1, 0))
 		else:
-			button.add_theme_color_override("font_color", Color(1, 1, 1))
+			bt.add_theme_color_override("font_color", Color(1, 1, 1))
 
-# ==================== СИСТЕМА УПРАВЛЕНИЯ ДОСТУПНОСТЬЮ ====================
-func update_buttons_availability():
-	update_frame_availability()
-	update_board_availability()
-	update_motor_availability()
-	update_propeller_availability()
-	
-	update_current_selections()
-	update_balance_warning()
+# ==================== СОХРАНЕНИЕ / ЗАГРУЗКА + СКРИНШОТЫ ====================
+func add_save_load_buttons() -> void:
+	if $UI.has_node("SaveLoadContainer"):
+		load_slots_info()
+		return
 
-func update_frame_availability():
-	for button in frame_buttons:
-		var frame_name = button.text
-		var is_available = Global.is_component_available("frame", frame_name)
-		
-		if is_available:
-			button.disabled = false
-			button.tooltip_text = "Доступно"
-		else:
-			button.disabled = true
-			button.add_theme_color_override("font_color", Color(1, 0, 0))
-			button.tooltip_text = "Не куплено в магазине"
-
-func update_board_availability():
-	for button in board_buttons:
-		var board_name = button.text
-		var is_available = Global.is_component_available("board", board_name)
-		
-		if is_available:
-			button.disabled = false
-			button.tooltip_text = "Доступно"
-		else:
-			button.disabled = true
-			button.add_theme_color_override("font_color", Color(1, 0, 0))
-			button.tooltip_text = "Не куплено в магазине"
-
-func update_motor_availability():
-	for button in motor_buttons:
-		var motor_name = button.text
-		var is_available = Global.is_component_available("motor", motor_name)
-		
-		if is_available:
-			button.disabled = false
-			button.tooltip_text = "Доступно"
-		else:
-			button.disabled = true
-			button.add_theme_color_override("font_color", Color(1, 0, 0))
-			button.tooltip_text = "Не куплено в магазине"
-
-func update_propeller_availability():
-	for button in propeller_buttons:
-		var propeller_name = button.text
-		var is_available = Global.is_component_available("propeller", propeller_name)
-		
-		if is_available:
-			button.disabled = false
-			button.tooltip_text = "Доступно"
-		else:
-			button.disabled = true
-			button.add_theme_color_override("font_color", Color(1, 0, 0))
-			button.tooltip_text = "Не куплено в магазине"
-
-func update_current_selections():
-	if not Global.is_component_available("", current_frame_type):
-		current_frame_type = get_first_available_component(frame_prefabs.keys())
-		update_frame_selection()
-	
-	if not Global.is_component_available("", current_board_type):
-		current_board_type = get_first_available_component(board_prefabs.keys())
-		update_board_selection()
-	
-	if not Global.is_component_available("", current_motor_type):
-		current_motor_type = get_first_available_component(motor_prefabs.keys())
-		update_motor_selection()
-	
-	if not Global.is_component_available("", current_propeller_type):
-		current_propeller_type = get_first_available_component(propeller_prefabs.keys())
-		update_propeller_selection()
-
-func get_first_available_component(component_names: Array) -> String:
-	for name in component_names:
-		if Global.is_component_available("", name):
-			return name
-	return component_names[0] if component_names.size() > 0 else ""
-
-func update_balance_warning():
-	var warning_label = $UI.get_node_or_null("BalanceWarning")
-	if not warning_label:
-		warning_label = Label.new()
-		warning_label.name = "BalanceWarning"
-		warning_label.position = Vector2(20, 100)
-		warning_label.add_theme_font_size_override("font_size", 16)
-		$UI.add_child(warning_label)
-	
-	if not drone_stats["is_balanced"]:
-		warning_label.add_theme_color_override("font_color", Color.RED)
-		warning_label.text = "⚠️ ДРОН НЕСБАЛАНСИРОВАН! Добавьте %d моторов" % drone_stats["missing_motors"]
-	else:
-		warning_label.add_theme_color_override("font_color", Color.GREEN)
-		warning_label.text = "✅ Дрон сбалансирован"
-
-# ==================== СИСТЕМА СОХРАНЕНИЯ И ЗАГРУЗКИ ====================
-func add_save_load_buttons():
-	var save_load_container = HBoxContainer.new()
-	save_load_container.position = Vector2(1920/2-150, 0)
+	var save_load_container: HBoxContainer = HBoxContainer.new()
+	save_load_container.name = "SaveLoadContainer"
+	save_load_container.position = Vector2(1920 / 2 - 150, 0)
 	save_load_container.size = Vector2(300, 50)
-	
-	var save_button = Button.new()
+
+	var save_button: Button = Button.new()
 	save_button.text = "💾 Сохранить"
 	save_button.custom_minimum_size = Vector2(90, 40)
-	save_button.connect("pressed", show_save_menu)
-	
-	var load_button = Button.new()
+	save_button.pressed.connect(show_save_menu)
+
+	var load_button: Button = Button.new()
 	load_button.text = "📂 Загрузить"
 	load_button.custom_minimum_size = Vector2(90, 40)
-	load_button.connect("pressed", show_load_menu)
-	
-	var export_button = Button.new()
+	load_button.pressed.connect(show_load_menu)
+
+	var export_button: Button = Button.new()
 	export_button.text = "🚀 Экспорт"
 	export_button.custom_minimum_size = Vector2(90, 40)
-	export_button.connect("pressed", export_drone_scene)
-	
+	export_button.pressed.connect(export_drone_scene)
+
 	save_load_container.add_child(save_button)
 	save_load_container.add_child(load_button)
 	save_load_container.add_child(export_button)
-	
+
 	$UI.add_child(save_load_container)
-	
 	load_slots_info()
 
-func show_save_menu():
-	if current_save_ui and is_instance_valid(current_save_ui):
+func show_save_menu() -> void:
+	if current_save_ui != null and is_instance_valid(current_save_ui):
 		current_save_ui.queue_free()
-	
 	current_save_ui = create_slot_menu(true, "СОХРАНЕНИЕ ДРОНА")
 	$UI.add_child(current_save_ui)
 
-func show_load_menu():
-	if current_save_ui and is_instance_valid(current_save_ui):
+func show_load_menu() -> void:
+	if current_save_ui != null and is_instance_valid(current_save_ui):
 		current_save_ui.queue_free()
-	
 	current_save_ui = create_slot_menu(false, "ЗАГРУЗКА ДРОНА")
 	$UI.add_child(current_save_ui)
 
-func load_slots_info():
+func _slot_json_path(slot_index: int) -> String:
+	return "user://drone_slot_%d.json" % slot_index
+
+func _slot_thumb_path(slot_index: int) -> String:
+	return "user://drone_slot_%d.png" % slot_index
+
+func _load_slot_thumbnail(slot_index: int) -> Texture2D:
+	var path: String = _slot_thumb_path(slot_index)
+	if not FileAccess.file_exists(path):
+		return null
+
+	var img: Image = Image.new()
+	var err: int = img.load(path)
+	if err != OK:
+		return null
+
+	var tex: ImageTexture = ImageTexture.new()
+	tex.set_image(img)
+	return tex
+
+func _save_slot_thumbnail(slot_index: int) -> void:
+	# Стараемся снять центр экрана (дрон обычно в центре)
+	var ui_node: CanvasLayer = get_node_or_null("UI") as CanvasLayer
+	var was_visible: bool = true
+	if ui_node != null:
+		was_visible = ui_node.visible
+		ui_node.visible = false
+
+	var vp_tex: Texture2D = get_viewport().get_texture()
+	if vp_tex == null:
+		if ui_node != null:
+			ui_node.visible = was_visible
+		return
+
+	var img: Image = vp_tex.get_image()
+	if ui_node != null:
+		ui_node.visible = was_visible
+
+	if img == null:
+		return
+
+	img.flip_y()
+
+	var w: int = img.get_width()
+	var h: int = img.get_height()
+	var size: int = min(w, h)
+	var crop_size: int = min(size, 512)
+	var x: int = (w - crop_size) / 2
+	var y: int = (h - crop_size) / 2
+
+	var region: Image = img.get_region(Rect2i(x, y, crop_size, crop_size))
+	region.resize(256, 256, Image.INTERPOLATE_BILINEAR)
+	region.save_png(_slot_thumb_path(slot_index))
+
+func load_slots_info() -> void:
 	for i in range(3):
-		var file_path = "user://drone_slot_%d.json" % i
+		var file_path: String = _slot_json_path(i)
 		if FileAccess.file_exists(file_path):
-			var file = FileAccess.open(file_path, FileAccess.READ)
-			if file:
-				var json_string = file.get_as_text()
+			var file: FileAccess = FileAccess.open(file_path, FileAccess.READ)
+			if file != null:
+				var json_string: String = file.get_as_text()
 				file.close()
-				
-				var json = JSON.new()
-				var parse_result = json.parse(json_string)
-				
+
+				var json: JSON = JSON.new()
+				var parse_result: int = json.parse(json_string)
 				if parse_result == OK:
-					var data = json.get_data()
-					if data and typeof(data) == TYPE_DICTIONARY:
-						var frame_data = data.get("frame", {})
-						var frame_type = "Неизвестно"
-						if frame_data and typeof(frame_data) == TYPE_DICTIONARY:
-							frame_type = frame_data.get("component_type", "Неизвестно")
-						
-						var motors_array = data.get("motors", [])
-						var motors_count = 0
-						if motors_array and typeof(motors_array) == TYPE_ARRAY:
-							motors_count = motors_array.size()
-						
-						var has_board = data.has("board") and data["board"] != null
-						
+					var data: Variant = json.get_data()
+					if typeof(data) == TYPE_DICTIONARY:
+						var d: Dictionary = data
+						var frame_data: Dictionary = d.get("frame", {})
+						var frame_type: String = "Неизвестно"
+						if typeof(frame_data) == TYPE_DICTIONARY:
+							frame_type = str(frame_data.get("component_type", "Неизвестно"))
+
+						var motors_array: Array = d.get("motors", [])
+						var motors_count: int = motors_array.size()
+
+						var has_board: bool = d.has("board") and d["board"] != null
+
 						save_slots[i] = {
 							"frame": frame_type,
 							"motors_count": motors_count,
@@ -1560,13 +1585,15 @@ func load_slots_info():
 			save_slots[i] = null
 
 func create_slot_menu(is_save_mode: bool, title: String) -> Panel:
-	var menu_panel = Panel.new()
+	var menu_panel: Panel = Panel.new()
 	menu_panel.name = "SlotMenu"
-	var viewport_size = Vector2(get_viewport().get_visible_rect().size)
-	menu_panel.position = (viewport_size - menu_panel.size) / 2
+	menu_panel.size = Vector2(760, 420)
+
+	var viewport_size: Vector2 = Vector2(get_viewport().size)
+	menu_panel.position = (viewport_size - menu_panel.size) / 2.0
 	menu_panel.z_index = 100
-	
-	var style = StyleBoxFlat.new()
+
+	var style: StyleBoxFlat = StyleBoxFlat.new()
 	style.bg_color = Color(0.1, 0.1, 0.2, 0.95)
 	style.border_color = Color(0.3, 0.5, 1.0)
 	style.border_width_left = 4
@@ -1578,80 +1605,96 @@ func create_slot_menu(is_save_mode: bool, title: String) -> Panel:
 	style.corner_radius_bottom_right = 12
 	style.corner_radius_bottom_left = 12
 	menu_panel.add_theme_stylebox_override("panel", style)
-	
-	var container = VBoxContainer.new()
+
+	var container: VBoxContainer = VBoxContainer.new()
 	container.size = menu_panel.size
 	container.alignment = BoxContainer.ALIGNMENT_CENTER
-	
-	var title_label = Label.new()
+
+	var title_label: Label = Label.new()
 	title_label.text = title
 	title_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title_label.add_theme_font_size_override("font_size", 28)
 	title_label.add_theme_color_override("font_color", Color.WHITE)
 	title_label.custom_minimum_size = Vector2(0, 60)
-	
-	var slots_container = HBoxContainer.new()
-	slots_container.custom_minimum_size = Vector2(700, 250)
+
+	var slots_container: HBoxContainer = HBoxContainer.new()
+	slots_container.custom_minimum_size = Vector2(700, 280)
 	slots_container.alignment = BoxContainer.ALIGNMENT_CENTER
-	
+
 	for slot_index in range(3):
-		var slot_button = create_slot_button(slot_index, is_save_mode)
+		var slot_button: Button = create_slot_button(slot_index, is_save_mode)
 		slots_container.add_child(slot_button)
-	
-	var close_button = Button.new()
+
+	var close_button: Button = Button.new()
 	close_button.text = "ЗАКРЫТЬ"
 	close_button.custom_minimum_size = Vector2(200, 50)
 	close_button.add_theme_font_size_override("font_size", 18)
-	close_button.connect("pressed", menu_panel.queue_free)
-	
+	close_button.pressed.connect(menu_panel.queue_free)
+
 	container.add_child(title_label)
 	container.add_child(slots_container)
 	container.add_child(close_button)
-	
+
 	menu_panel.add_child(container)
 	return menu_panel
 
 func create_slot_button(slot_index: int, is_save_mode: bool) -> Button:
-	var slot_button = Button.new()
+	var slot_button: Button = Button.new()
 	slot_button.name = "SlotButton_%d" % slot_index
-	slot_button.custom_minimum_size = Vector2(200, 200)
-	slot_button.add_theme_font_size_override("font_size", 16)
-	
+	slot_button.custom_minimum_size = Vector2(220, 250)
+	slot_button.add_theme_font_size_override("font_size", 14)
+
 	var slot_data = save_slots[slot_index]
-	var slot_text = "СЛОТ %d\n\n" % (slot_index + 1)
-	
-	if slot_data:
+	var slot_text: String = "СЛОТ %d\n\n" % (slot_index + 1)
+
+	if slot_data != null:
 		slot_text += "✅ Сохранение:\n"
-		slot_text += "Рама: %s\n" % slot_data["frame"]
-		slot_text += "Двигатели: %d/4\n" % slot_data["motors_count"]
-		slot_text += "Плата: %s\n" % ("✅" if slot_data["has_board"] else "❌")
-		
-		if is_save_mode:
-			slot_text += "\n⚠️ Нажмите для ПЕРЕЗАПИСИ"
-		else:
-			slot_text += "\n🎯 Нажмите для ЗАГРУЗКИ"
+		slot_text += "Рама: %s\n" % str(slot_data["frame"])
+		slot_text += "Двигатели: %d/4\n" % int(slot_data["motors_count"])
+		slot_text += "Плата: %s\n" % ("✅" if bool(slot_data["has_board"]) else "❌")
+		slot_text += "\n⚠️ Нажмите для ПЕРЕЗАПИСИ" if is_save_mode else "\n🎯 Нажмите для ЗАГРУЗКИ"
 	else:
 		slot_text += "📭 Пусто\n\n"
-		if is_save_mode:
-			slot_text += "💾 Нажмите для СОХРАНЕНИЯ"
-		else:
-			slot_text += "❌ Нет сохранения"
-	
-	slot_button.text = slot_text
-	
-	var button_style = StyleBoxFlat.new()
-	
-	if slot_data:
-		if is_save_mode:
-			button_style.bg_color = Color(0.9, 0.7, 0.1, 0.8)
-		else:
-			button_style.bg_color = Color(0.1, 0.7, 0.3, 0.8)
+		slot_text += "💾 Нажмите для СОХРАНЕНИЯ" if is_save_mode else "❌ Нет сохранения"
+
+	# Внутренний layout: превью + текст
+	slot_button.text = ""
+
+	var vbox: VBoxContainer = VBoxContainer.new()
+	vbox.anchor_left = 0
+	vbox.anchor_top = 0
+	vbox.anchor_right = 1
+	vbox.anchor_bottom = 1
+	vbox.offset_left = 8
+	vbox.offset_top = 8
+	vbox.offset_right = -8
+	vbox.offset_bottom = -8
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	slot_button.add_child(vbox)
+
+	var tex_rect: TextureRect = TextureRect.new()
+	tex_rect.custom_minimum_size = Vector2(200, 110)
+	tex_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tex_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	var thumb: Texture2D = _load_slot_thumbnail(slot_index)
+	if thumb != null:
+		tex_rect.texture = thumb
+
+	var label: Label = Label.new()
+	label.text = slot_text
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	vbox.add_child(tex_rect)
+	vbox.add_child(label)
+
+	var button_style: StyleBoxFlat = StyleBoxFlat.new()
+	if slot_data != null:
+		button_style.bg_color = Color(0.9, 0.7, 0.1, 0.8) if is_save_mode else Color(0.1, 0.7, 0.3, 0.8)
 	else:
-		if is_save_mode:
-			button_style.bg_color = Color(0.1, 0.5, 0.9, 0.8)
-		else:
-			button_style.bg_color = Color(0.3, 0.3, 0.3, 0.8)
-	
+		button_style.bg_color = Color(0.1, 0.5, 0.9, 0.8) if is_save_mode else Color(0.3, 0.3, 0.3, 0.8)
+
 	button_style.border_color = Color(1, 1, 1, 0.6)
 	button_style.border_width_left = 2
 	button_style.border_width_top = 2
@@ -1661,249 +1704,253 @@ func create_slot_button(slot_index: int, is_save_mode: bool) -> Button:
 	button_style.corner_radius_top_right = 8
 	button_style.corner_radius_bottom_right = 8
 	button_style.corner_radius_bottom_left = 8
-	
+
 	slot_button.add_theme_stylebox_override("normal", button_style)
-	
-	if is_save_mode or slot_data:
-		slot_button.connect("pressed", _on_slot_button_pressed.bind(slot_index, is_save_mode))
+
+	if is_save_mode or slot_data != null:
+		slot_button.pressed.connect(_on_slot_button_pressed.bind(slot_index, is_save_mode))
 	else:
 		slot_button.disabled = true
-	
+
 	return slot_button
 
-func _on_slot_button_pressed(slot_index: int, is_save_mode: bool):
+func _on_slot_button_pressed(slot_index: int, is_save_mode: bool) -> void:
 	if is_save_mode:
 		save_drone_to_slot(slot_index)
 	else:
 		load_drone_from_slot(slot_index)
-	
-	if current_save_ui and is_instance_valid(current_save_ui):
+
+	if current_save_ui != null and is_instance_valid(current_save_ui):
 		current_save_ui.queue_free()
-	
+
 	show_slot_action_message(slot_index, is_save_mode)
 
-func save_drone_to_slot(slot_index: int):
-	var drone_data = {
+func save_drone_to_slot(slot_index: int) -> void:
+	var drone_data: Dictionary = {
 		"frame": get_component_data(drone_frame),
-		"board": get_component_data(drone_board) if drone_board else null,
+		"board": get_component_data(drone_board) if (drone_board != null) else null,
 		"motors": [],
 		"propellers": []
 	}
-	
-	for motor in motors:
-		if is_instance_valid(motor):
+
+	for m in motors:
+		var motor: Node3D = m as Node3D
+		if motor != null and is_instance_valid(motor):
 			drone_data["motors"].append(get_component_data(motor))
-	
-	for propeller in propellers:
-		if is_instance_valid(propeller):
-			drone_data["propellers"].append(get_component_data(propeller))
-	
-	var file = FileAccess.open("user://drone_slot_%d.json" % slot_index, FileAccess.WRITE)
-	if file:
+
+	for p in propellers:
+		var prop: Node3D = p as Node3D
+		if prop != null and is_instance_valid(prop):
+			drone_data["propellers"].append(get_component_data(prop))
+
+	var file: FileAccess = FileAccess.open(_slot_json_path(slot_index), FileAccess.WRITE)
+	if file != null:
 		file.store_string(JSON.stringify(drone_data))
 		file.close()
-		
-		save_slots[slot_index] = {
-			"frame": current_frame_type,
-			"motors_count": motors.size(),
-			"has_board": drone_board != null
-		}
 
-func load_drone_from_slot(slot_index: int):
-	var file_path = "user://drone_slot_%d.json" % slot_index
-	if FileAccess.file_exists(file_path):
-		var file = FileAccess.open(file_path, FileAccess.READ)
-		if file:
-			var json_string = file.get_as_text()
-			file.close()
-			
-			var json = JSON.new()
-			var parse_result = json.parse(json_string)
-			
-			if parse_result == OK:
-				var drone_data = json.get_data()
-				if drone_data and typeof(drone_data) == TYPE_DICTIONARY:
-					clear_drone()
-					create_drone_from_data(drone_data)
+	_save_slot_thumbnail(slot_index)
 
-func get_component_data(component):
+	save_slots[slot_index] = {
+		"frame": current_frame_type,
+		"motors_count": motors.size(),
+		"has_board": drone_board != null
+	}
+
+func load_drone_from_slot(slot_index: int) -> void:
+	var file_path: String = _slot_json_path(slot_index)
+	if not FileAccess.file_exists(file_path):
+		return
+
+	var file: FileAccess = FileAccess.open(file_path, FileAccess.READ)
+	if file == null:
+		return
+
+	var json_string: String = file.get_as_text()
+	file.close()
+
+	var json: JSON = JSON.new()
+	var parse_result: int = json.parse(json_string)
+	if parse_result != OK:
+		return
+
+	var data: Variant = json.get_data()
+	if typeof(data) != TYPE_DICTIONARY:
+		return
+
+	clear_drone()
+	create_drone_from_data(data)
+
+func get_component_data(component: Node3D) -> Variant:
 	if component == null or not is_instance_valid(component):
 		return null
-	
-	var component_type = ""
-	
+
+	var component_type: String = ""
 	if component == drone_frame:
 		component_type = current_frame_type
 	elif component == drone_board:
 		component_type = current_board_type
-	elif component in motors:
+	elif motors.has(component):
 		component_type = current_motor_type
-	elif component in propellers:
+		if component.has_meta("component_type"):
+			component_type = str(component.get_meta("component_type"))
+	elif propellers.has(component):
 		component_type = current_propeller_type
-	
+		if component.has_meta("component_type"):
+			component_type = str(component.get_meta("component_type"))
+
+	var comp_name: String = component_type
+	if component.has_method("get_component_name"):
+		comp_name = str(component.call("get_component_name"))
+
 	return {
 		"component_type": component_type,
-		"component_name": component.component_name if component.has_method("get_component_name") else component_type,
-		"position": {
-			"x": component.position.x,
-			"y": component.position.y,
-			"z": component.position.z
-		},
-		"rotation": {
-			"x": component.rotation.x,
-			"y": component.rotation.y,
-			"z": component.rotation.z
-		}
+		"component_name": comp_name,
+		"position": {"x": component.position.x, "y": component.position.y, "z": component.position.z},
+		"rotation": {"x": component.rotation.x, "y": component.rotation.y, "z": component.rotation.z}
 	}
 
-func create_drone_from_data(drone_data):
+func create_drone_from_data(drone_data: Dictionary) -> void:
 	clear_drone()
-	
-	if drone_data.get("frame"):
+
+	if drone_data.has("frame") and drone_data["frame"] != null:
 		add_frame_from_data(drone_data["frame"])
-	
-	if drone_data.get("board"):
+	if drone_data.has("board") and drone_data["board"] != null:
 		add_board_from_data(drone_data["board"])
-	
-	if drone_data.get("motors"):
+	if drone_data.has("motors"):
 		for motor_data in drone_data["motors"]:
 			add_motor_from_data(motor_data)
-	
-	if drone_data.get("propellers"):
-		for propeller_data in drone_data["propellers"]:
-			add_propeller_from_data(propeller_data)
-	
+	if drone_data.has("propellers"):
+		for prop_data in drone_data["propellers"]:
+			add_propeller_from_data(prop_data)
+
+	calculate_drone_stats()
 	update_component_list()
 
-func add_frame_from_data(frame_data):
-	if frame_data == null:
+func add_frame_from_data(frame_data: Dictionary) -> void:
+	var frame_type: String = str(frame_data.get("component_type", "Рама1"))
+	var prefab: PackedScene = frame_prefabs.get(frame_type, null)
+	if prefab == null:
 		return
-		
-	var frame_type = frame_data.get("component_type", "Рама1")
-	var frame_prefab = frame_prefabs.get(frame_type)
-	
-	if frame_prefab:
-		var new_frame = frame_prefab.instantiate()
-		$Components.add_child(new_frame)
-		new_frame.position = Vector3(frame_data["position"]["x"], frame_data["position"]["y"], frame_data["position"]["z"])
-		new_frame.rotation = Vector3(frame_data["rotation"]["x"], frame_data["rotation"]["y"], frame_data["rotation"]["z"])
-		drone_frame = new_frame
-		current_frame_type = frame_type
-		update_frame_selection()
 
-func add_board_from_data(board_data):
-	if board_data == null:
+	var new_frame: Node3D = prefab.instantiate() as Node3D
+	$Components.add_child(new_frame)
+
+	new_frame.position = Vector3(frame_data["position"]["x"], frame_data["position"]["y"], frame_data["position"]["z"])
+	new_frame.rotation = Vector3(frame_data["rotation"]["x"], frame_data["rotation"]["y"], frame_data["rotation"]["z"])
+
+	drone_frame = new_frame
+	current_frame_type = frame_type
+	update_frame_selection()
+
+func add_board_from_data(board_data: Dictionary) -> void:
+	var board_type: String = str(board_data.get("component_type", "Плата1"))
+	var prefab: PackedScene = board_prefabs.get(board_type, null)
+	if prefab == null:
 		return
-		
-	var board_type = board_data.get("component_type", "Плата1")
-	var board_prefab = board_prefabs.get(board_type)
-	
-	if board_prefab:
-		var new_board = board_prefab.instantiate()
-		$Components.add_child(new_board)
-		new_board.position = Vector3(board_data["position"]["x"], board_data["position"]["y"], board_data["position"]["z"])
-		new_board.rotation = Vector3(board_data["rotation"]["x"], board_data["rotation"]["y"], board_data["rotation"]["z"])
-		drone_board = new_board
-		current_board_type = board_type
-		update_board_selection()
 
-func add_motor_from_data(motor_data):
-	if motor_data == null:
+	var new_board: Node3D = prefab.instantiate() as Node3D
+	$Components.add_child(new_board)
+
+	new_board.position = Vector3(board_data["position"]["x"], board_data["position"]["y"], board_data["position"]["z"])
+	new_board.rotation = Vector3(board_data["rotation"]["x"], board_data["rotation"]["y"], board_data["rotation"]["z"])
+
+	drone_board = new_board
+	current_board_type = board_type
+	update_board_selection()
+
+func add_motor_from_data(motor_data: Dictionary) -> void:
+	var motor_type: String = str(motor_data.get("component_type", "Мотор1"))
+	var prefab: PackedScene = motor_prefabs.get(motor_type, null)
+	if prefab == null:
 		return
-		
-	var motor_type = motor_data.get("component_type", "Мотор1")
-	var motor_prefab = motor_prefabs.get(motor_type)
-	
-	if motor_prefab:
-		var new_motor = motor_prefab.instantiate()
-		$Components.add_child(new_motor)
-		new_motor.position = Vector3(motor_data["position"]["x"], motor_data["position"]["y"], motor_data["position"]["z"])
-		new_motor.rotation = Vector3(motor_data["rotation"]["x"], motor_data["rotation"]["y"], motor_data["rotation"]["z"])
-		motors.append(new_motor)
-		
-		if motors.size() == 1:
-			current_motor_type = motor_type
-			update_motor_selection()
 
-func add_propeller_from_data(propeller_data):
-	if propeller_data == null:
+	var new_motor: Node3D = prefab.instantiate() as Node3D
+	$Components.add_child(new_motor)
+
+	new_motor.position = Vector3(motor_data["position"]["x"], motor_data["position"]["y"], motor_data["position"]["z"])
+	new_motor.rotation = Vector3(motor_data["rotation"]["x"], motor_data["rotation"]["y"], motor_data["rotation"]["z"])
+	new_motor.set_meta("component_type", motor_type)
+
+	motors.append(new_motor)
+
+	if motors.size() == 1:
+		current_motor_type = motor_type
+		update_motor_selection()
+
+func add_propeller_from_data(prop_data: Dictionary) -> void:
+	var prop_type: String = str(prop_data.get("component_type", "Пропеллер1"))
+	var prefab: PackedScene = propeller_prefabs.get(prop_type, null)
+	if prefab == null:
 		return
-		
-	var propeller_type = propeller_data.get("component_type", "Пропеллер1")
-	var propeller_prefab = propeller_prefabs.get(propeller_type)
-	
-	if propeller_prefab:
-		var new_propeller = propeller_prefab.instantiate()
-		$Components.add_child(new_propeller)
-		new_propeller.position = Vector3(propeller_data["position"]["x"], propeller_data["position"]["y"], propeller_data["position"]["z"])
-		new_propeller.rotation = Vector3(propeller_data["rotation"]["x"], propeller_data["rotation"]["y"], propeller_data["rotation"]["z"])
-		propellers.append(new_propeller)
-		
-		if propellers.size() == 1:
-			current_propeller_type = propeller_type
-			update_propeller_selection()
 
-func show_slot_action_message(slot_index: int, is_save_mode: bool):
-	var message_panel = Panel.new()
+	var new_prop: Node3D = prefab.instantiate() as Node3D
+	$Components.add_child(new_prop)
+
+	new_prop.position = Vector3(prop_data["position"]["x"], prop_data["position"]["y"], prop_data["position"]["z"])
+	new_prop.rotation = Vector3(prop_data["rotation"]["x"], prop_data["rotation"]["y"], prop_data["rotation"]["z"])
+	new_prop.set_meta("component_type", prop_type)
+
+	propellers.append(new_prop)
+
+	if propellers.size() == 1:
+		current_propeller_type = prop_type
+		update_propeller_selection()
+
+func show_slot_action_message(slot_index: int, is_save_mode: bool) -> void:
+	var message_panel: Panel = Panel.new()
 	message_panel.name = "SlotActionMessage"
 	message_panel.size = Vector2(400, 150)
-	var viewport_size = Vector2(get_viewport().get_visible_rect().size)
-	message_panel.position = (viewport_size - message_panel.size) / 2
+
+	var viewport_size: Vector2 = Vector2(get_viewport().size)
+	message_panel.position = (viewport_size - message_panel.size) / 2.0
 	message_panel.z_index = 101
-	
-	var style = StyleBoxFlat.new()
-	if is_save_mode:
-		style.bg_color = Color(0.1, 0.7, 0.3, 0.9)
-	else:
-		style.bg_color = Color(0.1, 0.5, 0.9, 0.9)
-	
+
+	var style: StyleBoxFlat = StyleBoxFlat.new()
+	style.bg_color = Color(0.1, 0.7, 0.3, 0.9) if is_save_mode else Color(0.1, 0.5, 0.9, 0.9)
 	style.border_color = Color(1, 1, 1, 0.8)
 	style.border_width_left = 3
 	style.border_width_top = 3
 	style.border_width_right = 3
 	style.border_width_bottom = 3
 	message_panel.add_theme_stylebox_override("panel", style)
-	
-	var label = Label.new()
+
+	var label: Label = Label.new()
 	label.text = "✅ %s В СЛОТЕ %d!" % ["СОХРАНЕНО" if is_save_mode else "ЗАГРУЖЕНО", slot_index + 1]
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.add_theme_font_size_override("font_size", 20)
 	label.add_theme_color_override("font_color", Color.WHITE)
 	label.size = message_panel.size
-	
+
 	message_panel.add_child(label)
 	$UI.add_child(message_panel)
-	
-	await get_tree().create_timer(2.0).timeout
-	if message_panel and is_instance_valid(message_panel):
-		message_panel.queue_free()
+
+	var timer: SceneTreeTimer = get_tree().create_timer(2.0)
+	timer.timeout.connect(_queue_free_safe.bind(message_panel))
+
+func _queue_free_safe(node: Node) -> void:
+	if node != null and is_instance_valid(node):
+		node.queue_free()
 
 # ==================== ЭКСПОРТ ДРОНА ====================
-func export_drone_scene():
+func export_drone_scene() -> bool:
 	calculate_drone_stats()
 	ensure_propellers_marked()
-	
-	# Рассчитываем физические параметры
-	var physics_data = calculate_physics_data()
-	
-	# СОЗДАЕМ КОРНЕВОЙ УЗЕЛ ДРОНА КАК CharacterBody3D
-	var drone_root = CharacterBody3D.new()
+
+	var physics_data: Dictionary = calculate_physics_data()
+
+	var drone_root: CharacterBody3D = CharacterBody3D.new()
 	drone_root.name = "ExportedDrone"
-	
-	# ДОБАВЛЯЕМ СКРИПТ ДРОНА
-	var drone_script = load("res://DroneLevels/Drone.gd")
-	if drone_script:
+
+	var drone_script: Script = load("res://DroneLevels/Drone.gd")
+	if drone_script != null:
 		drone_root.set_script(drone_script)
-	
-	# КОПИРУЕМ ВСЕ КОМПОНЕНТЫ ИЗ $Components В ДРОНА
+
 	copy_components_to_drone(drone_root)
-	
-	# Сохраняем физические данные
+
 	drone_root.set_meta("drone_physics", physics_data)
-	
-	# Сохраняем информацию о количестве компонентов
-	var drone_info = {
+
+	var drone_info: Dictionary = {
 		"frame_type": current_frame_type,
 		"board_type": current_board_type,
 		"motor_type": current_motor_type,
@@ -1913,143 +1960,80 @@ func export_drone_scene():
 		"motors": [],
 		"propellers": []
 	}
-	
-	# Сохраняем позиции моторов
-	for motor in motors:
-		if is_instance_valid(motor):
+
+	for m in motors:
+		var motor: Node3D = m as Node3D
+		if motor != null and is_instance_valid(motor):
 			drone_info["motors"].append({
 				"position": motor.global_position,
 				"rotation": motor.rotation,
 				"type": current_motor_type
 			})
-	
-	# Сохраняем позиции пропеллеров
-	for propeller in propellers:
-		if is_instance_valid(propeller):
+
+	for p in propellers:
+		var prop: Node3D = p as Node3D
+		if prop != null and is_instance_valid(prop):
 			drone_info["propellers"].append({
-				"position": propeller.global_position,
-				"rotation": propeller.rotation,
+				"position": prop.global_position,
+				"rotation": prop.rotation,
 				"type": current_propeller_type
 			})
-	
-	# Сохраняем информацию о дроне
+
 	drone_root.set_meta("drone_info", drone_info)
-	
-	# Сохраняем сцену
-	var packed_scene = PackedScene.new()
-	var result = packed_scene.pack(drone_root)
-	
+
+	var packed_scene: PackedScene = PackedScene.new()
+	var result: int = packed_scene.pack(drone_root)
+
 	if result == OK:
-		# Сохраняем в двух местах для надежности
 		ResourceSaver.save(packed_scene, "user://exported_drone.tscn")
 		ResourceSaver.save(packed_scene, "res://exported_drone.tscn")
-		
+
 		print("✅ Дрон экспортирован!")
-		print("📊 Информация о дроне:")
 		print("   - Тип ноды: ", drone_root.get_class())
 		print("   - Моторов: ", motors.size())
 		print("   - Пропеллеров: ", propellers.size())
-		print("   - Компонентов детей: ", drone_root.get_child_count())
-		
-		# Показываем сообщение об успехе
+		print("   - Детей: ", drone_root.get_child_count())
+
 		show_export_success_message()
 		return true
-	else:
-		print("❌ Ошибка при упаковке сцены дрона")
-		return false
-		
-func copy_components_to_drone(drone_root: CharacterBody3D):
-	"""Копирует все компоненты из $Components в корень дрона"""
-	# Копируем все дети из $Components
+
+	print("❌ Ошибка упаковки сцены дрона")
+	return false
+
+func copy_components_to_drone(drone_root: CharacterBody3D) -> void:
 	for child in $Components.get_children():
-		if is_instance_valid(child):
-			var child_copy = child.duplicate()
+		var node: Node = child as Node
+		if node != null and is_instance_valid(node):
+			var child_copy: Node = node.duplicate()
 			drone_root.add_child(child_copy)
 			child_copy.owner = drone_root
-			print("✅ Скопирован компонент: ", child.name)
-	
-	# Убедимся, что у пропеллеров есть метаданные
-	for i in range(propellers.size()):
-		var propeller = propellers[i]
-		if is_instance_valid(propeller):
-			# Ищем скопированный пропеллер по имени
-			for drone_child in drone_root.get_children():
-				if drone_child.name == propeller.name:
-					drone_child.set_meta("is_drone_propeller", true)
-					drone_child.set_meta("propeller_index", i)
-					drone_child.set_meta("propeller_type", current_propeller_type)
-					if not drone_child.is_in_group("drone_propellers"):
-						drone_child.add_to_group("drone_propellers")
-					break
 
-func create_drone_node_for_export() -> Node3D:
-	"""Создает узел дрона для экспорта"""
-	var drone_node = Node3D.new()
-	drone_node.name = "ExportedDrone"
-	
-	# Добавляем фрейм
-	if drone_frame and is_instance_valid(drone_frame):
-		var frame_copy = drone_frame.duplicate()
-		drone_node.add_child(frame_copy)
-		frame_copy.owner = drone_node
-	
-	# Добавляем плату
-	if drone_board and is_instance_valid(drone_board):
-		var board_copy = drone_board.duplicate()
-		drone_node.add_child(board_copy)
-		board_copy.owner = drone_node
-	
-	# Добавляем моторы
-	for i in range(motors.size()):
-		var motor = motors[i]
-		if is_instance_valid(motor):
-			var motor_copy = motor.duplicate()
-			motor_copy.name = "Motor_%d" % i
-			drone_node.add_child(motor_copy)
-			motor_copy.owner = drone_node
-			print("🔧 Добавлен мотор ", i, ": ", motor_copy.name)
-	
-	# Добавляем пропеллеры
 	for i in range(propellers.size()):
-		var propeller = propellers[i]
-		if is_instance_valid(propeller):
-			var propeller_copy = propeller.duplicate()
-			propeller_copy.name = "Propeller_%d" % i
-			drone_node.add_child(propeller_copy)
-			propeller_copy.owner = drone_node
-	
-	# Добавляем метаданные
-	var drone_info = {
-		"motor_count": motors.size(),
-		"propeller_count": propellers.size(),
-		"frame_type": current_frame_type,
-		"board_type": current_board_type,
-		"motor_type": current_motor_type,
-		"propeller_type": current_propeller_type
-	}
-	
-	drone_node.set_meta("drone_info", drone_info)
-	
-	print("📦 Создан узел дрона для экспорта:")
-	print("   - Детей: ", drone_node.get_child_count())
-	print("   - Моторов: ", motors.size())
-	print("   - Пропеллеров: ", propellers.size())
-	
-	return drone_node
+		var propeller: Node3D = propellers[i]
+		if propeller == null or not is_instance_valid(propeller):
+			continue
 
-func show_export_success_message():
-	"""Показывает сообщение об успешном экспорте"""
-	var canvas = CanvasLayer.new()
+		for drone_child in drone_root.get_children():
+			var dc: Node = drone_child as Node
+			if dc != null and dc.name == propeller.name:
+				dc.set_meta("is_drone_propeller", true)
+				dc.set_meta("propeller_index", i)
+				dc.set_meta("propeller_type", current_propeller_type)
+				if not dc.is_in_group("drone_propellers"):
+					dc.add_to_group("drone_propellers")
+				break
+
+func show_export_success_message() -> void:
+	var canvas: CanvasLayer = CanvasLayer.new()
 	canvas.layer = 100
-	
-	var panel = Panel.new()
+
+	var panel: Panel = Panel.new()
 	panel.size = Vector2(500, 300)
-	
-	# ИСПРАВЛЕНИЕ: преобразуем Vector2i в Vector2
-	var viewport_size = Vector2(get_viewport().size)
-	panel.position = (viewport_size - panel.size) / 2
-	
-	var style = StyleBoxFlat.new()
+
+	var viewport_size: Vector2 = Vector2(get_viewport().size)
+	panel.position = (viewport_size - panel.size) / 2.0
+
+	var style: StyleBoxFlat = StyleBoxFlat.new()
 	style.bg_color = Color(0.1, 0.1, 0.1, 0.95)
 	style.border_color = Color(0, 1, 0)
 	style.border_width_left = 3
@@ -2057,389 +2041,101 @@ func show_export_success_message():
 	style.border_width_right = 3
 	style.border_width_bottom = 3
 	panel.add_theme_stylebox_override("panel", style)
-	
-	var label = Label.new()
+
+	var label: Label = Label.new()
 	label.text = "✅ ДРОН УСПЕШНО ЭКСПОРТИРОВАН!\n\n"
 	label.text += "Компоненты:\n"
 	label.text += "• Рама: %s\n" % current_frame_type
 	label.text += "• Моторов: %d\n" % motors.size()
 	label.text += "• Пропеллеров: %d\n\n" % propellers.size()
-
 	label.text += "Теперь можно запускать на уровне!"
-	
+
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	label.size = panel.size
 	label.add_theme_font_size_override("font_size", 16)
-	
+
 	panel.add_child(label)
 	canvas.add_child(panel)
 	add_child(canvas)
-	
-	# Автоматическое закрытие через 4 секунды
-	await get_tree().create_timer(4.0).timeout
-	canvas.queue_free()
 
-func get_drone_root_node() -> Node3D:
-	"""Возвращает корневой узел дрона"""
-	# В вашей структуре дрон собирается в $Components
-	return $Components
+	var timer: SceneTreeTimer = get_tree().create_timer(4.0)
+	timer.timeout.connect(_queue_free_safe.bind(canvas))
 
-func ensure_propellers_marked():
+func ensure_propellers_marked() -> void:
 	for i in range(propellers.size()):
-		var propeller = propellers[i]
-		if is_instance_valid(propeller):
-			# Убедимся, что у пропеллера понятное имя
-			if not propeller.name.begins_with("Propeller_"):
-				propeller.name = "Propeller_" + str(i)
-			
-			# Добавляем метаданные
-			propeller.set_meta("is_drone_propeller", true)
-			propeller.set_meta("propeller_index", i)
-			propeller.set_meta("propeller_type", current_propeller_type)
-			
-			# Добавляем в группу
-			if not propeller.is_in_group("drone_propellers"):
-				propeller.add_to_group("drone_propellers")
-			
-			print("✅ Помечен пропеллер: ", propeller.name, " (тип: ", current_propeller_type, ")")
+		var propeller: Node3D = propellers[i]
+		if propeller == null or not is_instance_valid(propeller):
+			continue
 
-# ==================== ВСПОМОГАТЕЛЬНЫЕ СИСТЕМЫ ====================
-func init_ui_components():
-	components_container = $Components
-	
-	# Инициализируем панель иерархии
-	if has_node("UI/Hierarchy"):
-		list_panel = $UI/Hierarchy
-		list_panel.visible = false  # Гарантируем, что панель скрыта при старте
-		print("✅ Панель иерархии инициализирована")
-	else:
-		print("❌ Панель иерархии не найдена")
-	
-	# Инициализируем список компонентов
-	if has_node("UI/Hierarchy/Complist"):
-		component_list = $UI/Hierarchy/Complist
-		print("✅ Список компонентов инициализирован")
-	elif has_node("UI/Hierarchy/TitleContainer/Complist"):
-		component_list = $UI/Hierarchy/TitleContainer/Complist
-		print("✅ Список компонентов инициализирован (альтернативный путь)")
-	else:
-		print("❌ Список компонентов не найден")
-		component_list = null
-	
-	# Проверяем и подключаем сигнал кнопки OpenClose, если нужно
-	if has_node("UI/OpenClose"):
-		var open_close_button = $UI/OpenClose
-		print("✅ Кнопка OpenClose найдена в сцене")
-		print("   - Позиция:", open_close_button.position)
-		print("   - Размер:", open_close_button.size)
-		
-		# Подключаем сигнал, если не подключен
-		if not open_close_button.is_connected("pressed", _on_open_close_pressed):
-			open_close_button.pressed.connect(_on_open_close_pressed)
-			print("✅ Сигнал подключен к кнопке OpenClose")
-		else:
-			print("✅ Сигнал уже подключен к кнопке OpenClose")
-	else:
-		print("❌ Кнопка OpenClose не найдена в сцене")
+		if not propeller.name.begins_with("Propeller_"):
+			propeller.name = "Propeller_" + str(i)
 
-func create_grid():
-	for x in range(-5, 6):
-		for z in range(-5, 6):
-			var grid_cube = MeshInstance3D.new()
-			var cube_mesh = BoxMesh.new()
-			cube_mesh.size = Vector3(0.9, 0.1, 0.9)
-			
-			var material = StandardMaterial3D.new()
-			material.albedo_color = Color(0.5, 0.5, 0.5, 0.3)
-			cube_mesh.material = material
-			
-			grid_cube.mesh = cube_mesh
-			grid_cube.position = Vector3(x, 0, z)
-			$Grid.add_child(grid_cube)
+		propeller.set_meta("is_drone_propeller", true)
+		propeller.set_meta("propeller_index", i)
+		propeller.set_meta("propeller_type", current_propeller_type)
 
-func create_floor_line():
-	var line_mesh = MeshInstance3D.new()
-	var immediate_mesh = ImmediateMesh.new()
-	var material = StandardMaterial3D.new()
-	
-	material.albedo_color = Color(1, 0, 0, 0.8)
-	material.flags_unshaded = true
-	
-	immediate_mesh.surface_begin(Mesh.PRIMITIVE_LINES, material)
-	immediate_mesh.surface_add_vertex(Vector3(-6, 0.02, 0))
-	immediate_mesh.surface_add_vertex(Vector3(6, 0.02, 0))
-	immediate_mesh.surface_add_vertex(Vector3(0, 0.02, -6))
-	immediate_mesh.surface_add_vertex(Vector3(0, 0.02, 6))
-	immediate_mesh.surface_end()
-	
-	line_mesh.mesh = immediate_mesh
-	add_child(line_mesh)
+		if not propeller.is_in_group("drone_propellers"):
+			propeller.add_to_group("drone_propellers")
 
-func add_room():
-	var room_scene = load("res://room3d/garage_to_create_drone/garage.glb")
-	if room_scene:
-		var room = room_scene.instantiate()
-		add_child(room)
-		room.position = Vector3(10, 0, 0)
-		room.scale = Vector3(6, 6, 6)
-		room.name = "GarageRoom"
-
-func setup_lighting():
-	var lights_container = Node3D.new()
-	lights_container.name = "LightsContainer"
-	add_child(lights_container)
-	
-	var main_light = DirectionalLight3D.new()
-	main_light.name = "MainLight"
-	lights_container.add_child(main_light)
-	main_light.light_color = Color(1, 0.9, 0.8)
-	main_light.light_energy = 0.8
-	main_light.rotation_degrees = Vector3(-60, 30, 0)
-	main_light.shadow_enabled = true
-	main_light.shadow_bias = 0.1
-	main_light.shadow_normal_bias = 1.0
-	main_light.shadow_blur = 0.5
-	
-	var fill_light = OmniLight3D.new()
-	fill_light.name = "FillLight"
-	lights_container.add_child(fill_light)
-	fill_light.position = Vector3(0, 4, 0)
-	fill_light.light_color = Color(0.8, 0.85, 1)
-	fill_light.light_energy = 0.3
-	fill_light.omni_range = 10
-	fill_light.shadow_enabled = false
-
-func add_reflection_probe():
-	var probe = ReflectionProbe.new()
-	probe.name = "MainReflectionProbe"
-	add_child(probe)
-	probe.position = Vector3(0, 2, 0)
-	probe.size = Vector3(20, 10, 20)
-	probe.update_mode = ReflectionProbe.UPDATE_ALWAYS
-
-func load_settings_menu():
-	var settings_scene = preload("res://UI/SettingsScene.tscn")
-	settings_menu = settings_scene.instantiate()
-	add_child(settings_menu)
-	settings_menu.settings_saved.connect(_on_settings_saved)
-	settings_menu.settings_cancelled.connect(_on_settings_cancelled)
-	settings_menu.settings_closed.connect(_on_settings_closed)
-
-func apply_global_settings():
-	if not Global:
-		return
-	
-	camera.fov = Global.camera_fov
-	
-	var env = get_node_or_null("WorldEnvironment")
-	if env and env.environment:
-		env.environment.adjustment_enabled = true
-		env.environment.adjustment_brightness = Global.brightness
-
-func _on_settings_saved():
-	apply_global_settings()
-
-func _on_settings_cancelled():
-	apply_global_settings()
-
-func _on_settings_closed():
-	pass
-
-# ==================== УПРАВЛЕНИЕ ИЕРАРХИЕЙ ====================
-
-# ==================== УПРАВЛЕНИЕ ИЕРАРХИЕЙ ====================
-# ==================== УПРАВЛЕНИЕ ИЕРАРХИЕЙ ====================
-func create_open_close_button():
-	# Проверяем, есть ли уже кнопка
-	if has_node("UI/OpenClose"):
-		var existing_button = $UI/OpenClose
-		print("✅ Кнопка OpenClose уже существует, исправляю...")
-		
-		# 1. Меняем позицию на видимую!
-		existing_button.position = Vector2(20, 20)  # Левый верхний угол
-		
-		# 2. Устанавливаем разумный размер
-		existing_button.custom_minimum_size = Vector2(180, 40)
-		
-		# 3. Подключаем сигнал если не подключен
-		if not existing_button.is_connected("pressed", _on_open_close_pressed):
-			existing_button.pressed.connect(_on_open_close_pressed)
-			print("✅ Сигнал подключен к кнопке OpenClose")
-		else:
-			print("✅ Сигнал уже был подключен")
-		
-		# 4. Устанавливаем видимый стиль
-		var style_box = StyleBoxFlat.new()
-		style_box.bg_color = Color(0.2, 0.4, 0.8, 0.9)
-		style_box.border_color = Color(1, 1, 1, 0.8)
-		style_box.border_width_left = 2
-		style_box.border_width_top = 2
-		style_box.border_width_right = 2
-		style_box.border_width_bottom = 2
-		existing_button.add_theme_stylebox_override("normal", style_box)
-		
-		# 5. Устанавливаем текст
-		existing_button.text = "📋 Показать список"
-		
-		return
-	
-	print("🛠️ Создаем кнопку OpenClose...")
-	
-	var open_close_button = Button.new()
-	open_close_button.name = "OpenClose"
-	open_close_button.text = "📋 Показать список"
-	open_close_button.custom_minimum_size = Vector2(180, 40)
-	
-	# ВАЖНО: ЛЕВЫЙ ВЕРХНИЙ УГОЛ, А НЕ ПРАВЫЙ!
-	open_close_button.position = Vector2(20, 20)
-	
-	open_close_button.add_theme_font_size_override("font_size", 14)
-	
-	# Подключаем сигнал
-	open_close_button.pressed.connect(_on_open_close_pressed)
-	
-	# Яркий стиль чтобы видеть кнопку
-	var style_box = StyleBoxFlat.new()
-	style_box.bg_color = Color(0.2, 0.4, 0.8, 0.9)  # Синий
-	style_box.border_color = Color(1, 1, 1, 0.8)
-	style_box.border_width_left = 2
-	style_box.border_width_top = 2
-	style_box.border_width_right = 2
-	style_box.border_width_bottom = 2
-	style_box.corner_radius_top_left = 5
-	style_box.corner_radius_top_right = 5
-	style_box.corner_radius_bottom_right = 5
-	style_box.corner_radius_bottom_left = 5
-	open_close_button.add_theme_stylebox_override("normal", style_box)
-	
-	$UI.add_child(open_close_button)
-	print("✅ Кнопка OpenClose создана в левом верхнем углу")
-
-func _on_open_close_pressed():
-	print("🔄 Кнопка OpenClose нажата!")
-	
-	# Проверяем наличие панели иерархии
-	if not has_node("UI/Hierarchy"):
-		print("❌ Панель иерархии не найдена!")
-		return
-	
-	var hierarchy_panel = $UI/Hierarchy
-	
-	# Переключаем видимость
-	hierarchy_panel.visible = not hierarchy_panel.visible
-	
-	if hierarchy_panel.visible:
-		print("📋 Панель иерархии показана")
-		# Обновляем список
-		if component_list:
-			update_component_list()
-		
-		# Меняем текст кнопки
-		if has_node("UI/OpenClose"):
-			$UI/OpenClose.text = "📋 Скрыть список"
-	else:
-		print("📋 Панель иерархии скрыта")
-		# Меняем текст кнопки обратно
-		if has_node("UI/OpenClose"):
-			$UI/OpenClose.text = "📋 Показать список"
-
-func _on_hierarchy_close_pressed():
-	print("✕ Кнопка закрытия нажата")
-	
-	if has_node("UI/Hierarchy"):
-		var hierarchy_panel = $UI/Hierarchy
-		hierarchy_panel.visible = false
-		print("📋 Панель иерархии скрыта через крестик")
-		
-		# Обновляем текст кнопки OpenClose
-		if has_node("UI/OpenClose"):
-			$UI/OpenClose.text = "📋 Показать список"
-func create_test_button():
-	var test_button = Button.new()
-	test_button.name = "TestButton"
-	test_button.text = "ТЕСТ (тыкай сюда!)"
-	test_button.custom_minimum_size = Vector2(200, 50)
-	test_button.position = Vector2(300, 50)
-	test_button.add_theme_font_size_override("font_size", 16)
-	
-	# Яркий стиль
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.2, 0.8, 0.2, 1.0)  # ЯРКО-ЗЕЛЕНЫЙ
-	style.border_color = Color(1, 1, 1, 1)
-	style.border_width_left = 3
-	style.border_width_top = 3
-	style.border_width_right = 3
-	style.border_width_bottom = 3
-	test_button.add_theme_stylebox_override("normal", style)
-	
-	test_button.pressed.connect(_on_test_button_pressed)
-	$UI.add_child(test_button)
-	print("✅ Тестовая кнопка создана")
-
-func _on_test_button_pressed():
-	print("🎉 ТЕСТОВАЯ КНОПКА РАБОТАЕТ!")
-	
-	# Проверяем, можем ли открыть панель принудительно
-	if has_node("UI/Hierarchy"):
-		var panel = $UI/Hierarchy
-		panel.visible = true
-		print("✅ Панель принудительно показана через тестовую кнопку")
-
+# ==================== ФИЗИКА ДЛЯ ЭКСПОРТА ====================
 func calculate_physics_data() -> Dictionary:
-	"""Рассчитывает физические параметры дрона"""
-	var total_mass = 0.0
-	var center_of_mass = Vector3.ZERO
-	var active_motors = 0
-	var motor_positions = []
-	
-	# Собираем данные о компонентах
-	if drone_frame:
-		total_mass += component_stats["frame"][current_frame_type]["mass"]
-	
-	if drone_board:
-		total_mass += component_stats["board"][current_board_type]["mass"]
-	
+	var total_mass: float = 0.0
+	var center_of_mass: Vector3 = Vector3.ZERO
+	var active_motors: int = 0
+	var motor_positions: Array = []
+
+	if drone_frame != null:
+		total_mass += float(component_stats["frame"][current_frame_type]["mass"])
+	if drone_board != null:
+		total_mass += float(component_stats["board"][current_board_type]["mass"])
+
 	for i in range(motors.size()):
-		if is_instance_valid(motors[i]):
-			var motor_mass = component_stats["motor"][current_motor_type]["mass"]
-			total_mass += motor_mass
-			
-			# Позиция мотора (относительно центра)
-			var motor_pos = Vector3.ZERO
-			if i == 0: motor_pos = Vector3(0.5, 0, 0.5)    # Передний правый
-			elif i == 1: motor_pos = Vector3(-0.5, 0, 0.5)  # Передний левый
-			elif i == 2: motor_pos = Vector3(0.5, 0, -0.5)  # Задний правый
-			elif i == 3: motor_pos = Vector3(-0.5, 0, -0.5) # Задний левый
-			
-			motor_positions.append({
-				"position": motor_pos,
-				"has_propeller": i < propellers.size() and is_instance_valid(propellers[i])
-			})
-			
-			if i < propellers.size() and is_instance_valid(propellers[i]):
-				active_motors += 1
-				total_mass += component_stats["propeller"][current_propeller_type]["mass"]
-	
-	# Рассчитываем стабильность
-	var stability = 1.0
+		var motor: Node3D = motors[i]
+		if motor == null or not is_instance_valid(motor):
+			continue
+
+		var motor_mass: float = float(component_stats["motor"][current_motor_type]["mass"])
+		total_mass += motor_mass
+
+		var motor_pos: Vector3 = Vector3.ZERO
+		if i == 0:
+			motor_pos = Vector3(0.5, 0, 0.5)
+		elif i == 1:
+			motor_pos = Vector3(-0.5, 0, 0.5)
+		elif i == 2:
+			motor_pos = Vector3(0.5, 0, -0.5)
+		elif i == 3:
+			motor_pos = Vector3(-0.5, 0, -0.5)
+
+		var has_prop: bool = (i < propellers.size()) and (propellers[i] != null) and is_instance_valid(propellers[i])
+		motor_positions.append({
+			"position": motor_pos,
+			"has_propeller": has_prop
+		})
+
+		if has_prop:
+			active_motors += 1
+			total_mass += float(component_stats["propeller"][current_propeller_type]["mass"])
+
+	var stability: float = 1.0
 	if motors.size() < 4:
 		stability *= 0.7
 	if propellers.size() < 4:
 		stability *= 0.8
 	if active_motors < 4:
 		stability *= float(active_motors) / 4.0
-	
-	# Вектор разбалансировки (если моторы несимметричны)
-	var imbalance = Vector3.ZERO
+
+	var imbalance: Vector3 = Vector3.ZERO
 	if active_motors > 0:
-		var thrust_center = Vector3.ZERO
-		for motor_data in motor_positions:
-			if motor_data["has_propeller"]:
-				thrust_center += motor_data["position"]
-		thrust_center /= active_motors
-		imbalance = thrust_center  # Чем дальше от центра, тем больше разбалансировка
-	
+		var thrust_center: Vector3 = Vector3.ZERO
+		for md in motor_positions:
+			var d: Dictionary = md
+			if bool(d["has_propeller"]):
+				thrust_center += d["position"]
+		thrust_center /= float(active_motors)
+		imbalance = thrust_center
+
 	return {
 		"total_mass": total_mass,
 		"center_of_mass": center_of_mass,
@@ -2450,3 +2146,137 @@ func calculate_physics_data() -> Dictionary:
 		"motor_count": motors.size(),
 		"propeller_count": propellers.size()
 	}
+
+# ==================== ОКРУЖЕНИЕ / ГРИД / КОМНАТА ====================
+func create_grid() -> void:
+	# защита от дублей
+	if $Grid.get_child_count() > 0:
+		return
+
+	for x in range(-5, 6):
+		for z in range(-5, 6):
+			var grid_cube: MeshInstance3D = MeshInstance3D.new()
+			var cube_mesh: BoxMesh = BoxMesh.new()
+			cube_mesh.size = Vector3(0.9, 0.1, 0.9)
+
+			var material: StandardMaterial3D = StandardMaterial3D.new()
+			material.albedo_color = Color(0.5, 0.5, 0.5, 0.3)
+			material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+
+			grid_cube.mesh = cube_mesh
+			grid_cube.material_override = material
+			grid_cube.position = Vector3(x, 0, z)
+			$Grid.add_child(grid_cube)
+
+func create_floor_line() -> void:
+	if has_node("FloorLine"):
+		return
+
+	var line_mesh: MeshInstance3D = MeshInstance3D.new()
+	line_mesh.name = "FloorLine"
+
+	var immediate_mesh: ImmediateMesh = ImmediateMesh.new()
+	var material: StandardMaterial3D = StandardMaterial3D.new()
+	material.albedo_color = Color(1, 0, 0, 0.8)
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+
+	immediate_mesh.surface_begin(Mesh.PRIMITIVE_LINES, material)
+	immediate_mesh.surface_add_vertex(Vector3(-6, 0.02, 0))
+	immediate_mesh.surface_add_vertex(Vector3(6, 0.02, 0))
+	immediate_mesh.surface_add_vertex(Vector3(0, 0.02, -6))
+	immediate_mesh.surface_add_vertex(Vector3(0, 0.02, 6))
+	immediate_mesh.surface_end()
+
+	line_mesh.mesh = immediate_mesh
+	add_child(line_mesh)
+
+func add_room() -> void:
+	if has_node("GarageRoom"):
+		return
+
+	var room_scene: PackedScene = load("res://room3d/garage_to_create_drone/garage.glb")
+	if room_scene == null:
+		return
+
+	var room: Node3D = room_scene.instantiate() as Node3D
+	add_child(room)
+	room.position = Vector3(10, 0, 0)
+	room.scale = Vector3(6, 6, 6)
+	room.name = "GarageRoom"
+
+func setup_lighting() -> void:
+	if has_node("LightsContainer"):
+		return
+
+	var lights_container: Node3D = Node3D.new()
+	lights_container.name = "LightsContainer"
+	add_child(lights_container)
+
+	var main_light: DirectionalLight3D = DirectionalLight3D.new()
+	main_light.name = "MainLight"
+	lights_container.add_child(main_light)
+	main_light.light_color = Color(1, 0.9, 0.8)
+	main_light.light_energy = 0.8
+	main_light.rotation_degrees = Vector3(-60, 30, 0)
+	main_light.shadow_enabled = true
+	main_light.shadow_bias = 0.1
+	main_light.shadow_normal_bias = 1.0
+	main_light.shadow_blur = 0.5
+
+	var fill_light: OmniLight3D = OmniLight3D.new()
+	fill_light.name = "FillLight"
+	lights_container.add_child(fill_light)
+	fill_light.position = Vector3(0, 4, 0)
+	fill_light.light_color = Color(0.8, 0.85, 1)
+	fill_light.light_energy = 0.3
+	fill_light.omni_range = 10
+	fill_light.shadow_enabled = false
+
+func add_reflection_probe() -> void:
+	if has_node("MainReflectionProbe"):
+		return
+
+	var probe: ReflectionProbe = ReflectionProbe.new()
+	probe.name = "MainReflectionProbe"
+	add_child(probe)
+	probe.position = Vector3(0, 2, 0)
+	probe.size = Vector3(20, 10, 20)
+	probe.update_mode = ReflectionProbe.UPDATE_ALWAYS
+
+# ==================== НАСТРОЙКИ ====================
+func load_settings_menu() -> void:
+	if settings_menu != null and is_instance_valid(settings_menu):
+		return
+
+	var settings_scene: PackedScene = preload("res://UI/SettingsScene.tscn")
+	settings_menu = settings_scene.instantiate()
+	add_child(settings_menu)
+
+	# сигналы (если существуют)
+	if settings_menu.has_signal("settings_saved"):
+		settings_menu.connect("settings_saved", Callable(self, "_on_settings_saved"))
+	if settings_menu.has_signal("settings_cancelled"):
+		settings_menu.connect("settings_cancelled", Callable(self, "_on_settings_cancelled"))
+	if settings_menu.has_signal("settings_closed"):
+		settings_menu.connect("settings_closed", Callable(self, "_on_settings_closed"))
+
+func apply_global_settings() -> void:
+	if not Global:
+		return
+
+	camera.fov = Global.camera_fov
+
+	var env: WorldEnvironment = get_node_or_null("WorldEnvironment") as WorldEnvironment
+	if env != null and env.environment != null:
+		env.environment.adjustment_enabled = true
+		env.environment.adjustment_brightness = Global.brightness
+
+func _on_settings_saved() -> void:
+	apply_global_settings()
+
+func _on_settings_cancelled() -> void:
+	apply_global_settings()
+
+func _on_settings_closed() -> void:
+	pass
