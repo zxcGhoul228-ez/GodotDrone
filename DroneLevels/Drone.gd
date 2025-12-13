@@ -494,6 +494,11 @@ func perform_movement_with_physics(direction: int) -> bool:
 			# Безопасно обновляем позицию
 			if is_inside_tree():
 				global_position = physics_pos
+				# ВИЗУАЛЬНЫЙ КРЕН (плавно, без рандома)
+				if drone_physics and drone_physics.has_method("get_visual_tilt_degrees"):
+					var desired_tilt = drone_physics.get_visual_tilt_degrees(direction)
+					var tilt_lerp = clamp(get_process_delta_time() * 8.0, 0.0, 1.0)
+					rotation_degrees = rotation_degrees.lerp(desired_tilt, tilt_lerp)
 				drone_moved.emit()
 			else:
 				return false
@@ -519,7 +524,19 @@ func perform_movement_with_physics(direction: int) -> bool:
 				emit_crash_effect()
 				return false
 			
-			global_position = final_pos
+			# Если дрон полностью собран и стабилен — доводим ровно до центра клетки
+			if drone_physics and drone_physics.has_method("get_translation_factor"):
+				var t_factor = drone_physics.get_translation_factor()
+				var s_factor = drone_physics.get_stability_factor()
+				if t_factor >= 0.99 and s_factor >= 0.9:
+					global_position = target_pos
+				else:
+					global_position = final_pos
+			else:
+				global_position = final_pos
+			# Небольшой возврат крена к нулю в конце команды
+			var reset_tween = create_tween()
+			reset_tween.tween_property(self, "rotation_degrees", Vector3.ZERO, 0.25)
 	else:
 		# Без физики - обычное движение (с проверкой)
 		if is_inside_tree():
