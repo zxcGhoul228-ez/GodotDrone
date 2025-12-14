@@ -229,20 +229,29 @@ func setup_from_components(frame, board, motor_nodes: Array, propeller_nodes: Ar
 		positions.append(local_pos)
 		print("📊 Мотор слот ", slot, " (", motors[slot]["side"], "): ", motor_type, " тяга: ", motor_thrust)
 
-	# ===== ПРОПЕЛЛЕРЫ =====
+		# ===== ПРОПЕЛЛЕРЫ =====
 	propellers.clear()
-	for propeller in propeller_nodes:
-		if not (propeller and is_instance_valid(propeller) and propeller is Node3D):
+
+	var assigned: Array = _assign_propellers_to_motor_slots_stable(propeller_nodes, root)
+
+	for a in assigned:
+		var prop: Node3D = a.get("node", null)
+		if prop == null or not is_instance_valid(prop):
 			continue
 
-		var propeller_type = _extract_component_name(propeller, "propeller", "Пропеллер1")
-		var propeller_efficiency = component_stats["propeller"][propeller_type]["efficiency"]
-		var propeller_mass = component_stats["propeller"][propeller_type]["mass"]
+		var slot: int = int(a.get("slot", 0))
+		slot = clampi(slot, 0, 3)
 
-		var slot = find_closest_motor((propeller as Node3D).global_position, motor_nodes)
-		var local_pos = (root.to_local((propeller as Node3D).global_position) if root else (propeller as Node3D).position)
+		var local_pos: Vector3 = a.get("local_pos", Vector3.ZERO)
 
-		var propeller_data = {
+		var propeller_type: String = _extract_component_name(prop, "propeller", "Пропеллер1")
+		var propeller_efficiency: float = float(component_stats["propeller"][propeller_type]["efficiency"])
+		var propeller_mass: float = float(component_stats["propeller"][propeller_type]["mass"])
+
+		# сохраняем слот в meta (на будущее/для дебага)
+		prop.set_meta("motor_slot", slot)
+
+		var propeller_data: Dictionary = {
 			"position": local_pos,
 			"motor_index": slot,
 			"efficiency": propeller_efficiency,
@@ -251,16 +260,29 @@ func setup_from_components(frame, board, motor_nodes: Array, propeller_nodes: Ar
 		}
 		propellers.append(propeller_data)
 
-		# Пропеллер сам по себе — не делает слот активным, пока нет мотора.
 		motors[slot]["propeller_present"] = true
-		motors[slot]["propeller_efficiency"] = propeller_efficiency
-		motors[slot]["has_propeller"] = (motors[slot]["present"] and motors[slot]["propeller_present"])
+
+		var pc: int = int(motors[slot].get("propeller_count", 0)) + 1
+		motors[slot]["propeller_count"] = pc
+
+		var prev_eff: float = float(motors[slot].get("propeller_efficiency", 0.0))
+		motors[slot]["propeller_efficiency"] = propeller_efficiency if pc == 1 else ((prev_eff * float(pc - 1)) + propeller_efficiency) / float(pc)
+
+		motors[slot]["has_propeller"] = (bool(motors[slot].get("present", false)) and bool(motors[slot].get("propeller_present", false)))
 
 		masses.append(propeller_mass)
 		positions.append(local_pos)
 		print("📊 Пропеллер на слот ", slot, ": ", propeller_type, " эффективность: ", propeller_efficiency)
 
-	# Отмечаем отсутствующие моторы/пропеллеры и определяем ослабленные стороны
+	# Быстрый контроль распределения пропеллеров по слотам
+	var pcnts: Array = [0, 0, 0, 0]
+	for p in propellers:
+		var si: int = int(p.get("motor_index", 0))
+		if si >= 0 and si < 4:
+			pcnts[si] += 1
+	print("🧾 Пропеллеры по слотам: ", pcnts)
+
+# Отмечаем отсутствующие моторы/пропеллеры и определяем ослабленные стороны
 	analyze_motor_configuration()
 
 	# Рассчитываем общую массу и центр масс
@@ -559,3 +581,179 @@ func get_imbalance_multiplier() -> float:
 			return 2.6
 		_:
 			return 1.0
+func _assign_propellers_to_motor_slots_stable(propeller_nodes: Array, root: Node3D) -> Array:
+	# Возвращает Array из словарей:
+	# { "node": Node3D, "slot": int, "local_pos": Vector3 }
+	var props: Array = []
+	for p in propeller_nodes:
+		var n: Node3D = p as Node3D
+		if n != null and is_instance_valid(n):
+			props.append(n)
+
+	var slots: Array = []
+	for i in range(motors.size()):
+		if bool(motors[i].get("present", false)):
+			slots.append(i)
+
+	var result: Array = []
+	if props.is_empty() or slots.is_empty():
+		for n2 in props:
+			var lp2: Vector3 = (root.to_local(n2.global_position) if root else n2.position)
+			result.append({"node": n2, "slot": 0, "local_pos": lp2})
+		return result
+
+	# локальные позиции пропеллеров
+	var prop_pos: Array = []
+	for n3 in props:
+		var lp3: Vector3 = (root.to_local(n3.global_position) if root else n3.position)
+		prop_pos.append(lp3)
+
+	var p_count: int = props.size()
+	var s_count: int = slots.size()
+
+	# primary matching (минимальная сумма расстояний), чтобы не было [0,1,1,2] при 4/4
+	var primary_map: Dictionary = {}
+	if p_count >= s_count:
+		# каждому слоту по одному пропеллеру (если пропов >= слотов)
+		primary_map = _stable_match_slots_to_props(prop_pos, slots)
+	else:
+		# каждому пропеллеру уникальный слот (если пропов < слотов)
+		primary_map = _stable_match_props_to_slots(prop_pos, slots)
+
+	# отмечаем использованные пропеллеры
+	var used_prop: Array = []
+	used_prop.resize(p_count)
+	for i in range(p_count):
+		used_prop[i] = false
+
+	# добавляем primary
+	for k in primary_map.keys():
+		var pi: int = int(k)
+		var si: int = int(primary_map[k])
+		if pi < 0 or pi >= p_count:
+			continue
+		used_prop[pi] = true
+		result.append({
+			"node": props[pi],
+			"slot": si,
+			"local_pos": prop_pos[pi]
+		})
+
+	# leftover: остальные пропеллеры -> ближайший слот
+	for pi2 in range(p_count):
+		if bool(used_prop[pi2]):
+			continue
+		var best_slot: int = _nearest_present_slot_for_local_pos(prop_pos[pi2], slots)
+		result.append({
+			"node": props[pi2],
+			"slot": best_slot,
+			"local_pos": prop_pos[pi2]
+		})
+
+	return result
+
+
+func _nearest_present_slot_for_local_pos(p_local: Vector3, slots: Array) -> int:
+	var best_slot: int = int(slots[0])
+	var best_d: float = 1.0e30
+
+	for s in slots:
+		var si: int = int(s)
+		var mp: Vector3 = motors[si].get("position", Vector3.ZERO)
+		var d: float = p_local.distance_squared_to(mp)
+		if d < best_d:
+			best_d = d
+			best_slot = si
+
+	return best_slot
+
+
+func _stable_match_slots_to_props(prop_pos: Array, slots: Array) -> Dictionary:
+	# Мапа: prop_index -> slot_index, где покрыты ВСЕ slots (каждому слоту по 1 пропу)
+	var p_count: int = prop_pos.size()
+
+	var used: Array = []
+	used.resize(p_count)
+	for i in range(p_count):
+		used[i] = false
+
+	var best: Dictionary = {"cost": 1.0e30, "map": {}}
+	var cur_map: Dictionary = {}
+	_stable_match_slots_to_props_rec(prop_pos, slots, 0, used, cur_map, 0.0, best)
+
+	var out: Dictionary = {}
+	var m: Variant = best.get("map")
+	if typeof(m) == TYPE_DICTIONARY:
+		out = m as Dictionary
+	return out
+
+
+func _stable_match_slots_to_props_rec(prop_pos: Array, slots: Array, slot_i: int, used: Array, cur_map: Dictionary, cur_cost: float, best: Dictionary) -> void:
+	var best_cost: float = float(best.get("cost", 1.0e30))
+	if cur_cost >= best_cost:
+		return
+
+	if slot_i >= slots.size():
+		best["cost"] = cur_cost
+		best["map"] = cur_map.duplicate(true)
+		return
+
+	var slot: int = int(slots[slot_i])
+	var motor_p: Vector3 = motors[slot].get("position", Vector3.ZERO)
+
+	for pi in range(prop_pos.size()):
+		if bool(used[pi]):
+			continue
+		var d: float = (prop_pos[pi] as Vector3).distance_squared_to(motor_p)
+
+		used[pi] = true
+		cur_map[pi] = slot
+		_stable_match_slots_to_props_rec(prop_pos, slots, slot_i + 1, used, cur_map, cur_cost + d, best)
+		cur_map.erase(pi)
+		used[pi] = false
+
+
+func _stable_match_props_to_slots(prop_pos: Array, slots: Array) -> Dictionary:
+	# Мапа: prop_index -> slot_index, где у каждого пропа уникальный слот
+	var s_count: int = slots.size()
+
+	var used_slots: Array = []
+	used_slots.resize(s_count)
+	for i in range(s_count):
+		used_slots[i] = false
+
+	var best: Dictionary = {"cost": 1.0e30, "map": {}}
+	var cur_map: Dictionary = {}
+	_stable_match_props_to_slots_rec(prop_pos, slots, 0, used_slots, cur_map, 0.0, best)
+
+	var out: Dictionary = {}
+	var m: Variant = best.get("map")
+	if typeof(m) == TYPE_DICTIONARY:
+		out = m as Dictionary
+	return out
+
+
+func _stable_match_props_to_slots_rec(prop_pos: Array, slots: Array, prop_i: int, used_slots: Array, cur_map: Dictionary, cur_cost: float, best: Dictionary) -> void:
+	var best_cost: float = float(best.get("cost", 1.0e30))
+	if cur_cost >= best_cost:
+		return
+
+	if prop_i >= prop_pos.size():
+		best["cost"] = cur_cost
+		best["map"] = cur_map.duplicate(true)
+		return
+
+	var p_local: Vector3 = prop_pos[prop_i] as Vector3
+
+	for si_idx in range(slots.size()):
+		if bool(used_slots[si_idx]):
+			continue
+		var slot: int = int(slots[si_idx])
+		var motor_p: Vector3 = motors[slot].get("position", Vector3.ZERO)
+		var d: float = p_local.distance_squared_to(motor_p)
+
+		used_slots[si_idx] = true
+		cur_map[prop_i] = slot
+		_stable_match_props_to_slots_rec(prop_pos, slots, prop_i + 1, used_slots, cur_map, cur_cost + d, best)
+		cur_map.erase(prop_i)
+		used_slots[si_idx] = false

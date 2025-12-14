@@ -8,10 +8,14 @@ const MAX_DISTANCE: float = 20.0
 const FRICTION: float = 0.92
 const MIN_VERTICAL_ANGLE: float = 0.0
 const MAX_VERTICAL_ANGLE: float = PI / 2.0 - 0.2
+const PROP_SNAP_RADIUS := 3.0
+
 
 const BOUNDS_MIN: Vector3 = Vector3(-5, 0, -5)
 const BOUNDS_MAX: Vector3 = Vector3(5, 3, 5)
 
+var _components_center_local: Vector3 = Vector3.ZERO
+var _components_center_valid: bool = false
 # Камера
 var camera_rotation: Vector2 = Vector2.ZERO
 var camera_distance: float = 8.0
@@ -22,6 +26,7 @@ var is_dragging_camera: bool = false
 
 @onready var camera_pivot: Node3D = $CameraPivot
 @onready var camera: Camera3D = $CameraPivot/Camera3D
+const MAIN_MENU_SCENE_PATH := "main_scene.tscn"
 
 # UI (узлы берём из сцены, НЕ создаём дубликаты)
 var open_close_button: Button = null
@@ -147,6 +152,7 @@ func _ready() -> void:
 
 	set_process_input(true)
 	print("✅ create_dron.gd готов.")
+	_create_main_menu_button_top()
 
 func _process(delta: float) -> void:
 	# Инерция камеры
@@ -375,7 +381,7 @@ func is_propeller_attached_to_motor(propeller: Node3D, motor: Node3D) -> bool:
 	if not is_instance_valid(propeller) or not is_instance_valid(motor):
 		return false
 	var d: float = propeller.global_position.distance_to(motor.global_position)
-	return d < 1.0
+	return d < PROP_SNAP_RADIUS
 
 func update_component_dragging(mouse_position: Vector2) -> void:
 	if dragged_component == null or not is_instance_valid(dragged_component):
@@ -444,6 +450,54 @@ func stop_component_dragging() -> void:
 	dragged_component = null
 	child_relative_positions.clear()
 
+func _get_motor_slot_index(motor: Node3D) -> int:
+	if motor == null or not is_instance_valid(motor):
+		return -1
+	if motor.has_meta("motor_slot"):
+		return int(motor.get_meta("motor_slot"))
+	var idx: int = motors.find(motor)
+	return idx
+
+func _attach_propeller_to_motor(propeller: Node3D, motor: Node3D) -> void:
+	if propeller == null or not is_instance_valid(propeller):
+		return
+	if motor == null or not is_instance_valid(motor):
+		return
+
+	# Проставляем слот (важно для физики в уровнях)
+	var slot: int = _get_motor_slot_index(motor)
+	if slot >= 0:
+		propeller.set_meta("motor_slot", slot)
+		_apply_motor_slot_recursive(propeller, slot)
+
+	# Обязательные метки пропеллера
+	propeller.set_meta("is_drone_propeller", true)
+	if not propeller.is_in_group("drone_propellers"):
+		propeller.add_to_group("drone_propellers")
+
+	# Делаем пропеллер дочерним мотору, чтобы он гарантированно "жил" на своем моторе
+	# и сохранял корректную привязку после экспорта.
+	if propeller.get_parent() != motor:
+		propeller.reparent(motor, true)
+
+	# Позиционируем над мотором + небольшой оффсет для второго пропеллера на том же моторе
+	var already: int = 0
+	for c in motor.get_children():
+		if c == propeller:
+			continue
+		if c is Node and c.has_meta("is_drone_propeller"):
+			already += 1
+
+	var lateral: float = 0.0
+	if already % 2 == 0:
+		lateral = 0.08
+	else:
+		lateral = -0.08
+
+	var p3d: Node3D = propeller as Node3D
+	p3d.position = Vector3(lateral, 0.3, 0.0)
+	p3d.rotation = Vector3.ZERO
+
 func update_motor_propeller_connection(motor: Node3D) -> void:
 	var old_propeller: Node3D = null
 	if motor_propeller_map.has(motor):
@@ -460,7 +514,7 @@ func update_motor_propeller_connection(motor: Node3D) -> void:
 			continue
 
 		var d: float = prop.global_position.distance_to(motor.global_position)
-		if d < 1.0 and d < closest_distance:
+		if d < PROP_SNAP_RADIUS and d < closest_distance:
 			closest_distance = d
 			closest_propeller = prop
 
@@ -494,7 +548,7 @@ func snap_propeller_to_motor(propeller: Node3D) -> void:
 			closest_distance = d
 			closest_motor = motor
 
-	if closest_motor != null and closest_distance < 1.0:
+	if closest_motor != null and closest_distance < PROP_SNAP_RADIUS:
 		# убрать старую связь (без удаления во время итерации)
 		var key_to_erase: Node3D = null
 		for k in motor_propeller_map.keys():
@@ -506,6 +560,29 @@ func snap_propeller_to_motor(propeller: Node3D) -> void:
 			motor_propeller_map.erase(key_to_erase)
 
 		motor_propeller_map[closest_motor] = propeller
+
+		# --- ВАЖНО ДЛЯ ФИЗИКИ: ставим slot на мотор и пропеллер ---
+		var slot := -1
+
+		# 1) если у мотора уже есть motor_slot — используем
+		if closest_motor.has_meta("motor_slot"):
+			slot = int(closest_motor.get_meta("motor_slot"))
+
+		# 2) иначе считаем по позиции мотора в $Components
+		if slot < 0:
+			var local_motor_pos: Vector3 = ($Components as Node3D).to_local(closest_motor.global_position)
+			slot = _get_motor_slot_from_local_pos(local_motor_pos)
+			closest_motor.set_meta("motor_slot", slot)
+
+		# 3) на пропеллер и всех его детей
+		_apply_motor_slot_recursive(propeller, slot)
+
+		# помечаем пропеллер как пропеллер (чтобы Drone.gd точно нашёл)
+		propeller.set_meta("is_drone_propeller", true)
+		if not propeller.is_in_group("drone_propellers"):
+			propeller.add_to_group("drone_propellers")
+
+		# позиционирование
 		propeller.global_position = closest_motor.global_position + Vector3(0, 0.3, 0)
 		propeller.rotation = closest_motor.rotation
 
@@ -808,6 +885,9 @@ func add_propeller() -> void:
 	$Components.add_child(new_prop)
 
 	new_prop.set_meta("component_type", current_propeller_type)
+	new_prop.set_meta("is_drone_propeller", true)
+	if not new_prop.is_in_group("drone_propellers"):
+		new_prop.add_to_group("drone_propellers")
 
 	var mouse_pos: Vector2 = get_viewport().get_mouse_position()
 	var world_pos: Vector3 = screen_to_world_position(mouse_pos)
@@ -1553,36 +1633,57 @@ func _save_slot_thumbnail(slot_index: int) -> void:
 
 func load_slots_info() -> void:
 	for i in range(3):
+		# По умолчанию слот считаем пустым
+		save_slots[i] = null
+
 		var file_path: String = _slot_json_path(i)
-		if FileAccess.file_exists(file_path):
-			var file: FileAccess = FileAccess.open(file_path, FileAccess.READ)
-			if file != null:
-				var json_string: String = file.get_as_text()
-				file.close()
+		if not FileAccess.file_exists(file_path):
+			continue
 
-				var json: JSON = JSON.new()
-				var parse_result: int = json.parse(json_string)
-				if parse_result == OK:
-					var data: Variant = json.get_data()
-					if typeof(data) == TYPE_DICTIONARY:
-						var d: Dictionary = data
-						var frame_data: Dictionary = d.get("frame", {})
-						var frame_type: String = "Неизвестно"
-						if typeof(frame_data) == TYPE_DICTIONARY:
-							frame_type = str(frame_data.get("component_type", "Неизвестно"))
+		var file: FileAccess = FileAccess.open(file_path, FileAccess.READ)
+		if file == null:
+			continue
 
-						var motors_array: Array = d.get("motors", [])
-						var motors_count: int = motors_array.size()
+		var json_string: String = file.get_as_text()
+		file.close()
 
-						var has_board: bool = d.has("board") and d["board"] != null
+		# Если файл пустой — считаем слот пустым
+		if json_string.strip_edges().is_empty():
+			continue
 
-						save_slots[i] = {
-							"frame": frame_type,
-							"motors_count": motors_count,
-							"has_board": has_board
-						}
-		else:
-			save_slots[i] = null
+		var json: JSON = JSON.new()
+		var parse_result: int = json.parse(json_string)
+		if parse_result != OK:
+			continue
+
+		var data_v: Variant = json.get_data()
+		if typeof(data_v) != TYPE_DICTIONARY:
+			continue
+
+		var d: Dictionary = data_v
+
+		# frame может быть null -> берём Variant и проверяем тип
+		var frame_type: String = "Неизвестно"
+		var frame_v: Variant = d.get("frame")
+		if typeof(frame_v) == TYPE_DICTIONARY:
+			frame_type = str((frame_v as Dictionary).get("component_type", "Неизвестно"))
+
+		# motors может быть null -> проверяем тип
+		var motors_count: int = 0
+		var motors_v: Variant = d.get("motors")
+		if typeof(motors_v) == TYPE_ARRAY:
+			motors_count = (motors_v as Array).size()
+
+		# board может быть null
+		var has_board: bool = false
+		var board_v: Variant = d.get("board")
+		has_board = (board_v != null and typeof(board_v) == TYPE_DICTIONARY)
+
+		save_slots[i] = {
+			"frame": frame_type,
+			"motors_count": motors_count,
+			"has_board": has_board
+		}
 
 func create_slot_menu(is_save_mode: bool, title: String) -> Panel:
 	var menu_panel: Panel = Panel.new()
@@ -1932,11 +2033,69 @@ func _queue_free_safe(node: Node) -> void:
 	if node != null and is_instance_valid(node):
 		node.queue_free()
 
+func ensure_slots_marked_for_export() -> void:
+	var components_3d: Node3D = $Components as Node3D
+	if components_3d == null:
+		return
+
+	# Собираем валидные моторы
+	var motor_nodes: Array = []
+	for m in motors:
+		var mot: Node3D = m as Node3D
+		if mot != null and is_instance_valid(mot):
+			motor_nodes.append(mot)
+
+	# 1) Моторы: назначаем уникальные слоты по реальным позициям
+	var motor_id_to_slot: Dictionary = _assign_motor_slots_stable(components_3d, motor_nodes)
+
+	for mot_node in motor_nodes:
+		var mot3d: Node3D = mot_node as Node3D
+		if mot3d == null or not is_instance_valid(mot3d):
+			continue
+		var id: int = int(mot3d.get_instance_id()) # ✅ явный тип
+		if motor_id_to_slot.has(id):
+			mot3d.set_meta("motor_slot", int(motor_id_to_slot[id]))
+
+	# 2) Пропеллеры: слот берём у мотора, к которому они привязаны (motor_propeller_map),
+	# а если связи нет — ищем ближайший мотор
+	for p in propellers:
+		var prop: Node3D = p as Node3D
+		if prop == null or not is_instance_valid(prop):
+			continue
+
+		var slot: int = -1
+
+		# (a) связь из motor_propeller_map
+		var owner_motor: Node3D = null
+		for k in motor_propeller_map.keys():
+			var motk: Node3D = k as Node3D
+			if motk != null and is_instance_valid(motk) and motor_propeller_map[motk] == prop:
+				owner_motor = motk
+				break
+
+		# (b) если связи нет — ближайший мотор
+		if owner_motor == null:
+			owner_motor = _find_nearest_motor(prop, motor_nodes)
+
+		if owner_motor != null and owner_motor.has_meta("motor_slot"):
+			slot = int(owner_motor.get_meta("motor_slot"))
+
+		if slot >= 0:
+			_apply_motor_slot_recursive(prop, slot)
+
+		prop.set_meta("is_drone_propeller", true)
+		if not prop.is_in_group("drone_propellers"):
+			prop.add_to_group("drone_propellers")
 # ==================== ЭКСПОРТ ДРОНА ====================
 func export_drone_scene() -> bool:
+	_components_center_valid = false
+	if is_dragging_component:
+		stop_component_dragging()
 	calculate_drone_stats()
 	ensure_propellers_marked()
-
+	
+	ensure_slots_marked_for_export()
+	
 	var physics_data: Dictionary = calculate_physics_data()
 
 	var drone_root: CharacterBody3D = CharacterBody3D.new()
@@ -1947,6 +2106,17 @@ func export_drone_scene() -> bool:
 		drone_root.set_script(drone_script)
 
 	copy_components_to_drone(drone_root)
+
+	# ✅ Гарантируем коллизию (иначе в уровне будет 'нет коллизии')
+	if drone_root.find_child("CollisionShape3D", true, false) == null:
+		var cs := CollisionShape3D.new()
+		cs.name = "CollisionShape3D"
+		var box := BoxShape3D.new()
+		box.size = Vector3(8.0, 4.0, 8.0)
+		cs.shape = box
+		cs.position = Vector3(0.0, 2.0, 0.0)
+		drone_root.add_child(cs)
+		_set_owner_recursive(cs, drone_root)
 
 	drone_root.set_meta("drone_physics", physics_data)
 
@@ -1961,27 +2131,29 @@ func export_drone_scene() -> bool:
 		"propellers": []
 	}
 
-	for m in motors:
-		var motor: Node3D = m as Node3D
-		if motor != null and is_instance_valid(motor):
+	for motor in motors:
+		if is_instance_valid(motor):
 			drone_info["motors"].append({
 				"position": motor.global_position,
 				"rotation": motor.rotation,
 				"type": current_motor_type
 			})
 
-	for p in propellers:
-		var prop: Node3D = p as Node3D
-		if prop != null and is_instance_valid(prop):
+	for propeller in propellers:
+		if is_instance_valid(propeller):
 			drone_info["propellers"].append({
-				"position": prop.global_position,
-				"rotation": prop.rotation,
+				"position": propeller.global_position,
+				"rotation": propeller.rotation,
 				"type": current_propeller_type
 			})
 
 	drone_root.set_meta("drone_info", drone_info)
 
 	var packed_scene: PackedScene = PackedScene.new()
+	print("🧱 EXPORT DEBUG: Components tree:")
+	_debug_dump_tree($Components)
+	print("🧱 EXPORT DEBUG: propellers array (size=", propellers.size(), "):")
+	_debug_dump_list(propellers)
 	var result: int = packed_scene.pack(drone_root)
 
 	if result == OK:
@@ -1997,31 +2169,68 @@ func export_drone_scene() -> bool:
 		show_export_success_message()
 		return true
 
-	print("❌ Ошибка упаковки сцены дрона")
+	print("❌ Ошибка при упаковке сцены дрона")
 	return false
 
 func copy_components_to_drone(drone_root: CharacterBody3D) -> void:
+	# 1) Копируем дерево компонентов
 	for child in $Components.get_children():
 		var node: Node = child as Node
 		if node != null and is_instance_valid(node):
 			var child_copy: Node = node.duplicate()
 			drone_root.add_child(child_copy)
-			child_copy.owner = drone_root
+			_set_owner_recursive(child_copy, drone_root)
+
+	# 2) Помечаем пропеллеры уже в скопированном дереве
+	var components_3d: Node3D = $Components as Node3D
 
 	for i in range(propellers.size()):
-		var propeller: Node3D = propellers[i]
+		var propeller: Node3D = propellers[i] as Node3D
 		if propeller == null or not is_instance_valid(propeller):
 			continue
 
-		for drone_child in drone_root.get_children():
-			var dc: Node = drone_child as Node
-			if dc != null and dc.name == propeller.name:
-				dc.set_meta("is_drone_propeller", true)
-				dc.set_meta("propeller_index", i)
-				dc.set_meta("propeller_type", current_propeller_type)
-				if not dc.is_in_group("drone_propellers"):
-					dc.add_to_group("drone_propellers")
-				break
+		var dc: Node = drone_root.find_child(propeller.name, true, false)
+		if dc == null:
+			continue
+
+		# Метки
+		dc.set_meta("is_drone_propeller", true)
+		dc.set_meta("propeller_index", i)
+		dc.set_meta("propeller_type", current_propeller_type)
+
+		# ❗ ВАЖНО: motor_slot берём с ОРИГИНАЛА, а НЕ из имени Propeller_0/1/2/3
+		var slot: int = -1
+		if propeller.has_meta("motor_slot"):
+			slot = int(propeller.get_meta("motor_slot"))
+
+		# Фоллбек: если почему-то у оригинала нет слота — вычислим по ближайшему мотору
+		if slot < 0:
+			var best_d: float = INF
+			var best_motor: Node3D = null
+			for m in motors:
+				var mot: Node3D = m as Node3D
+				if mot == null or not is_instance_valid(mot):
+					continue
+				var d: float = propeller.global_position.distance_to(mot.global_position)
+				if d < best_d:
+					best_d = d
+					best_motor = mot
+
+			if best_motor != null:
+				if best_motor.has_meta("motor_slot"):
+					slot = int(best_motor.get_meta("motor_slot"))
+				else:
+					var local_motor_pos: Vector3 = components_3d.to_local(best_motor.global_position)
+					slot = _get_motor_slot_from_local_pos(local_motor_pos)
+					best_motor.set_meta("motor_slot", slot)
+
+		if slot >= 0:
+			_apply_motor_slot_recursive(dc, slot)
+
+		# Группа только на корень пропеллера (детям убираем)
+		if not dc.is_in_group("drone_propellers"):
+			dc.add_to_group("drone_propellers")
+		_remove_group_from_descendants(dc, "drone_propellers")
 
 func show_export_success_message() -> void:
 	var canvas: CanvasLayer = CanvasLayer.new()
@@ -2074,6 +2283,22 @@ func ensure_propellers_marked() -> void:
 		propeller.set_meta("is_drone_propeller", true)
 		propeller.set_meta("propeller_index", i)
 		propeller.set_meta("propeller_type", current_propeller_type)
+
+		# Проставляем слот пропеллера для физики (надежно, без угадываний в уровне)
+		var slot: int = -1
+		if propeller.has_meta("motor_slot"):
+			slot = int(propeller.get_meta("motor_slot"))
+		else:
+			var parent_node: Node = propeller.get_parent()
+			if parent_node is Node3D and motors.has(parent_node):
+				slot = _get_motor_slot_index(parent_node as Node3D)
+			elif drone_frame != null and is_instance_valid(drone_frame):
+				var lp: Vector3 = drone_frame.to_local(propeller.global_position)
+				slot = _get_motor_slot_from_local_pos(lp)
+
+		if slot >= 0:
+			propeller.set_meta("motor_slot", slot)
+			_apply_motor_slot_recursive(propeller, slot)
 
 		if not propeller.is_in_group("drone_propellers"):
 			propeller.add_to_group("drone_propellers")
@@ -2280,3 +2505,314 @@ func _on_settings_cancelled() -> void:
 
 func _on_settings_closed() -> void:
 	pass
+
+func _get_motor_slot_from_local_pos(local_pos: Vector3) -> int:
+	# 0 = front_right, 1 = front_left, 2 = back_right, 3 = back_left
+	# Вперёд обычно -Z, назад +Z; право +X, лево -X
+
+	var components_3d: Node3D = $Components as Node3D
+	var center: Vector3 = _get_components_visual_center_local(components_3d)
+
+	# Сдвигаем координаты в систему, где (0,0,0) = центр модели
+	var p: Vector3 = local_pos - center
+
+	var eps := 0.0001
+	var x := p.x
+	var z := p.z
+	if abs(x) < eps: x = 0.0
+	if abs(z) < eps: z = 0.0
+
+	var is_front := (z <= 0.0)
+	var is_right := (x >= 0.0)
+
+	if is_front and is_right:
+		return 0
+	if is_front and not is_right:
+		return 1
+	if not is_front and is_right:
+		return 2
+	return 3
+ 
+func _remove_group_recursive(n: Node, group_name: String, skip_self: bool = false) -> void:
+	if not skip_self:
+		if n.is_in_group(group_name):
+			n.remove_from_group(group_name)
+	for c in n.get_children():
+		_remove_group_recursive(c, group_name, false)
+
+func _set_owner_recursive(n: Node, owner_node: Node) -> void:
+	if n == null or not is_instance_valid(n):
+		return
+	n.owner = owner_node
+	for c in n.get_children():
+		_set_owner_recursive(c, owner_node)
+
+func _remove_group_from_descendants(root: Node, group_name: String) -> void:
+	for c in root.get_children():
+		if c != null and is_instance_valid(c):
+			if c.is_in_group(group_name):
+				c.remove_from_group(group_name)
+			_remove_group_from_descendants(c, group_name)
+
+func _apply_motor_slot_recursive(node: Node, slot: int) -> void:
+	if node == null or not is_instance_valid(node):
+		return
+	node.set_meta("motor_slot", slot)
+	for c in node.get_children():
+		_apply_motor_slot_recursive(c, slot)
+
+func _create_main_menu_button_top() -> void:
+	# Верхний слой, чтобы кнопку ничего не перекрывало
+	var top_layer := get_node_or_null("TopUiLayer") as CanvasLayer
+	if top_layer == null:
+		top_layer = CanvasLayer.new()
+		top_layer.name = "TopUiLayer"
+		top_layer.layer = 200 # выше обычной UI
+		add_child(top_layer)
+
+	# Контейнер на весь экран (сам не блокирует мышь)
+	var overlay := top_layer.get_node_or_null("Overlay") as Control
+	if overlay == null:
+		overlay = Control.new()
+		overlay.name = "Overlay"
+		overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+		overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		top_layer.add_child(overlay)
+
+	# Не создаём вторую кнопку
+	if overlay.get_node_or_null("btn_main_menu") != null:
+		return
+
+	var btn := Button.new()
+	btn.name = "btn_main_menu"
+	btn.text = "В главное меню"
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.mouse_filter = Control.MOUSE_FILTER_STOP
+	# btn.z_index = 100  # можно не ставить
+	btn.set_as_top_level(true) # чтобы не зависеть от родительских трансформов
+
+	# Снизу слева
+	btn.anchor_left = 0.0
+	btn.anchor_right = 0.0
+	btn.anchor_top = 1.0
+	btn.anchor_bottom = 1.0
+	btn.offset_left = 16.0
+	btn.offset_right = 220.0
+	btn.offset_top = -56.0
+	btn.offset_bottom = -16.0
+
+	overlay.add_child(btn)
+	btn.pressed.connect(_on_main_menu_button_pressed)
+
+
+func _on_main_menu_button_pressed() -> void:
+	get_tree().change_scene_to_file(MAIN_MENU_SCENE_PATH)
+
+
+func _debug_dump_tree(root: Node, depth: int = 0) -> void:
+	if root == null or not is_instance_valid(root):
+		return
+
+	var indent := ""
+	for i in range(depth):
+		indent += "  "
+
+	var meta_slot = (root.get_meta("motor_slot") if root.has_meta("motor_slot") else "NONE")
+	var is_prop = (root.get_meta("is_drone_propeller") if root.has_meta("is_drone_propeller") else "NONE")
+	print(indent, "- ", root.name, " class=", root.get_class(), " groups=", root.get_groups(), " motor_slot=", meta_slot, " is_drone_propeller=", is_prop)
+
+	for c in root.get_children():
+		if c != null and is_instance_valid(c):
+			_debug_dump_tree(c, depth + 1)
+
+
+func _debug_dump_list(arr: Array) -> void:
+	for n in arr:
+		if n == null or not is_instance_valid(n):
+			continue
+		var meta_slot = (n.get_meta("motor_slot") if n.has_meta("motor_slot") else "NONE")
+		var is_prop = (n.get_meta("is_drone_propeller") if n.has_meta("is_drone_propeller") else "NONE")
+		print("  * ", n.name, " class=", n.get_class(), " path=", n.get_path(), " groups=", n.get_groups(), " motor_slot=", meta_slot, " is_drone_propeller=", is_prop)
+
+func _get_components_visual_center_local(components_3d: Node3D) -> Vector3:
+	if _components_center_valid:
+		return _components_center_local
+
+	var min_v := Vector3(INF, INF, INF)
+	var max_v := Vector3(-INF, -INF, -INF)
+
+	var stack: Array = [components_3d]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n == null or not is_instance_valid(n):
+			continue
+
+		for c in n.get_children():
+			if c != null and is_instance_valid(c):
+				stack.append(c)
+
+		if n is MeshInstance3D:
+			var mi := n as MeshInstance3D
+			var aabb: AABB = mi.get_aabb()
+
+			# Переводим 8 углов AABB меша в локальные координаты $Components
+			var to_comp: Transform3D = components_3d.global_transform.affine_inverse() * mi.global_transform
+			for i in range(8):
+				var corner := aabb.position
+				if (i & 1) != 0: corner.x += aabb.size.x
+				if (i & 2) != 0: corner.y += aabb.size.y
+				if (i & 4) != 0: corner.z += aabb.size.z
+
+				var p: Vector3 = to_comp * corner
+				min_v = Vector3(minf(min_v.x, p.x), minf(min_v.y, p.y), minf(min_v.z, p.z))
+				max_v = Vector3(maxf(max_v.x, p.x), maxf(max_v.y, p.y), maxf(max_v.z, p.z))
+
+	# Если мешей нет — центр нулевой
+	if min_v.x == INF:
+		_components_center_local = Vector3.ZERO
+	else:
+		_components_center_local = (min_v + max_v) * 0.5
+
+	_components_center_valid = true
+	return _components_center_local
+
+func _find_nearest_motor(prop: Node3D, motor_nodes: Array) -> Node3D:
+	var best: Node3D = null
+	var best_d: float = INF
+	for mot in motor_nodes:
+		var m: Node3D = mot as Node3D
+		if m == null or not is_instance_valid(m):
+			continue
+		var d: float = prop.global_position.distance_to(m.global_position)
+		if d < best_d:
+			best_d = d
+			best = m
+	return best
+
+
+func _assign_motor_slots_stable(components_3d: Node3D, motor_nodes: Array) -> Dictionary:
+	# Возвращает: { motor_instance_id(int) : slot(int 0..3) }
+	var locals: Dictionary = {} # int -> Vector3
+	var xs: Array = []
+	var zs: Array = []
+
+	for mot in motor_nodes:
+		var m: Node3D = mot as Node3D
+		if m == null or not is_instance_valid(m):
+			continue
+		var id: int = int(m.get_instance_id())
+		var lp: Vector3 = components_3d.to_local(m.global_position)
+		locals[id] = lp
+		xs.append(lp.x)
+		zs.append(lp.z)
+
+	if locals.size() == 0:
+		return {}
+
+	# экстенты
+	var min_x: float = float(xs[0])
+	var max_x: float = float(xs[0])
+	for x in xs:
+		min_x = minf(min_x, float(x))
+		max_x = maxf(max_x, float(x))
+
+	var min_z: float = float(zs[0])
+	var max_z: float = float(zs[0])
+	for z in zs:
+		min_z = minf(min_z, float(z))
+		max_z = maxf(max_z, float(z))
+
+	# 0 = front_right, 1 = front_left, 2 = back_right, 3 = back_left
+	var targets := {
+		0: Vector3(max_x, 0.0, min_z),
+		1: Vector3(min_x, 0.0, min_z),
+		2: Vector3(max_x, 0.0, max_z),
+		3: Vector3(min_x, 0.0, max_z)
+	}
+
+	var ids: Array = locals.keys() # keys будут Variant, ниже приводим к int
+	var n: int = ids.size()
+
+	var slots_all := [0, 1, 2, 3]
+	var best_cost: float = INF
+	var best_assign: Dictionary = {}
+
+	# перебор всех перестановок слотов длины n
+	_perm_slots(ids, locals, targets, 0, [], slots_all, best_assign, best_cost)
+
+	return best_assign
+
+
+func _solve_slot_assignment(ids: Array, locals: Dictionary, targets: Dictionary, idx: int, used: Array, current: Dictionary, cost: float, best_assign: Dictionary, best_cost: float) -> void:
+	# ids: массив instance_id моторов
+	if idx >= ids.size():
+		if cost < best_cost:
+			# обновляем best_assign/best_cost
+			best_assign.clear()
+			for k in current.keys():
+				best_assign[k] = current[k]
+			# трюк: best_cost передать наружу нельзя по значению,
+			# поэтому храним его в best_assign meta ключом
+			best_assign["__best_cost"] = cost
+		return
+
+	# Текущий лучший cost (если уже записан)
+	var bc := INF
+	if best_assign.has("__best_cost"):
+		bc = float(best_assign["__best_cost"])
+
+	# Отсечение
+	if cost >= bc:
+		return
+
+	var id = ids[idx]
+	var lp: Vector3 = locals[id]
+
+	for slot in range(4):
+		if used[slot]:
+			continue
+
+		var t: Vector3 = targets[slot]
+		# Стоимость — расстояние в XZ (квадрат, без sqrt)
+		var dx := lp.x - t.x
+		
+func _perm_slots(ids: Array, locals: Dictionary, targets: Dictionary, idx: int, chosen: Array, available: Array, best_assign: Dictionary, best_cost: float) -> void:
+	if idx >= ids.size():
+		# оценка стоимости
+		var cost: float = 0.0
+		for i in range(ids.size()):
+			var id: int = int(ids[i])
+			var slot: int = int(chosen[i])
+			var lp: Vector3 = locals[id]
+			var t: Vector3 = targets[slot]
+			var dx: float = lp.x - t.x
+			var dz: float = lp.z - t.z
+			cost += dx * dx + dz * dz
+
+		var current_best: float = best_cost
+		if best_assign.has("__cost"):
+			current_best = float(best_assign["__cost"])
+
+		if cost < current_best:
+			best_assign.clear()
+			for i in range(ids.size()):
+				best_assign[int(ids[i])] = int(chosen[i])
+			best_assign["__cost"] = cost
+		return
+
+	# отсечение по текущему best
+	var current_best2: float = best_cost
+	if best_assign.has("__cost"):
+		current_best2 = float(best_assign["__cost"])
+
+	# выбираем следующий слот
+	for j in range(available.size()):
+		var slot_pick: int = int(available[j])
+
+		var next_chosen := chosen.duplicate()
+		next_chosen.append(slot_pick)
+
+		var next_avail := available.duplicate()
+		next_avail.remove_at(j)
+
+		_perm_slots(ids, locals, targets, idx + 1, next_chosen, next_avail, best_assign, best_cost)

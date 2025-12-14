@@ -35,7 +35,7 @@ func _ready():
 	print("🚁 Масштабирую дрон: ", scale)
 	
 	# ГАРАНТИРОВАННЫЙ ПОИСК ПРОПЕЛЛЕРОВ
-	find_propellers_guaranteed()
+	propellers = find_propellers_guaranteed()
 	
 	print("🚁 Дрон готов, масштаб: ", scale)
 	print("🌀 Найдено пропеллеров: ", propellers.size())
@@ -49,6 +49,7 @@ func _ready():
 		
 		show_imbalance_visualization()
 		
+	_ensure_collision()
 
 
 func get_has_reached_target() -> bool:
@@ -63,35 +64,70 @@ func init_drone_physics():
 	"""Инициализация системы физики дрона"""
 	drone_physics = DronePhysics.new()
 	add_child(drone_physics)
-	
+
 	# Собираем компоненты дрона
 	var frame_node = find_component_by_type("frame")
 	var board_node = find_component_by_type("board")
 	var motor_nodes = find_all_components_by_type("motor")
-	
-	# НАХОДИМ ПРОПЕЛЛЕРЫ ЧЕРЕЗ НАШУ ФУНКЦИЮ
+
+	# ==== DEBUG: имена/пути моторов ====
+	print("🧩 Motors найдено: ", motor_nodes.size())
+	for m in motor_nodes:
+		if m and is_instance_valid(m):
+			var meta_slot_m = (m.get_meta("motor_slot") if m.has_meta("motor_slot") else "NONE")
+			print("   motor node name=", m.name, " class=", m.get_class(), " path=", m.get_path(), " meta_slot=", meta_slot_m)
+
+	# НАХОДИМ ПРОПЕЛЛЕРЫ ЧЕРЕЗ НАШУ ФУНКЦИЮ (если где-то выше она вызывается — ок; иначе можно раскомментить)
+	# propellers = find_propellers_guaranteed()
+
+	# ==== DEBUG: имена/пути пропеллеров из member массива ====
+	print("🧩 Propellers (member) найдено: ", propellers.size())
+	for p in propellers:
+		if p and is_instance_valid(p):
+			var meta_slot_p = (p.get_meta("motor_slot") if p.has_meta("motor_slot") else "NONE")
+			print("   prop node name=", p.name, " class=", p.get_class(), " path=", p.get_path(), " meta_slot=", meta_slot_p, " groups=", p.get_groups())
+
+	# Если пропеллеры не найдены — дополнительно сканим дерево по именам
+	if propellers.size() == 0:
+		print("🔎 Scan дерева на 'prop'/'motor' по именам:")
+		var stack: Array = [self]
+		while not stack.is_empty():
+			var n: Node = stack.pop_back()
+			if n == null or not is_instance_valid(n):
+				continue
+
+			for c in n.get_children():
+				if c and is_instance_valid(c):
+					stack.append(c)
+
+			var nl := str(n.name).to_lower()
+			if nl.find("motor") != -1 or nl.find("prop") != -1:
+				var meta_slot = (n.get_meta("motor_slot") if n.has_meta("motor_slot") else "NONE")
+				print("   node=", n.name, " class=", n.get_class(), " path=", n.get_path(), " meta_slot=", meta_slot, " groups=", n.get_groups())
+
+	# Собираем пропеллеры для физики из member массива
 	var propeller_nodes = []
 	for propeller in propellers:
 		if is_instance_valid(propeller):
 			propeller_nodes.append(propeller)
-	
+
 	print("📊 Компоненты для физики:")
 	print("   - Рам: ", 1 if frame_node else 0)
 	print("   - Плат: ", 1 if board_node else 0)
 	print("   - Моторов: ", motor_nodes.size())
 	print("   - Пропеллеров: ", propeller_nodes.size())
-	
+
 	# Настраиваем физику
 	if drone_physics:
 		drone_physics.setup_from_components(
-			frame_node, 
-			board_node, 
-			motor_nodes, 
+			frame_node,
+			board_node,
+			motor_nodes,
 			propeller_nodes
 		)
-		
+
 		flight_behavior = drone_physics.get_flight_behavior()
-		
+
 		if not flight_behavior["can_fly"]:
 			print("⚠️ ВНИМАНИЕ: Дрон не может лететь!")
 			print("   Причина: недостаточно моторов/пропеллеров")
@@ -130,59 +166,104 @@ func count_active_motors() -> int:
 	return count
 
 # ГАРАНТИРОВАННЫЙ ПОИСК ПРОПЕЛЛЕРОВ
-func find_propellers_guaranteed():
-	propellers.clear()
-	
+func find_propellers_guaranteed() -> Array:
+	var found: Array = []
 	print("🔍 Начинаем поиск пропеллеров...")
-	
-	# Способ 1: Поиск по группе
-	var group_propellers = get_tree().get_nodes_in_group("drone_propellers")
+
+	# 1) Поиск по группе (быстрый)
+	var group_propellers := get_tree().get_nodes_in_group("drone_propellers")
 	for node in group_propellers:
-		if node is Node3D and is_instance_valid(node):
-			if not propellers.has(node):
-				propellers.append(node)
-				print("✅ Найден по группе: ", node.name, " в позиции ", node.global_position)
-	
-	print("   Найдено по группе: ", propellers.size())
-	
-	# Способ 2: Поиск по метаданным
-	if propellers.size() == 0:
-		print("🔍 Поиск по метаданным...")
-		search_by_metadata(self)
-		print("   Найдено по метаданным: ", propellers.size())
-	
-	# Способ 3: Ищем все MeshInstance3D с определенными именами
-	if propellers.size() == 0:
-		print("🔍 Поиск по именам...")
-		search_all_meshes_for_propellers(self)
-		print("   Найдено по именам: ", propellers.size())
-	
-	# Способ 4: Ищем пропеллеры как детей моторов
-	if propellers.size() == 0:
-		print("🔍 Поиск как детей моторов...")
-		find_propellers_as_motor_children()
-		print("   Найдено как детей моторов: ", propellers.size())
-	
-	# Способ 5: Ищем по структуре экспортированного дрона
-	if propellers.size() == 0:
-		print("🔍 Поиск в структуре экспортированного дрона...")
-		find_propellers_in_exported_structure()
-		print("   Найдено в структуре: ", propellers.size())
-	
+		if node == null or not is_instance_valid(node):
+			continue
+		if not is_ancestor_of(node):
+			continue
+		if node.name.begins_with("@"):
+			continue
+		if not (node is Node3D):
+			continue
+		# Не берём MeshInstance3D как "пропеллер"
+		if node is MeshInstance3D:
+			continue
+
+		# В группе должен быть КОРНЕВОЙ узел пропеллера
+		var name_l := str(node.name).to_lower()
+		if not name_l.begins_with("propeller"):
+			continue
+
+		if not found.has(node):
+			found.append(node)
+			print("✅ Найден по группе: ", node.name, " в позиции ", (node as Node3D).global_position)
+
+	print("   Найдено по группе (после фильтра): ", found.size())
+
+	# 2) ДОБОР ПО ДЕРЕВУ (ВСЕГДА!), чтобы подхватывать пропеллеры без группы/мет
+	var stack: Array = [self]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		if n == null or not is_instance_valid(n):
+			continue
+
+		for c in n.get_children():
+			if c and is_instance_valid(c):
+				stack.append(c)
+
+		if n.name.begins_with("@"):
+			continue
+		if not (n is Node3D):
+			continue
+		if n is MeshInstance3D:
+			continue
+
+		var nl := str(n.name).to_lower()
+		if not nl.begins_with("propeller"):
+			continue
+
+		if found.has(n):
+			continue
+
+		# ✅ Самофикс: помечаем, чтобы дальше всё стабильно работало
+		if not n.has_meta("is_drone_propeller"):
+			n.set_meta("is_drone_propeller", true)
+		if not n.is_in_group("drone_propellers"):
+			n.add_to_group("drone_propellers")
+
+		var slot := _infer_slot_from_propeller_name(n.name)
+		if slot >= 0 and not n.has_meta("motor_slot"):
+			n.set_meta("motor_slot", slot)
+
+		found.append(n)
+		print("✅ Найден в дереве: ", n.name, " позиция ", (n as Node3D).global_position)
+
+	# КЛЮЧЕВОЕ: записываем в member propellers
+	propellers.clear()
+	propellers.append_array(found)
+
 	print("🎯 Итог: ", propellers.size(), " пропеллеров")
-	
-	# Если пропеллеры найдены, отладочная информация
-	if propellers.size() > 0:
-		for i in range(propellers.size()):
-			var prop = propellers[i]
-			if is_instance_valid(prop):
-				print("   ", i, ". ", prop.name, " - позиция: ", prop.global_position)
-	else:
-		print("⚠️ ВНИМАНИЕ: пропеллеры не найдены!")
-		print("   Детей у дрона: ", get_child_count())
-		for i in range(get_child_count()):
-			var child = get_child(i)
-			print("   ", i, ". ", child.name, " (", child.get_class(), ")")
+	for i in range(propellers.size()):
+		var p := propellers[i] as Node3D
+		if p:
+			print("   ", i, ". ", p.name, " - позиция: ", p.global_position)
+
+	return propellers
+
+
+func _infer_slot_from_propeller_name(nm: String) -> int:
+	var s := nm.to_lower()
+	# Propeller_0..3
+	if s.begins_with("propeller_"):
+		var parts := s.split("_")
+		if parts.size() >= 2 and parts[parts.size() - 1].is_valid_int():
+			var idx := int(parts[parts.size() - 1])
+			if idx >= 0 and idx <= 3:
+				return idx
+	# Propeller0..3
+	if s.length() > 0:
+		var last := s.substr(s.length() - 1, 1)
+		if last.is_valid_int():
+			var idx2 := int(last)
+			if idx2 >= 0 and idx2 <= 3 and s.find("propeller") != -1:
+				return idx2
+	return -1
 
 func search_all_meshes_for_propellers(node: Node):
 	"""Ищет все меши, которые могут быть пропеллерами"""
@@ -845,3 +926,17 @@ func show_crash_message():
 	await get_tree().create_timer(3.0).timeout
 	if is_instance_valid(crash_canvas):
 		crash_canvas.queue_free()
+
+func _ensure_collision() -> void:
+	if find_child("CollisionShape3D", true, false) != null:
+		return
+
+	var cs := CollisionShape3D.new()
+	cs.name = "CollisionShape3D"
+
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(8.0, 4.0, 8.0) # подгони под свою клетку/размер дрона
+	cs.shape = shape
+	cs.position = Vector3(0.0, 2.0, 0.0)
+
+	add_child(cs)
