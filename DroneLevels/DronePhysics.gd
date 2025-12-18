@@ -379,15 +379,17 @@ func apply_movement_physics_old(direction: int, current_pos: Vector3, target_pos
 	return apply_movement_physics(direction, current_pos, target_pos, delta, 32.0)
 
 func get_stability_factor() -> float:
-	"""Возвращает коэффициент стабильности от 0 до 1"""
-	var active_motors = get_active_motors_count()
-	var motor_factor = float(active_motors) / 4.0
-	var balance_factor = 1.0 - min(thrust_imbalance.length() * 2.0, 1.0)
+	var active_motors: int = get_active_motors_count()
+	if active_motors <= 0:
+		return 0.0
 
-	# Немного «поднимаем пол», чтобы поведение не было слишком резким
-	return clamp((motor_factor * 0.65 + balance_factor * 0.35) * 0.85 + 0.15, 0.0, 1.0)
+	var motor_factor: float = float(active_motors) / 4.0
+	var imbalance: float = thrust_imbalance.length()
+	var balance_factor: float = 1.0 - clampf(imbalance * 2.0, 0.0, 1.0)
 
-# ВАЖНО: функция оставлена
+	var stability: float = motor_factor * (0.25 + 0.75 * balance_factor)
+	return clampf(stability, 0.0, 1.0)
+
 func get_flight_behavior() -> Dictionary:
 	"""Возвращает поведение дрона в зависимости от конфигурации"""
 	var active_motors = get_active_motors_count()
@@ -447,32 +449,35 @@ func calculate_lift_and_balance():
 	lift_capacity = 0.0
 	thrust_imbalance = Vector3.ZERO
 
-	var thrust_center = Vector3.ZERO
-	var total_thrust = 0.0
+	var thrust_center := Vector3.ZERO
+	var total_thrust := 0.0
 
 	for motor in motors:
-		# active слот
+		# active слот (мотор есть И пропеллер есть)
 		if bool(motor.get("has_propeller", false)):
-			var thrust = float(motor.get("thrust", 0.0))
-			var eff = float(motor.get("propeller_efficiency", PROP_EFFICIENCY))
-			var effective_thrust = thrust * eff
+			var thrust := float(motor.get("thrust", 0.0))
+			var eff := float(motor.get("propeller_efficiency", PROP_EFFICIENCY))
+			var effective_thrust := thrust * eff
 
 			lift_capacity += effective_thrust
 			total_thrust += effective_thrust
-			thrust_center += Vector3(motor["position"].x, 0.0, motor["position"].z) * effective_thrust
+			# Центр тяги считаем только по активным моторам, в XZ-плоскости
+			thrust_center += Vector3(float(motor["position"].x), 0.0, float(motor["position"].z)) * effective_thrust
 
-	if total_thrust > 0:
-		var thrust_center_position = thrust_center / total_thrust
-		# Важно: thrust_imbalance теперь означает «слабая сторона» (куда заваливает)
-		thrust_imbalance = Vector3(center_of_mass.x, 0.0, center_of_mass.z) - Vector3(thrust_center_position.x, 0.0, thrust_center_position.z)
+	if total_thrust > 0.0:
+		var thrust_center_position := thrust_center / total_thrust
+
+		# ВАЖНО:
+		# Раньше мы считали через center_of_mass, и из-за смещения масс (например, когда мотор отсутствует и масса тоже пропадает)
+		# направление могло «переворачиваться». Для поведения «дрейфует к стороне, где НЕТ тяги» используем геометрический центр (0,0,0).
+		# Если справа нет мотора -> центр тяги смещается влево -> слабая сторона = -thrust_center_position (вправо).
+		thrust_imbalance = -Vector3(thrust_center_position.x, 0.0, thrust_center_position.z)
 	else:
 		thrust_imbalance = Vector3.ZERO
 
-	var active_motors = get_active_motors_count()
-	is_stable = (
-		active_motors >= 3 and
-		thrust_imbalance.length() < 0.25
-	)
+	var active_motors := get_active_motors_count()
+	# Стабильным считаем только полностью собранный дрон (4 активных слота)
+	is_stable = (active_motors == 4 and thrust_imbalance.length() < 0.05)
 
 func check_crash_condition(current_position: Vector3, ground_level: float = 0.0) -> bool:
 	"""Проверяет, не упал ли дрон"""
@@ -505,14 +510,38 @@ func get_translation_factor() -> float:
 	return clamp(motor_factor * (0.7 + 0.3 * stability), 0.0, 1.0)
 
 func get_drift_direction_world() -> Vector3:
-	"""Направление дрейфа в мировых координатах (куда уносит/заваливает)"""
+	"""Направление дрейфа в мировых координатах (куда уносит/заваливает).
+	Важно: переводим локальный XZ в мир без влияния roll/pitch (только "горизонт"),
+	иначе при визуальном крене направление может «плыть».
+	"""
 	if thrust_imbalance == Vector3.ZERO:
 		return Vector3.ZERO
-	var dir_local = thrust_imbalance
-	dir_local.y = 0
-	var dir_world = _local_dir_to_world_dir(dir_local)
-	dir_world.y = 0
-	return dir_world.normalized() if dir_world.length() > 0.0001 else Vector3.ZERO
+
+	var dir_local := thrust_imbalance
+	dir_local.y = 0.0
+	if dir_local.length() < 0.0001:
+		return Vector3.ZERO
+
+	var root := _get_drone_root()
+	if root:
+		# Берем горизонтальные оси из текущего basis, но проецируем в XZ-плоскость
+		var right := root.global_transform.basis.x
+		right.y = 0.0
+		var back := root.global_transform.basis.z
+		back.y = 0.0
+
+		if right.length() < 0.0001 or back.length() < 0.0001:
+			return dir_local.normalized()
+
+		right = right.normalized()
+		back = back.normalized()
+
+		# local (x,z) -> world (right, back)
+		var dir_world := right * dir_local.x + back * dir_local.z
+		dir_world.y = 0.0
+		return dir_world.normalized() if dir_world.length() > 0.0001 else Vector3.ZERO
+
+	return dir_local.normalized()
 
 func get_visual_tilt_degrees(direction: int = -1) -> Vector3:
 	"""Желаемый визуальный наклон дрона (в градусах). Можно использовать в Drone.gd."""
@@ -530,40 +559,45 @@ func get_visual_tilt_degrees(direction: int = -1) -> Vector3:
 
 # Добавим параметр скорости в функцию
 func apply_movement_physics(direction: int, current_pos: Vector3, target_pos: Vector3, delta: float, speed: float = 32.0) -> Vector3:
-	"""Применяет физику движения с учетом конфигурации дрона и скорости.
-	Цели:
-	- без ускорения
-	- без рандома
-	- корректная сторона дрейфа при отсутствии мотора/пропеллера
-	- расстояние за команду зависит ТОЛЬКО от количества активных моторов (и немного от стабильности)
-	"""
+	# Если взлететь нельзя — падаем вниз плавно
 	if not can_take_off():
-		# Падает вниз (плавно)
-		return current_pos + Vector3(0, -GRAVITY * delta, 0)
+		var fall: Vector3 = Vector3(0.0, -float(GRAVITY) * delta, 0.0)
+		return current_pos + fall
 
-	# Базовое «догоняющее» движение к target_pos без разгона и без overshoot
-	var translation_factor = get_translation_factor()
-	var max_step = speed * translation_factor * delta
-	var next_pos = current_pos.move_toward(target_pos, max_step)
+	# Базовое движение к цели (без разгона и overshoot)
+	var translation_factor: float = float(get_translation_factor())
+	var max_step: float = speed * translation_factor * delta
+	var next_pos: Vector3 = current_pos.move_toward(target_pos, max_step)
 
-	# Дрейф в сторону «слабой стороны» (плавно, без рандома)
-	var stability = get_stability_factor()
-	var drift_dir = get_drift_direction_world()
+	var stability: float = float(get_stability_factor())
+
+	# === ДРЕЙФ в сторону слабой тяги (т.е. где нет мотора/пропеллера) ===
+	var drift_dir: Vector3 = get_drift_direction_world()
 	if drift_dir != Vector3.ZERO:
-		# Чем хуже стабильность/меньше моторов — тем заметнее дрейф
-		var drift_fraction = clamp((1.0 - stability) * 0.35 * get_imbalance_multiplier(), 0.0, 0.6)
-		var target_drift_vel = drift_dir * (speed * drift_fraction)
-		var lerp_t = 1.0 - exp(-DRIFT_SMOOTHING * delta)
+		var imbalance_mul: float = float(get_imbalance_multiplier())
+		var drift_fraction: float = clampf((1.0 - stability) * 0.45 * imbalance_mul, 0.0, 0.75)
+
+		var target_drift_vel: Vector3 = drift_dir * (speed * drift_fraction)
+
+		var lerp_t: float = 1.0 - exp(-float(DRIFT_SMOOTHING) * delta)
 		_drift_velocity_world = _drift_velocity_world.lerp(target_drift_vel, lerp_t)
 		next_pos += _drift_velocity_world * delta
 	else:
-		# Быстро затухаем к нулю
-		var lerp_t2 = 1.0 - exp(-DRIFT_SMOOTHING * delta)
+		var lerp_t2: float = 1.0 - exp(-float(DRIFT_SMOOTHING) * delta)
 		_drift_velocity_world = _drift_velocity_world.lerp(Vector3.ZERO, lerp_t2)
 
-	# Небольшая «просадка» по Y при очень низкой стабильности (но без рандома)
+	# === ПРОСАДКА по Y при неполной сборке ===
+	var active_motors: int = get_active_motors_count()
+	var missing_count: int = 4 - active_motors
+	if missing_count > 0:
+		var missing_frac: float = float(missing_count) / 4.0
+		var sink_strength: float = clampf(missing_frac * (0.35 + 0.65 * (1.0 - stability)), 0.0, 1.0)
+		var sink_speed: float = float(GRAVITY) * 0.22 * sink_strength
+		next_pos.y -= sink_speed * delta
+
+	# Доп. просадка при очень низкой стабильности
 	if stability < 0.35:
-		next_pos.y -= (0.35 - stability) * 0.25 * GRAVITY * delta
+		next_pos.y -= (0.35 - stability) * 0.35 * float(GRAVITY) * delta
 
 	return next_pos
 

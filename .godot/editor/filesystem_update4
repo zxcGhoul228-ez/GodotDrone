@@ -1,10 +1,1 @@
-res://create_drone/create_dron.tscn
-res://UI/SettingsScene.tscn
-res://create_drone/visual_controller.gd
-res://UI/engineer_hud.gd
-res://global.gd
-res://UI/beauty_visual.gd
-res://create_drone/create_dron.gd
-res://UI/LoadingScreen.gd
-res://UI/LoadingScreen.tscn
-res://drone_ard/DroneConnectionScene.tscn
+res://DroneLevels/DronePhysics.gd
