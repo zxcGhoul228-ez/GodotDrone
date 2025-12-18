@@ -153,7 +153,7 @@ func _ready() -> void:
 	set_process_input(true)
 	print("✅ create_dron.gd готов.")
 	_create_main_menu_button_top()
-
+	add_child(load("res://UI/beauty_visual.gd").new())
 func _process(delta: float) -> void:
 	# Инерция камеры
 	if (not is_dragging_camera) and (rotation_velocity.x != 0.0 or rotation_velocity.y != 0.0):

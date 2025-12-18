@@ -1,32 +1,37 @@
-[gd_scene load_steps=2 format=3]
+[gd_scene load_steps=2 format=3 uid="uid://25s66bhpx53v"]
 
-[ext_resource type="Script" path="res://DroneLevels/drone_connection_scene.gd" id="1"]
+[ext_resource type="Script" uid="uid://bjyp63gap3c5k" path="res://drone_ard/drone_connection_scene.gd" id="1_8pbra"]
 
 [node name="DroneConnectionScene" type="Control"]
+layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-script = ExtResource("1")
+script = ExtResource("1_8pbra")
 
 [node name="TopBar" type="HBoxContainer" parent="."]
-anchors_preset = 10
+layout_mode = 0
 anchor_right = 1.0
 offset_bottom = 56.0
 
 [node name="BackButton" type="Button" parent="TopBar"]
+layout_mode = 2
 text = "← Назад"
 
 [node name="AutoButton" type="Button" parent="TopBar"]
+layout_mode = 2
 text = "Авто"
 
 [node name="SaveButton" type="Button" parent="TopBar"]
+layout_mode = 2
 text = "Сохранить"
 
 [node name="StatusLabel" type="Label" parent="TopBar"]
+layout_mode = 2
 text = "..."
 
 [node name="GraphEdit" type="GraphEdit" parent="."]
-anchors_preset = 15
+layout_mode = 0
 anchor_right = 1.0
 anchor_bottom = 1.0
 offset_top = 56.0
