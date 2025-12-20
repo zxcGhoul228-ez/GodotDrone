@@ -1,1 +1,3 @@
+res://DroneScene.gd
 res://DroneLevels/DronePhysics.gd
+res://create_drone/create_dron.gd

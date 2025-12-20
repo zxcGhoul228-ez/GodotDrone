@@ -57,6 +57,7 @@ var last_position: Vector3 = Vector3.ZERO
 # Расчетные параметры
 var thrust_imbalance: Vector3 = Vector3.ZERO  # Вектор «слабой стороны» (куда заваливает/дрейфует)
 var lift_capacity: float = 0.0  # Суммарная подъемная сила (в условных единицах)
+var _unstable_time: float = 0.0  # Накопитель «долго нестабилен» (для краша)
 var is_stable: bool = true
 var missing_motors: Array = []  # Индексы отсутствующих/неактивных слотов
 var missing_sides: Dictionary = {  # Какие стороны ослаблены
@@ -82,6 +83,38 @@ func _get_drone_root() -> Node3D:
 	var p = get_parent()
 	return p as Node3D
 
+func _get_horizontal_axes(root: Node3D) -> Dictionary:
+	# Берём только горизонтальную проекцию осей дрона (yaw), чтобы визуальный наклон (pitch/roll)
+	# и вложенные повороты компонентов не «перекручивали» оси дрейфа.
+	var b := root.global_transform.basis
+	var right := b.x
+	right.y = 0.0
+	if right.length() < 0.0001:
+		right = Vector3.RIGHT
+	else:
+		right = right.normalized()
+	var back := b.z
+	back.y = 0.0
+	if back.length() < 0.0001:
+		back = Vector3.BACK
+	else:
+		back = back.normalized()
+	return {"right": right, "back": back}
+
+func _global_to_flat_local(global_pos: Vector3, root: Node3D) -> Vector3:
+	# Координаты относительно дрона в «плоской» системе:
+	# X = вправо, Z = назад (как в Transform3D), а «вперёд» = -Z.
+	var axes := _get_horizontal_axes(root)
+	var offset := global_pos - root.global_position
+	var x = axes["right"].dot(offset)
+	var z = axes["back"].dot(offset)
+	return Vector3(x, offset.y, z)
+
+func _flat_local_dir_to_world_dir(local_dir: Vector3, root: Node3D) -> Vector3:
+	var axes := _get_horizontal_axes(root)
+	return axes["right"] * local_dir.x + Vector3.UP * local_dir.y + axes["back"] * local_dir.z
+
+
 func _slot_from_local_pos(local_pos: Vector3) -> int:
 	# Классификация по четвертям X/Z (устойчива к любому порядку детей)
 	var is_right = local_pos.x >= 0.0
@@ -105,11 +138,11 @@ func _closest_slot_by_local_pos(local_pos: Vector3) -> int:
 	return best_i
 
 func _local_dir_to_world_dir(local_dir: Vector3) -> Vector3:
-	var root = _get_drone_root()
+	var root := _get_drone_root()
 	if root:
-		var b = root.global_transform.basis.orthonormalized()
-		return (b * local_dir)
+		return _flat_local_dir_to_world_dir(local_dir, root)
 	return local_dir
+
 
 func _extract_component_name(node: Node, category: String, default_name: String) -> String:
 	# 1) meta
@@ -141,11 +174,11 @@ func find_closest_motor(propeller_pos: Vector3, motor_nodes: Array) -> int:
 					closest_d = d
 					closest_motor = motor
 		if closest_motor:
-			var m_local = root.to_local(closest_motor.global_position)
+			var m_local = _global_to_flat_local(closest_motor.global_position, root)
 			return _slot_from_local_pos(m_local)
 
 		# Фоллбек: по позиции пропеллера
-		var p_local = root.to_local(propeller_pos)
+		var p_local = _global_to_flat_local(propeller_pos, root)
 		return _slot_from_local_pos(p_local)
 
 	# Если root не нашли (необычная иерархия) — старый фоллбек
@@ -205,7 +238,7 @@ func setup_from_components(frame, board, motor_nodes: Array, propeller_nodes: Ar
 		var motor_thrust = component_stats["motor"][motor_type]["thrust"]
 		var motor_mass = component_stats["motor"][motor_type]["mass"]
 
-		var local_pos = (root.to_local((motor as Node3D).global_position) if root else (motor as Node3D).position)
+		var local_pos = (_global_to_flat_local((motor as Node3D).global_position, root) if root else (motor as Node3D).position)
 		# 1) по четвертям — устойчиво
 		var slot = _slot_from_local_pos(local_pos)
 		# 2) если вдруг два мотора попали в одну четверть, добираем ближайший свободный
@@ -325,6 +358,14 @@ func analyze_motor_configuration():
 			if "right" in side:
 				missing_sides["right"] = true
 
+		# Ослабленные стороны (по половинам, а не по одиночному углу):
+	# Сторона считается «ослабленной», только если на ней отсутствуют ОБА мотора.
+	# Это даёт более логичную картину для случаев, когда есть только передняя пара и т.п.
+	missing_sides["left"] = (not bool(motors[1].get("has_propeller", false)) and not bool(motors[3].get("has_propeller", false)))
+	missing_sides["right"] = (not bool(motors[0].get("has_propeller", false)) and not bool(motors[2].get("has_propeller", false)))
+	missing_sides["front"] = (not bool(motors[0].get("has_propeller", false)) and not bool(motors[1].get("has_propeller", false)))
+	missing_sides["back"] = (not bool(motors[2].get("has_propeller", false)) and not bool(motors[3].get("has_propeller", false)))
+
 	print("🔍 Анализ конфигурации:")
 	print("  Неактивные слоты: ", missing_motors)
 	print("  Ослабленные стороны: ", missing_sides)
@@ -412,15 +453,28 @@ func get_flight_behavior() -> Dictionary:
 	return behavior
 
 func can_take_off() -> bool:
-	"""Проверяет, может ли дрон взлететь"""
-	var active_motors = get_active_motors_count()
+	var active_motors_count := get_active_motors_count()
 
-	# Минимально 2 активных слота (мотор+проп) для хоть какого-то полета
-	if active_motors < 2:
+	# 0-1 мотора — физически почти всегда «не взлетит»
+	if active_motors_count < 2:
 		return false
 
-	# Подъемная сила должна быть больше массы (в этой игре — условная проверка)
-	return lift_capacity > total_mass * 1.1
+	# Если масса нулевая/не посчиталась — не блокируем полёт
+	if total_mass <= 0.001:
+		return true
+
+	# В этой игре тяга/масса — условные величины, поэтому используем «коэффициент тяги».
+	var lift_ratio := lift_capacity / total_mass
+
+	# Чем меньше моторов — тем ниже порог (дрон всё равно будет сильнее проседать и дрейфовать).
+	var min_ratio := 0.45
+	if active_motors_count >= 3:
+		min_ratio = 0.75
+	if active_motors_count >= 4:
+		min_ratio = 0.95
+
+	return lift_ratio >= min_ratio
+
 
 func get_active_motors_count() -> int:
 	"""Считает активные моторы (слоты, где есть мотор И пропеллер)"""
@@ -479,8 +533,10 @@ func calculate_lift_and_balance():
 	# Стабильным считаем только полностью собранный дрон (4 активных слота)
 	is_stable = (active_motors == 4 and thrust_imbalance.length() < 0.05)
 
-func check_crash_condition(current_position: Vector3, ground_level: float = 0.0) -> bool:
-	"""Проверяет, не упал ли дрон"""
+func check_crash_condition(current_position: Vector3, ground_level: float = 0.0, delta: float = 0.0) -> bool:
+	"""Проверяет, не упал ли дрон.
+	Важно: нестабильность сама по себе не должна «моментально убивать» дрона, иначе он не сможет взлетать с 2-3 моторами.
+	Если хочешь «краш от нестабильности» — делаем его накопительным (таймером) и только в воздухе."""
 	var behavior = get_flight_behavior()
 
 	# 1. Дрон упал ниже уровня земли
@@ -488,10 +544,19 @@ func check_crash_condition(current_position: Vector3, ground_level: float = 0.0)
 		print("💥 Дрон упал на землю!")
 		return true
 
-	# 2. Дрон слишком нестабилен
-	if behavior["stability"] < 0.15:
-		print("💥 Дрон слишком нестабилен!")
-		return true
+	# 2. Нестабильность — НЕ мгновенный краш.
+	# Если очень нестабилен и долго — тогда да (и только если дрон реально в воздухе).
+	var stab := float(behavior.get("stability", 0.0))
+	var airborne := current_position.y > ground_level + 0.25
+	if airborne and delta > 0.0 and stab < 0.15:
+		_unstable_time += delta
+		# 0.8с — мягкий порог: с 2 моторами он может «колбаситься», но не умирать сразу
+		if _unstable_time >= 0.8:
+			print("💥 Дрон слишком нестабилен слишком долго!")
+			return true
+	else:
+		# Сбрасываем таймер, если на земле или стабилизировались
+		_unstable_time = 0.0
 
 	# 3. Нет активных моторов
 	var active_motors = get_active_motors_count()
@@ -557,7 +622,6 @@ func get_visual_tilt_degrees(direction: int = -1) -> Vector3:
 	var roll = -dir.x * tilt
 	return Vector3(pitch, 0.0, roll)
 
-# Добавим параметр скорости в функцию
 func apply_movement_physics(direction: int, current_pos: Vector3, target_pos: Vector3, delta: float, speed: float = 32.0) -> Vector3:
 	# Если взлететь нельзя — падаем вниз плавно
 	if not can_take_off():
@@ -632,14 +696,14 @@ func _assign_propellers_to_motor_slots_stable(propeller_nodes: Array, root: Node
 	var result: Array = []
 	if props.is_empty() or slots.is_empty():
 		for n2 in props:
-			var lp2: Vector3 = (root.to_local(n2.global_position) if root else n2.position)
+			var lp2: Vector3 = (_global_to_flat_local(n2.global_position, root) if root else n2.position)
 			result.append({"node": n2, "slot": 0, "local_pos": lp2})
 		return result
 
 	# локальные позиции пропеллеров
 	var prop_pos: Array = []
 	for n3 in props:
-		var lp3: Vector3 = (root.to_local(n3.global_position) if root else n3.position)
+		var lp3: Vector3 = (_global_to_flat_local(n3.global_position, root) if root else n3.position)
 		prop_pos.append(lp3)
 
 	var p_count: int = props.size()

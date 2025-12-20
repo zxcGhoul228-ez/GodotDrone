@@ -2172,18 +2172,100 @@ func export_drone_scene() -> bool:
 	print("❌ Ошибка при упаковке сцены дрона")
 	return false
 
-func copy_components_to_drone(drone_root: CharacterBody3D) -> void:
-	# 1) Копируем дерево компонентов
-	for child in $Components.get_children():
-		var node: Node = child as Node
-		if node != null and is_instance_valid(node):
-			var child_copy: Node = node.duplicate()
-			drone_root.add_child(child_copy)
-			_set_owner_recursive(child_copy, drone_root)
-
-	# 2) Помечаем пропеллеры уже в скопированном дереве
+func get_components_center_local() -> Vector3:
+	# Возвращает центр (AABB) всех Node3D внутри $Components в ЛОКАЛЬНЫХ координатах $Components.
+	# Используется только для «центрирования» экспортируемой модели, чтобы оси в уровнях не «плыли».
 	var components_3d: Node3D = $Components as Node3D
+	if components_3d == null:
+		return Vector3.ZERO
 
+	var nodes: Array = []
+	_collect_node3d_recursive(components_3d, nodes)
+
+	var has_any := false
+	var min_x := 0.0
+	var min_y := 0.0
+	var min_z := 0.0
+	var max_x := 0.0
+	var max_y := 0.0
+	var max_z := 0.0
+
+	for n in nodes:
+		if n == components_3d:
+			continue
+		if not (n is Node3D):
+			continue
+
+		var p: Vector3 = components_3d.to_local((n as Node3D).global_position)
+
+		if not has_any:
+			has_any = true
+			min_x = p.x
+			min_y = p.y
+			min_z = p.z
+			max_x = p.x
+			max_y = p.y
+			max_z = p.z
+		else:
+			min_x = minf(min_x, p.x)
+			min_y = minf(min_y, p.y)
+			min_z = minf(min_z, p.z)
+			max_x = maxf(max_x, p.x)
+			max_y = maxf(max_y, p.y)
+			max_z = maxf(max_z, p.z)
+
+	if not has_any:
+		return Vector3.ZERO
+
+	return Vector3((min_x + max_x) * 0.5, (min_y + max_y) * 0.5, (min_z + max_z) * 0.5)
+
+
+func _collect_node3d_recursive(root: Node, out: Array) -> void:
+	if root == null:
+		return
+	out.append(root)
+	for c in root.get_children():
+		_collect_node3d_recursive(c, out)
+
+func copy_components_to_drone(drone_root: CharacterBody3D) -> void:
+	# ВАЖНО:
+	# Раньше мы копировали только детей $Components. Если у $Components был сдвиг/поворот,
+	# то при экспорте эти трансформации терялись, и в уровнях могли «поплыть» оси моторов/пропеллеров.
+	# Это напрямую ломает расчёт центра тяги и визуально даёт «кривой» дрейф.
+	# Теперь мы «запекаем» transform $Components в каждый скопированный узел + центрируем модель.
+	var components_3d: Node3D = $Components as Node3D
+	if components_3d == null:
+		return
+
+	# Центр экспорта должен быть СТАБИЛЬНЫМ.
+	# Если центрировать по AABB всех деталей, то при недосборке (например 3 мотора)
+	# ноль смещается и «слабая сторона» может перевернуться.
+	# Поэтому якорим 0,0,0 на раму (pivot рамы).
+	var center_local: Vector3 = Vector3.ZERO
+	if drone_frame != null and is_instance_valid(drone_frame):
+		center_local = components_3d.to_local(drone_frame.global_position)
+	else:
+		center_local = get_components_center_local() # фоллбек, если рамы нет
+
+	# Базовый трансформ, который применим к каждому ребёнку, чтобы сохранить ориентацию $Components
+	var base_t: Transform3D = components_3d.transform
+	base_t.origin -= base_t.basis * center_local
+
+	# 1) Копируем дерево компонентов
+	for child in components_3d.get_children():
+		var node: Node = child as Node
+		if node == null or not is_instance_valid(node):
+			continue
+
+		var child_copy: Node = node.duplicate()
+		drone_root.add_child(child_copy)
+
+		# Запекаем transform $Components (поворот/смещение) в transform ребёнка
+		if child_copy is Node3D and node is Node3D:
+			(child_copy as Node3D).transform = base_t * (node as Node3D).transform
+
+		_set_owner_recursive(child_copy, drone_root)
+	# 2) Помечаем пропеллеры уже в скопированном дереве
 	for i in range(propellers.size()):
 		var propeller: Node3D = propellers[i] as Node3D
 		if propeller == null or not is_instance_valid(propeller):
@@ -2231,6 +2313,8 @@ func copy_components_to_drone(drone_root: CharacterBody3D) -> void:
 		if not dc.is_in_group("drone_propellers"):
 			dc.add_to_group("drone_propellers")
 		_remove_group_from_descendants(dc, "drone_propellers")
+
+
 
 func show_export_success_message() -> void:
 	var canvas: CanvasLayer = CanvasLayer.new()

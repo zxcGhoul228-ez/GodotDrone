@@ -60,6 +60,31 @@ func set_target_position(pos: Vector3):
 	print("🎯 Установлена цель: ", target_position)
 
 
+func _find_motors_by_tree_scan() -> Array:
+	# Фоллбек-поиск моторов. Работает даже если у мотора нет get_component_type(),
+	# но на нём проставлена meta "motor_slot" (create_dron.gd делает это при экспорте).
+	var motors: Array = []
+	for n in _walk_drone_tree():
+		if not (n is Node3D):
+			continue
+		var parent = n.get_parent()
+		var parent_has_slot = (parent != null and parent.has_meta("motor_slot"))
+		if n.has_meta("motor_slot") and not parent_has_slot:
+			# Важно: пропеллеры тоже имеют meta motor_slot, но они почти всегда внутри мотора,
+			# поэтому по этому правилу сюда не попадают.
+			motors.append(n)
+
+	# Дедупликация по instance_id
+	var uniq: Dictionary = {}
+	var result: Array = []
+	for m in motors:
+		var id := (m as Node).get_instance_id()
+		if not uniq.has(id):
+			uniq[id] = true
+			result.append(m)
+	return result
+
+
 func init_drone_physics():
 	"""Инициализация системы физики дрона"""
 	drone_physics = DronePhysics.new()
@@ -69,6 +94,8 @@ func init_drone_physics():
 	var frame_node = find_component_by_type("frame")
 	var board_node = find_component_by_type("board")
 	var motor_nodes = find_all_components_by_type("motor")
+	if motor_nodes.is_empty():
+		motor_nodes = _find_motors_by_tree_scan()
 
 	# ==== DEBUG: имена/пути моторов ====
 	print("🧩 Motors найдено: ", motor_nodes.size())
@@ -139,19 +166,35 @@ func init_drone_physics():
 			print("✅ Дрон готов к полету!")
 
 func find_component_by_type(type: String):
-	"""Находит компонент по типу в иерархии дрона"""
-	for child in get_children():
-		if child.has_method("get_component_type") and child.get_component_type() == type:
-			return child
+	"""Находит компонент по типу в дереве дрона (поиск рекурсивный)"""
+	for n in _walk_drone_tree():
+		if n == self:
+			continue
+		if n.has_method("get_component_type") and n.get_component_type() == type:
+			return n
 	return null
 
+
 func find_all_components_by_type(type: String) -> Array:
-	"""Находит все компоненты по типу"""
-	var components = []
-	for child in get_children():
-		if child.has_method("get_component_type") and child.get_component_type() == type:
-			components.append(child)
-	return components
+	"""Находит все компоненты по типу в дереве дрона (поиск рекурсивный)"""
+	var result: Array = []
+	for n in _walk_drone_tree():
+		if n == self:
+			continue
+		if n.has_method("get_component_type") and n.get_component_type() == type:
+			result.append(n)
+	return result
+
+func _walk_drone_tree() -> Array:
+	var result: Array = []
+	var stack: Array = [self]
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		result.append(n)
+		for c in n.get_children():
+			stack.append(c)
+	return result
+
 
 
 func count_active_motors() -> int:

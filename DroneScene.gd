@@ -17,7 +17,7 @@ const TRAIL_FADE_TIME = 2.0
 const MIN_CAMERA_HEIGHT = -15.0
 const START_POINT_X = 0
 const START_POINT_Z = 0
-const START_POINT_Y = 0
+const START_POINT_Y = 0.0 # спавн на уровне пола (y=0)
 const HIGHLIGHT_COLOR_WARNING = Color(1.0, 0.3, 0.3, 0.7)
 
 # ==================== ПУТИ К КОМНАТАМ ====================
@@ -98,6 +98,7 @@ var original_settings = {}
 
 # ==================== ФУНКЦИИ ИНИЦИАЛИЗАЦИИ ====================
 func _ready():
+	print("📄 DroneScene script: ", get_script().resource_path)
 	print("=== ИНИЦИАЛИЗАЦИЯ СЦЕНЫ ДРОНА ===")
 	
 	# Базовые настройки
@@ -887,6 +888,24 @@ func adjust_drone_height(relative_change: float):
 	var new_height = START_POINT_Y + relative_change
 	set_drone_height(new_height)
 
+func _get_spawn_floor_y(drone_node: CharacterBody3D) -> float:
+	# Пол в этой сцене = нижняя граница сетки
+	var floor_y: float = grid_boundary_min.y
+
+	var cs: CollisionShape3D = drone_node.find_child("CollisionShape3D", true, false) as CollisionShape3D
+	if cs != null and cs.shape != null and cs.shape is BoxShape3D:
+		var box: BoxShape3D = cs.shape
+		# Нижняя точка коллизии в ЛОКАЛЬНЫХ координатах дрона
+		var bottom_local_y: float = cs.position.y - box.size.y * 0.5
+		# Учитываем масштаб (у тебя дрон scale = Vector3(6,6,6) в Drone.gd)
+		var scale_y: float = drone_node.global_transform.basis.get_scale().y
+		var bottom_world_offset: float = bottom_local_y * scale_y
+		# Ставим дрон так, чтобы низ коллизии касался пола
+		return floor_y - bottom_world_offset
+
+	return floor_y
+
+
 func setup_drone(drone_node: CharacterBody3D):
 	print("🔧 Настраиваем дрон...")
 	
@@ -899,8 +918,9 @@ func setup_drone(drone_node: CharacterBody3D):
 	@warning_ignore("integer_division")
 	var aligned_z = floor((start_pos.z + GRID_SIZE / 2) / GRID_SIZE) * GRID_SIZE - GRID_SIZE / 2
 	
-	start_pos = Vector3(aligned_x, START_POINT_Y, aligned_z)
-	
+	start_pos = Vector3(aligned_x, start_pos.y, aligned_z)
+	# Страховка: ставим дрон так, чтобы его нижняя точка была на полу
+	start_pos.y = max(start_pos.y, _get_spawn_floor_y(drone_node))
 	if not is_position_within_bounds(start_pos):
 		start_pos = clamp_position_to_bounds(start_pos)
 		print("⚠️ Стартовая позиция скорректирована: ", start_pos)
@@ -931,9 +951,9 @@ func setup_drone(drone_node: CharacterBody3D):
 		drone_node.set_boundaries(grid_boundary_min, grid_boundary_max)
 		print("✅ Границы установлены для дрона")
 	
+	# DEBUG: если дрон "телепортируется вниз", этот трекер покажет, КОГДА это случается
+	_spawn_debug_track(drone_node, drone_node.global_position.y)
 	print("🚁 Дрон установлен на позицию: ", drone_node.global_position)
-	
-
 func add_collision_if_needed(drone_node: CharacterBody3D):
 	if drone_node.get_node_or_null("CollisionShape3D") == null:
 		print("➕ Добавляем коллизию дрону...")
@@ -1759,3 +1779,26 @@ func get_target_for_level(level: int) -> Vector3:
 		15: Vector3(GRID_SIZE * 20, GRID_SIZE * 4, GRID_SIZE * 15)
 	}
 	return targets.get(level, Vector3(GRID_SIZE * 2, 0, GRID_SIZE * 2))
+
+
+# ==================== DEBUG: ОТСЛЕЖИВАНИЕ СПАВНА ====================
+func _spawn_debug_track(drone_node: Node3D, expected_y: float) -> void:
+	# Печатает, кто/когда меняет высоту сразу после спавна.
+	# Если ты не видишь эти логи — значит у тебя запущен ДРУГОЙ DroneScene.gd.
+	if drone_node == null or not is_instance_valid(drone_node):
+		return
+
+	for i in range(3):
+		await get_tree().process_frame
+		if drone_node == null or not is_instance_valid(drone_node):
+			return
+		print("🛠️ [SpawnDebug] frame=", i, " pos=", (drone_node as Node3D).global_position)
+
+	await get_tree().physics_frame
+	if drone_node == null or not is_instance_valid(drone_node):
+		return
+	print("🛠️ [SpawnDebug] physics_frame pos=", (drone_node as Node3D).global_position)
+
+	var cur_y := (drone_node as Node3D).global_position.y
+	if abs(cur_y - expected_y) > 0.1:
+		print("❗ [SpawnDebug] Высота изменилась после спавна! Было y=", expected_y, " стало y=", cur_y)
