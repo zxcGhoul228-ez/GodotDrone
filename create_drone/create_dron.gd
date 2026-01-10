@@ -28,6 +28,27 @@ var is_dragging_camera: bool = false
 @onready var camera: Camera3D = $CameraPivot/Camera3D
 const MAIN_MENU_SCENE_PATH := "main_scene.tscn"
 
+
+# ==================== ПУТИ СЦЕН ====================
+const CREATE_DRONE_SCENE_PATH := "res://create_drone/create_dron.tscn"
+const ARDUINO_SCENE_PATHS: Array[String] = [
+	"res://drone_ard/DroneConnectionScene.tscn",
+	"res://drone_ard/drone_connection_scene.tscn"
+]
+
+# ==================== ESC-МЕНЮ (ПАУЗА) ====================
+var _pause_layer: CanvasLayer = null
+var _pause_overlay: Control = null
+var _pause_panel: Panel = null
+var _pause_open: bool = false
+var _pause_tween: Tween = null
+
+# ==================== КНОПКА ПЕРЕХОДА В ARDUINO ====================
+var _arduino_button: Button = null
+
+# ==================== ЭКСПОРТ (ТИХИЙ РЕЖИМ) ====================
+var _suppress_export_popup: bool = false
+
 # UI (узлы берём из сцены, НЕ создаём дубликаты)
 var open_close_button: Button = null
 var list_panel: Panel = null
@@ -36,6 +57,9 @@ var component_list: ItemList = null
 # Система сохранения
 var save_slots: Array = [null, null, null]
 var current_save_ui: Control = null
+
+# Служебное: данные для скрина превью слота (чтобы не получать "скрин меню в меню")
+var _thumb_capture_state: Dictionary = {}
 
 # Хранение компонентов
 var drone_frame: Node3D = null
@@ -136,10 +160,11 @@ func _ready() -> void:
 	init_ui_components()
 	setup_hierarchy_panel()
 
+
+	_remove_save_load_container_runtime()
+	load_slots_info()
 	# UI, который делается кодом (но с защитой от дублей)
 	create_component_selectors_ui()
-	add_save_load_buttons()
-
 	# Мир
 	create_grid()
 	create_floor_line()
@@ -152,9 +177,12 @@ func _ready() -> void:
 
 	set_process_input(true)
 	print("✅ create_dron.gd готов.")
-	_create_main_menu_button_top()
+	_ensure_pause_menu()
+	_ensure_arduino_button()
 	add_child(load("res://UI/beauty_visual.gd").new())
 func _process(delta: float) -> void:
+	if _pause_open:
+		return
 	# Инерция камеры
 	if (not is_dragging_camera) and (rotation_velocity.x != 0.0 or rotation_velocity.y != 0.0):
 		camera_rotation.x += rotation_velocity.x
@@ -181,16 +209,25 @@ func update_camera_position() -> void:
 
 # ==================== ОБРАБОТКА ВВОДА ====================
 func _input(event: InputEvent) -> void:
-	# ESC -> меню настроек
+	# ==================== ESC -> ВЫЕЗЖАЮЩЕЕ МЕНЮ ====================
 	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		if settings_menu != null:
-			if settings_menu.has_method("is_open") and bool(settings_menu.call("is_open")):
-				return
-			if settings_menu.has_method("open"):
-				settings_menu.call("open")
-				get_viewport().set_input_as_handled()
-				return
+		# Если открыты настройки — пусть SettingsScene сам обработает ESC
+		if settings_menu != null and settings_menu.has_method("is_open") and bool(settings_menu.call("is_open")):
+			return
 
+		# Чтобы не "залипало" перетаскивание при открытии меню
+		if (not _pause_open) and is_dragging_component:
+			stop_component_dragging()
+
+		_toggle_pause_menu(not _pause_open)
+		get_viewport().set_input_as_handled()
+		return
+
+	# Если ESC-меню открыто — блокируем остальное управление
+	if _pause_open:
+		return
+
+	# Если SettingsScene открыт — тоже блокируем остальное управление
 	if settings_menu != null and settings_menu.has_method("is_open") and bool(settings_menu.call("is_open")):
 		return
 
@@ -1598,27 +1635,67 @@ func _load_slot_thumbnail(slot_index: int) -> Texture2D:
 	return tex
 
 func _save_slot_thumbnail(slot_index: int) -> void:
-	# Стараемся снять центр экрана (дрон обычно в центре)
-	var ui_node: CanvasLayer = get_node_or_null("UI") as CanvasLayer
-	var was_visible: bool = true
-	if ui_node != null:
-		was_visible = ui_node.visible
-		ui_node.visible = false
+	# Снимок превью слота: прячем UI и делаем capture ПОСЛЕ рендера кадра.
+	# Иначе получится "скриншот меню поверх меню" (рекурсия), как у тебя на скрине.
+	_thumb_capture_state.clear()
 
+	var ui_layer: CanvasLayer = get_node_or_null("UI") as CanvasLayer
+	var hud_layer: CanvasLayer = get_node_or_null("EngineerHUD") as CanvasLayer
+	var top_layer: CanvasLayer = get_node_or_null("TopUiLayer") as CanvasLayer
+
+	_thumb_capture_state = {
+		"slot_index": slot_index,
+		"ui_layer": ui_layer,
+		"hud_layer": hud_layer,
+		"top_layer": top_layer,
+		"ui_visible": (ui_layer.visible if ui_layer != null else true),
+		"hud_visible": (hud_layer.visible if hud_layer != null else true),
+		"top_visible": (top_layer.visible if top_layer != null else true)
+	}
+
+	if ui_layer != null:
+		ui_layer.visible = false
+	if hud_layer != null:
+		hud_layer.visible = false
+	if top_layer != null:
+		top_layer.visible = false
+
+	# Ждём, пока отрендерится кадр без UI, и только потом берём изображение.
+	var cb: Callable = Callable(self, "_on_thumb_frame_post_draw")
+	if RenderingServer.frame_post_draw.is_connected(cb):
+		RenderingServer.frame_post_draw.disconnect(cb)
+	RenderingServer.frame_post_draw.connect(cb, CONNECT_ONE_SHOT)
+
+
+func _on_thumb_frame_post_draw() -> void:
+	if _thumb_capture_state.is_empty():
+		return
+
+	var slot_index: int = int(_thumb_capture_state.get("slot_index", -1))
+
+	# Берём картинку уже после рендера кадра
+	var img: Image = null
 	var vp_tex: Texture2D = get_viewport().get_texture()
-	if vp_tex == null:
-		if ui_node != null:
-			ui_node.visible = was_visible
+	if vp_tex != null:
+		img = vp_tex.get_image()
+
+	# Возвращаем видимость UI обратно (ВАЖНО: делаем это даже если img == null)
+	var ui_layer: CanvasLayer = _thumb_capture_state.get("ui_layer") as CanvasLayer
+	var hud_layer: CanvasLayer = _thumb_capture_state.get("hud_layer") as CanvasLayer
+	var top_layer: CanvasLayer = _thumb_capture_state.get("top_layer") as CanvasLayer
+
+	if ui_layer != null:
+		ui_layer.visible = bool(_thumb_capture_state.get("ui_visible", true))
+	if hud_layer != null:
+		hud_layer.visible = bool(_thumb_capture_state.get("hud_visible", true))
+	if top_layer != null:
+		top_layer.visible = bool(_thumb_capture_state.get("top_visible", true))
+
+	_thumb_capture_state.clear()
+
+	if img == null or slot_index < 0:
 		return
 
-	var img: Image = vp_tex.get_image()
-	if ui_node != null:
-		ui_node.visible = was_visible
-
-	if img == null:
-		return
-
-	img.flip_y()
 
 	var w: int = img.get_width()
 	var h: int = img.get_height()
@@ -1880,6 +1957,11 @@ func load_drone_from_slot(slot_index: int) -> void:
 
 	clear_drone()
 	create_drone_from_data(data)
+
+	# Авто-экспорт после загрузки (кнопка "Экспорт" больше не нужна)
+	_suppress_export_popup = true
+	export_drone_scene()
+	_suppress_export_popup = false
 
 func get_component_data(component: Node3D) -> Variant:
 	if component == null or not is_instance_valid(component):
@@ -2166,7 +2248,8 @@ func export_drone_scene() -> bool:
 		print("   - Пропеллеров: ", propellers.size())
 		print("   - Детей: ", drone_root.get_child_count())
 
-		show_export_success_message()
+		if not _suppress_export_popup:
+			show_export_success_message()
 		return true
 
 	print("❌ Ошибка при упаковке сцены дрона")
@@ -2900,3 +2983,239 @@ func _perm_slots(ids: Array, locals: Dictionary, targets: Dictionary, idx: int, 
 		next_avail.remove_at(j)
 
 		_perm_slots(ids, locals, targets, idx + 1, next_chosen, next_avail, best_assign, best_cost)
+
+# ==================== UI: УБРАТЬ КНОПКИ СЦЕНЫ (SAVE/LOAD/EXPORT) ====================
+func _remove_save_load_container_runtime() -> void:
+	var ui := get_node_or_null("UI") as CanvasLayer
+	if ui == null:
+		return
+	var c := ui.get_node_or_null("SaveLoadContainer")
+	if c != null and is_instance_valid(c):
+		c.queue_free()
+
+# ==================== ARDUINO: ПЕРЕХОД В СЦЕНУ ====================
+func _get_arduino_scene_path() -> String:
+	for p in ARDUINO_SCENE_PATHS:
+		if ResourceLoader.exists(p):
+			return p
+	return ARDUINO_SCENE_PATHS[0]
+
+func _ensure_arduino_button() -> void:
+	var ui := get_node_or_null("UI") as CanvasLayer
+	if ui == null:
+		return
+
+	var btn := ui.get_node_or_null("ArduinoButton") as Button
+	if btn == null:
+		btn = Button.new()
+		btn.name = "ArduinoButton"
+		btn.text = "🔌 Arduino"
+		btn.custom_minimum_size = Vector2(200, 45)
+		btn.focus_mode = Control.FOCUS_NONE
+		btn.mouse_filter = Control.MOUSE_FILTER_STOP
+
+		# Сверху справа
+		btn.anchor_left = 1.0
+		btn.anchor_right = 1.0
+		btn.anchor_top = 0.0
+		btn.anchor_bottom = 0.0
+		btn.offset_left = -220.0
+		btn.offset_right = -20.0
+		btn.offset_top = 15.0
+		btn.offset_bottom = 60.0
+
+		ui.add_child(btn)
+
+	_arduino_button = btn
+	var cb := Callable(self, "_on_arduino_button_pressed")
+	if not _arduino_button.is_connected("pressed", cb):
+		_arduino_button.pressed.connect(_on_arduino_button_pressed)
+
+func _on_arduino_button_pressed() -> void:
+	if _pause_open:
+		_toggle_pause_menu(false)
+
+	# Если нет экспортированного дрона — экспортнём один раз
+	if not FileAccess.file_exists("user://exported_drone.tscn"):
+		_suppress_export_popup = true
+		export_drone_scene()
+		_suppress_export_popup = false
+
+	get_tree().change_scene_to_file(_get_arduino_scene_path())
+
+
+# ===================================================================
+# ==================== ESC-МЕНЮ: СОЗДАНИЕ/АНИМАЦИЯ ===================
+# ===================================================================
+
+func _ensure_pause_menu() -> void:
+	if _pause_layer != null and is_instance_valid(_pause_layer):
+		return
+
+	_pause_layer = CanvasLayer.new()
+	_pause_layer.name = "PauseMenuLayer"
+	_pause_layer.layer = 500
+	add_child(_pause_layer)
+
+	_pause_overlay = Control.new()
+	_pause_overlay.name = "PauseOverlay"
+	_pause_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_pause_overlay.visible = false
+	_pause_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	_pause_layer.add_child(_pause_overlay)
+
+	# Клик по затемнению -> закрыть
+	_pause_overlay.gui_input.connect(_on_pause_overlay_gui_input)
+
+	# Затемнение
+	var dim := ColorRect.new()
+	dim.name = "Dim"
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.color = Color(0, 0, 0, 0.45)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_pause_overlay.add_child(dim)
+
+	# Панель меню (по центру)
+	_pause_panel = Panel.new()
+	_pause_panel.name = "PausePanel"
+	_pause_panel.size = Vector2(420, 420)
+	_pause_panel.set_anchors_preset(Control.PRESET_CENTER)
+	_pause_panel.offset_left = -_pause_panel.size.x * 0.5
+	_pause_panel.offset_top = -_pause_panel.size.y * 0.5
+	_pause_panel.offset_right = _pause_panel.size.x * 0.5
+	_pause_panel.offset_bottom = _pause_panel.size.y * 0.5
+	_pause_panel.pivot_offset = _pause_panel.size * 0.5
+	_pause_panel.scale = Vector2(0.92, 0.92)
+	_pause_panel.modulate.a = 0.0
+	_pause_overlay.add_child(_pause_panel)
+
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.08, 0.08, 0.1, 0.96)
+	style.border_color = Color(0.3, 0.5, 1.0, 0.9)
+	style.border_width_left = 2
+	style.border_width_top = 2
+	style.border_width_right = 2
+	style.border_width_bottom = 2
+	style.corner_radius_top_left = 16
+	style.corner_radius_top_right = 16
+	style.corner_radius_bottom_left = 16
+	style.corner_radius_bottom_right = 16
+	_pause_panel.add_theme_stylebox_override("panel", style)
+
+	var vbox := VBoxContainer.new()
+	vbox.name = "VBox"
+	vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	vbox.offset_left = 18
+	vbox.offset_top = 18
+	vbox.offset_right = -18
+	vbox.offset_bottom = -18
+	vbox.add_theme_constant_override("separation", 8)
+	_pause_panel.add_child(vbox)
+
+	var title := Label.new()
+	title.text = "МЕНЮ"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.add_theme_font_size_override("font_size", 24)
+	vbox.add_child(title)
+
+	var hint := Label.new()
+	hint.text = "ESC — закрыть меню"
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.add_theme_font_size_override("font_size", 14)
+	hint.modulate = Color(1,1,1,0.75)
+	vbox.add_child(hint)
+
+	vbox.add_child(HSeparator.new())
+
+	# --- быстрые действия ---
+	vbox.add_child(_pm_btn("▶ Продолжить", Callable(self, "_on_pause_resume_pressed")))
+	vbox.add_child(_pm_btn("🔌 Arduino (схема)", Callable(self, "_on_pause_arduino_pressed")))
+	vbox.add_child(_pm_btn("💾 Сохранить (слоты)", Callable(self, "_on_pause_save_pressed")))
+	vbox.add_child(_pm_btn("📂 Загрузить (и экспорт)", Callable(self, "_on_pause_load_pressed")))
+	vbox.add_child(_pm_btn("⚙ Настройки", Callable(self, "_on_pause_settings_pressed")))
+	vbox.add_child(_pm_btn("🏠 В главное меню", Callable(self, "_on_pause_main_menu_pressed")))
+	vbox.add_child(_pm_btn("⛔ Выйти из игры", Callable(self, "_on_pause_quit_pressed")))
+
+func _pm_btn(text_: String, cb: Callable) -> Button:
+	var b := Button.new()
+	b.text = text_
+	b.custom_minimum_size = Vector2(0, 42)
+	b.focus_mode = Control.FOCUS_NONE
+	b.pressed.connect(cb)
+	return b
+
+func _toggle_pause_menu(open: bool) -> void:
+	_ensure_pause_menu()
+	_pause_open = open
+	_pause_overlay.visible = true
+
+	if _pause_tween != null and is_instance_valid(_pause_tween):
+		_pause_tween.kill()
+
+	if open:
+		_pause_panel.scale = Vector2(0.92, 0.92)
+		_pause_panel.modulate.a = 0.0
+
+	_pause_tween = create_tween()
+	_pause_tween.set_trans(Tween.TRANS_QUAD)
+	_pause_tween.set_ease(Tween.EASE_OUT)
+
+	if open:
+		_pause_tween.tween_property(_pause_panel, "modulate:a", 1.0, 0.12)
+		_pause_tween.parallel().tween_property(_pause_panel, "scale", Vector2(1, 1), 0.14)
+	else:
+		_pause_tween.tween_property(_pause_panel, "modulate:a", 0.0, 0.10)
+		_pause_tween.parallel().tween_property(_pause_panel, "scale", Vector2(0.92, 0.92), 0.10)
+		_pause_tween.tween_callback(Callable(self, "_pause_hide_overlay"))
+
+func _pause_hide_overlay() -> void:
+	if (not _pause_open) and _pause_overlay != null and is_instance_valid(_pause_overlay):
+		_pause_overlay.visible = false
+
+func _close_pause_menu_immediate() -> void:
+	# Мгновенно закрывает оверлей (нужно, чтобы он не перекрывал другие окна, например меню слотов)
+	_pause_open = false
+	if _pause_tween != null and is_instance_valid(_pause_tween):
+		_pause_tween.kill()
+	if _pause_panel != null and is_instance_valid(_pause_panel):
+		_pause_panel.modulate.a = 0.0
+		_pause_panel.scale = Vector2(0.92, 0.92)
+	if _pause_overlay != null and is_instance_valid(_pause_overlay):
+		_pause_overlay.visible = false
+
+
+func _on_pause_overlay_gui_input(event: InputEvent) -> void:
+	# клик по фону закрывает меню
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		_toggle_pause_menu(false)
+
+# ===================================================================
+# ==================== ESC-МЕНЮ: ОБРАБОТЧИКИ КНОПОК ==================
+# ===================================================================
+
+func _on_pause_resume_pressed() -> void:
+	_toggle_pause_menu(false)
+
+func _on_pause_arduino_pressed() -> void:
+	_close_pause_menu_immediate()
+	_on_arduino_button_pressed()
+
+func _on_pause_save_pressed() -> void:
+	_close_pause_menu_immediate()
+	show_save_menu()
+
+func _on_pause_load_pressed() -> void:
+	_close_pause_menu_immediate()
+	show_load_menu()
+
+func _on_pause_settings_pressed() -> void:
+	_toggle_pause_menu(false)
+	if settings_menu != null and settings_menu.has_method("open"):
+		settings_menu.call("open")
+
+func _on_pause_main_menu_pressed() -> void:
+	_toggle_pause_menu(false)
+	get_tree().change_scene_to_file(MAIN_MENU_SCENE_PATH)
+
+func _on_pause_quit_pressed() -> void:
+	get_tree().quit()

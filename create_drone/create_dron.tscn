@@ -35,12 +35,10 @@ transform = Transform3D(6, 0, 0, 0, 6, 0, 0, 0, 6, 10, 0, 0)
 [node name="LightsContainer" type="Node3D" parent="."]
 
 [node name="MainLight" type="DirectionalLight3D" parent="LightsContainer"]
-transform = Transform3D(0.8660254, -0.43301272, 0.24999999, 0, 0.49999997, 0.86602545, -0.5, -0.75, 0.43301266, 0, 0, 0)
 light_energy = 0.85
 shadow_enabled = true
 
 [node name="FillLight" type="OmniLight3D" parent="LightsContainer"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 4, 0)
 light_energy = 0.35
 omni_range = 12.0
 
@@ -53,27 +51,6 @@ offset_right = 260.0
 offset_bottom = 60.0
 text = "Показать список"
 
-[node name="SaveLoadContainer" type="HBoxContainer" parent="UI"]
-offset_left = 720.0
-offset_top = 15.0
-offset_right = 1200.0
-offset_bottom = 65.0
-
-[node name="SaveButton" type="Button" parent="UI/SaveLoadContainer"]
-custom_minimum_size = Vector2(150, 45)
-layout_mode = 2
-text = "Сохранить"
-
-[node name="LoadButton" type="Button" parent="UI/SaveLoadContainer"]
-custom_minimum_size = Vector2(150, 45)
-layout_mode = 2
-text = "Загрузить"
-
-[node name="ExportButton" type="Button" parent="UI/SaveLoadContainer"]
-custom_minimum_size = Vector2(150, 45)
-layout_mode = 2
-text = "Экспорт"
-
 [node name="Hierarchy" type="Panel" parent="UI"]
 visible = false
 offset_left = 20.0
@@ -82,7 +59,6 @@ offset_right = 360.0
 offset_bottom = 520.0
 
 [node name="Title" type="Label" parent="UI/Hierarchy"]
-layout_mode = 0
 offset_left = 12.0
 offset_top = 8.0
 offset_right = 328.0
@@ -91,7 +67,6 @@ text = "Структура"
 horizontal_alignment = 1
 
 [node name="Complist" type="ItemList" parent="UI/Hierarchy"]
-layout_mode = 0
 offset_left = 12.0
 offset_top = 45.0
 offset_right = 328.0
@@ -110,26 +85,14 @@ offset_right = 1892.0
 offset_bottom = 1052.0
 
 [node name="Label" type="Label" parent="UI/StatsPanel"]
-layout_mode = 0
 offset_left = 12.0
 offset_top = 12.0
 offset_right = 328.0
 offset_bottom = 168.0
-
-[node name="Control" type="Control" parent="UI"]
-layout_mode = 3
-anchors_preset = 0
-offset_left = 20.0
-offset_top = 850.0
-offset_right = 220.0
-offset_bottom = 930.0
 
 [node name="EngineerHUD" type="CanvasLayer" parent="."]
 layer = 10
 script = ExtResource("3_7jpe2")
 
 [connection signal="pressed" from="UI/OpenClose" to="." method="_on_open_close_pressed"]
-[connection signal="pressed" from="UI/SaveLoadContainer/SaveButton" to="." method="show_save_menu"]
-[connection signal="pressed" from="UI/SaveLoadContainer/LoadButton" to="." method="show_load_menu"]
-[connection signal="pressed" from="UI/SaveLoadContainer/ExportButton" to="." method="export_drone_scene"]
 [connection signal="item_clicked" from="UI/Hierarchy/Complist" to="." method="_on_component_list_item_clicked"]
