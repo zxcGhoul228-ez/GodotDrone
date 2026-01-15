@@ -1,8 +1,8 @@
+Button
 TextureRect
 Label
 HSlider
 HBoxContainer
-Button
 OptionButton
 VBoxContainer
 Panel

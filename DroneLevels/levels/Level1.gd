@@ -139,6 +139,13 @@ func _on_target_body_entered(body: Node):
 	
 	if body is CharacterBody3D and ("Drone" in body.name or "DefaultDrone" in body.name):
 		print("🎯 Дрон достиг цели!")
+		# ВАЖНО: DroneScene/логика завершения смотрит на флаг has_reached_target у дрона.
+		# При входе в Area цели выставляем флаг сразу, чтобы не было ситуации
+		# "Дрон достиг цели" (по коллизии), но has_reached_target остаётся false.
+		if body.has_method("set_target_reached"):
+			body.set_target_reached(true)
+		elif body.has_method("set_has_reached_target"):
+			body.set_has_reached_target(true)
 		complete_level()
 
 func create_cell_marker(grid_x: int, grid_z: int):
@@ -262,13 +269,18 @@ func complete_level():
 	
 	# ПРОВЕРЯЕМ РАССТОЯНИЕ И СОСТОЯНИЕ
 	var distance_to_target = drone.global_position.distance_to(target_point.global_position)
-	var target_radius = 10.0  # ВОССТАНАВЛИВАЕМ ОРИГИНАЛЬНОЕ
+	# ВАЖНО: в DroneScene и логах используется порог примерно 48 (GRID_SIZE * 1.5).
+	# Старое значение 10.0 часто давало ложный "не достиг" даже после коллизии.
+	var target_threshold = GRID_SIZE * 1.5
 	
 	print("📏 Дистанция до цели: ", distance_to_target)
 	print("🎯 Состояние дрона: достиг цели = ", has_reached_target)
 	
-	# Условие завершения: дрон должен быть достаточно близко (коллизия уже проверила это)
-	if has_reached_target:
+	# Условие завершения: либо дрон сам выставил флаг, либо мы достаточно близко к цели.
+	if has_reached_target or distance_to_target <= target_threshold:
+		# синхронизируем флаг в дроне, чтобы DroneScene тоже видел цель достигнутой
+		if drone.has_method("set_target_reached"):
+			drone.set_target_reached(true)
 		is_level_completed = true
 		print("🎉 УРОВЕНЬ 1 ЗАВЕРШЕН!")
 		
@@ -286,7 +298,7 @@ func complete_level():
 		await get_tree().create_timer(3.0).timeout
 		return_to_selection()
 	else:
-		print("❌ Дрон не достиг цели: расстояние = ", distance_to_target, ", радиус = ", target_radius)
+		print("❌ Дрон не достиг цели: расстояние = ", distance_to_target, ", порог = ", target_threshold)
 		show_failure_message()
 		await get_tree().create_timer(2.0).timeout
 		reset_level()

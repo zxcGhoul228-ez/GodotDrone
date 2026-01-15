@@ -8,7 +8,7 @@
 
 [node name="Node2D" type="Node2D"]
 
-[node name="Control" type="Control" parent="." node_paths=PackedStringArray("audio_player", "score_label")]
+[node name="Control" type="Control" parent="."]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -18,8 +18,6 @@ offset_bottom = 1080.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_d5x1h")
-audio_player = NodePath("AudioStreamPlayer")
-score_label = NodePath("VBoxContainer/HBoxContainer/ScoreLabel")
 
 [node name="TextureRect" type="TextureRect" parent="Control"]
 custom_minimum_size = Vector2(1920, 1080)
@@ -35,9 +33,9 @@ texture = ExtResource("2_gyfs4")
 custom_minimum_size = Vector2(300, 200)
 layout_mode = 0
 offset_left = 83.0
-offset_top = 321.0
+offset_top = 318.0
 offset_right = 657.0
-offset_bottom = 985.0
+offset_bottom = 865.0
 theme_override_constants/separation = 149
 alignment = 1
 

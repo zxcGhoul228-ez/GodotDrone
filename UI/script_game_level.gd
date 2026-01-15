@@ -100,7 +100,12 @@ func _load_level():
 	# Для игровых уровней используем экран загрузки
 	Global.load_scene_with_loading(level_path)
 
-func _on_back_pressed():
-	# Возврат в главное меню БЕЗ экрана загрузки
+func _on_back_pressed() -> void:
 	print("🔙 Назад в меню")
-	get_tree().change_scene_to_file("res://main_scene.tscn")
+
+	var path := "res://main_scene.tscn"
+	if not ResourceLoader.exists(path):
+		push_error("Не найдена сцена: " + path)
+		return
+
+	get_tree().change_scene_to_file(path)

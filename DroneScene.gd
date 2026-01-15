@@ -137,6 +137,8 @@ func _ready():
 	print("Границы сетки: от ", grid_boundary_min, " до ", grid_boundary_max)
 
 # ==================== СИСТЕМА КОМНАТ ====================
+	_tutorial_setup_level()
+
 func load_room_for_level(level: int):
 	print("🔄 Загружаем комнату для уровня: ", level)
 	
@@ -687,7 +689,13 @@ func _on_continue_pressed(canvas: CanvasLayer):
 func return_to_selection():
 	print("🔄 Возвращаемся к выбору уровней...")
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	var tutor := get_node_or_null("/root/tut")
+	if tutor != null and tutor.active:
+		# В обучении после победы возвращаем игрока в главное меню
+		get_tree().change_scene_to_file("res://main_scene.tscn")
+		return
 	get_tree().change_scene_to_file("res://UI/game_level.tscn")
+
 
 # ==================== СИСТЕМА ДРОНА ====================
 func create_drone():
@@ -1260,6 +1268,9 @@ func toggle_programming():
 		if block_ui.has_method("get_program_sequence"):
 			var sequence = block_ui.get_program_sequence()
 			update_trajectory_preview(sequence)
+		var tut := get_node_or_null("/root/tut")
+		if tut != null:
+			tut.notify("programming_open")
 		print("🧩 Открываем панель программирования")
 
 # ==================== МЕНЮ ПАУЗЫ ====================
@@ -1802,3 +1813,130 @@ func _spawn_debug_track(drone_node: Node3D, expected_y: float) -> void:
 	var cur_y := (drone_node as Node3D).global_position.y
 	if abs(cur_y - expected_y) > 0.1:
 		print("❗ [SpawnDebug] Высота изменилась после спавна! Было y=", expected_y, " стало y=", cur_y)
+
+
+# ==================== TUTORIAL HELPERS ====================
+func _tutorial_setup_level() -> void:
+	# Добавляем кнопку подсказки в BlockProgramming и ставим ЕЁ ПОД списком команд (чтобы не лезла на текст обучения)
+	if block_ui == null or not (block_ui is Control):
+		return
+	var ui: Control = block_ui as Control
+
+	var target_pos := Vector2(16, 16)
+	var target_size := Vector2(180, 52)
+
+	# Пытаемся ориентироваться на BlockPalette (колонка команд)
+	var palette: Control = ui.get_node_or_null("BlockPalette") as Control
+	if palette != null:
+		# Под последним блоком: считаем суммарную высоту детей (чтобы не зависеть от темы/масштаба).
+		var content_h := 0.0
+		for ch in palette.get_children():
+			if ch is Control:
+				var c := ch as Control
+				var h := maxf(c.size.y, c.custom_minimum_size.y)
+				if h <= 0.0:
+					h = 70.0
+				content_h += h
+		content_h += 10.0
+		var max_y := maxf(0.0, palette.size.y - target_size.y)
+		var y := minf(content_h, max_y)
+		target_pos = palette.position + Vector2(0.0, y)
+
+	var hint_btn: Button = ui.get_node_or_null("TutorialHintButton") as Button
+	if hint_btn == null:
+		hint_btn = Button.new()
+		hint_btn.name = "TutorialHintButton"
+		hint_btn.text = "Подсказка"
+		hint_btn.mouse_filter = Control.MOUSE_FILTER_STOP
+		ui.add_child(hint_btn)
+
+	# Фиксируем размер/позицию
+	hint_btn.anchor_left = 0.0
+	hint_btn.anchor_top = 0.0
+	hint_btn.anchor_right = 0.0
+	hint_btn.anchor_bottom = 0.0
+	hint_btn.position = target_pos
+	hint_btn.custom_minimum_size = target_size
+	hint_btn.size = target_size
+	hint_btn.tooltip_text = "Показать пример алгоритма"
+	hint_btn.add_theme_font_size_override("font_size", 14)
+
+	if not hint_btn.pressed.is_connected(_on_tutorial_hint_pressed):
+		hint_btn.pressed.connect(_on_tutorial_hint_pressed)
+
+func _on_tutorial_hint_pressed() -> void:
+	# 1) Если идет обучение — сообщаем Tutorial.gd, чтобы он показал алгоритм
+	var tutor := get_node_or_null("/root/tut")
+	if tutor != null and tutor.active:
+		tutor.notify("hint_pressed")
+
+	# 2) Показываем небольшую плашку внутри блока программирования (можно и вне обучения)
+	_tutorial_toggle_hint_popup("Алгоритм: 3 назад, 3 вправо, 1 вверх")
+
+func _tutorial_toggle_hint_popup(text: String) -> void:
+	if block_ui == null or not (block_ui is Control):
+		return
+	var ui: Control = block_ui as Control
+	var hint_btn: Button = ui.get_node_or_null("TutorialHintButton") as Button
+
+	var popup: Panel = ui.get_node_or_null("TutorialHintPopup") as Panel
+	if popup == null:
+		popup = Panel.new()
+		popup.name = "TutorialHintPopup"
+		popup.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.08, 0.08, 0.1, 0.92)
+		sb.corner_radius_top_left = 12
+		sb.corner_radius_top_right = 12
+		sb.corner_radius_bottom_left = 12
+		sb.corner_radius_bottom_right = 12
+		sb.border_width_left = 2
+		sb.border_width_top = 2
+		sb.border_width_right = 2
+		sb.border_width_bottom = 2
+		sb.border_color = Color(1, 0.85, 0.2, 0.9)
+		popup.add_theme_stylebox_override("panel", sb)
+		ui.add_child(popup)
+
+		var lbl := Label.new()
+		lbl.name = "Text"
+		lbl.text = text
+		lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		# Паддинги
+		lbl.anchor_left = 0
+		lbl.anchor_top = 0
+		lbl.anchor_right = 1
+		lbl.anchor_bottom = 1
+		lbl.offset_left = 12
+		lbl.offset_top = 10
+		lbl.offset_right = -12
+		lbl.offset_bottom = -10
+		popup.add_child(lbl)
+	else:
+		var lbl2: Label = popup.get_node_or_null("Text") as Label
+		if lbl2 != null:
+			lbl2.text = text
+
+	# Ставим плашку рядом с кнопкой подсказки
+	var left := 16.0
+	var top := 60.0
+	if hint_btn != null:
+		left = hint_btn.position.x
+		top = hint_btn.position.y - 92.0
+		if top < 12.0:
+			top = hint_btn.position.y + hint_btn.size.y + 8.0
+
+	popup.anchor_left = 0.0
+	popup.anchor_top = 0.0
+	popup.anchor_right = 0.0
+	popup.anchor_bottom = 0.0
+	popup.position = Vector2(left, top)
+	popup.size = Vector2(320, 92)
+	popup.custom_minimum_size = popup.size
+
+
+func _tutorial_notify_level_completed() -> void:
+	var tutor := get_node_or_null("/root/tut")
+	if tutor != null:
+		tutor.notify("level_completed")

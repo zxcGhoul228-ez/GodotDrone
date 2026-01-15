@@ -1,5 +1,8 @@
 extends Control
 
+@export var tutorial_button_path: NodePath
+@onready var tutorial_butt: Button = get_node_or_null(tutorial_button_path) as Button
+
 @export var audio_player: AudioStreamPlayer
 @export var score_label: Label
 
@@ -99,7 +102,16 @@ func _ready():
 	else:
 		print("⚠️ audio_player не установлен в инспекторе!")
 	
+	_tutorial_setup_button()
 	print("=== MAIN MENU READY ===")
+	
+	if tutorial_butt:
+		tutorial_butt.pressed.connect(_on_tutorial_pressed)
+	else:
+		push_warning("tutorial_butt == null. Назначь tutorial_button_path в инспекторе.")
+		
+func _on_tutorial_pressed() -> void:
+	tut.start_tutorial()
 
 func find_all_buttons(node: Node, buttons: Array):
 	for child in node.get_children():
@@ -623,3 +635,106 @@ func _input(event):
 			# Открываем меню настроек
 			show_settings_menu()
 			get_viewport().set_input_as_handled()
+
+
+# ================== TUTORIAL BUTTON ==================
+func _tutorial_setup_button() -> void:
+	var tut := get_node_or_null("/root/tut")
+	if tut == null:
+		return
+
+	# Ищем VBoxContainer, где лежат кнопки, и вставляем между "Магазин" и "Выйти"
+	var vbox: VBoxContainer = null
+
+	# Пытаемся найти по структуре: Control/TextureRect/HBoxContainer/VBoxContainer
+	if has_node("TextureRect/HBoxContainer/VBoxContainer"):
+		vbox = get_node("TextureRect/HBoxContainer/VBoxContainer") as VBoxContainer
+	else:
+		# Фолбэк: поиск первого VBoxContainer
+		var stack: Array[Node] = [self]
+		while not stack.is_empty():
+			var n: Node = stack.pop_back()
+			if n is VBoxContainer:
+				vbox = n as VBoxContainer
+				break
+			for c in n.get_children():
+				stack.append(c)
+
+	if vbox == null:
+		print("❌ Tutorial: VBoxContainer не найден, кнопку не добавили")
+		return
+
+	if vbox.get_node_or_null("TutorialStartButton") != null:
+		return
+
+	# Берем стиль/размер у кнопки "Магазин" (или у первой доступной)
+	var ref_btn: Button = null
+	for ch in vbox.get_children():
+		if ch is Button:
+			var b := ch as Button
+			if b.text.findn("Магазин") != -1:
+				ref_btn = b
+				break
+	if ref_btn == null:
+		for ch in vbox.get_children():
+			if ch is Button:
+				ref_btn = ch as Button
+				break
+
+	var btn := Button.new()
+	btn.name = "TutorialStartButton"
+	btn.text = "Начать обучение"
+
+	# Размер/стиль как у остальных кнопок
+	if ref_btn != null:
+		btn.size_flags_horizontal = ref_btn.size_flags_horizontal
+		if btn.size_flags_horizontal == 0:
+			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.size_flags_vertical = ref_btn.size_flags_vertical
+		btn.size_flags_stretch_ratio = ref_btn.size_flags_stretch_ratio
+		btn.custom_minimum_size = ref_btn.custom_minimum_size
+		if btn.custom_minimum_size.y <= 0.0:
+			btn.custom_minimum_size.y = maxf(ref_btn.size.y, 60.0)
+
+		btn.theme = ref_btn.theme
+		btn.theme_type_variation = ref_btn.theme_type_variation
+
+		# Копируем overrides (если кнопки в сцене их используют)
+		var style_keys := ["normal", "hover", "pressed", "disabled", "focus"]
+		for k in style_keys:
+			if ref_btn.has_theme_stylebox_override(k):
+				btn.add_theme_stylebox_override(k, ref_btn.get_theme_stylebox(k))
+		if ref_btn.has_theme_font_size_override("font_size"):
+			btn.add_theme_font_size_override("font_size", ref_btn.get_theme_font_size("font_size"))
+		if ref_btn.has_theme_color_override("font_color"):
+			btn.add_theme_color_override("font_color", ref_btn.get_theme_color("font_color"))
+	else:
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		btn.custom_minimum_size = Vector2(0, 60)
+
+	# Находим индексы Shop и Exit
+	var shop_index := -1
+	var exit_index := -1
+	for i in range(vbox.get_child_count()):
+		var ch := vbox.get_child(i)
+		if ch is Button:
+			var b := ch as Button
+			if b.text.findn("Магазин") != -1:
+				shop_index = i
+			if b.text.findn("Выйти") != -1:
+				exit_index = i
+
+	var insert_at := -1
+	if exit_index != -1:
+		insert_at = exit_index
+	elif shop_index != -1:
+		insert_at = shop_index + 1
+	else:
+		insert_at = vbox.get_child_count()
+
+	vbox.add_child(btn)
+	vbox.move_child(btn, insert_at)
+
+	btn.pressed.connect(func():
+		tut.start_tutorial()
+	)

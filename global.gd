@@ -320,6 +320,9 @@ func complete_level(level_number: int, time_ms: int):
 		save_levels_data()
 		save_game()  # Сохраняем игру чтобы сохранить счет
 		
+		var tut := get_node_or_null("/root/tut")
+		if tut != null:
+			tut.notify("level_completed")
 		return result
 	return {"stars": 0, "reward": 0, "base_reward": 0, "bonus": 0}
 	

@@ -482,6 +482,7 @@ func stop_component_dragging() -> void:
 		hide_attachment_points()
 		update_component_list()
 		calculate_drone_stats()
+		_tut_notify_after_drop(component_type)
 
 	is_dragging_component = false
 	dragged_component = null
@@ -853,6 +854,7 @@ func add_frame() -> void:
 	calculate_drone_stats()
 	update_component_list()
 	start_component_dragging(drone_frame, mouse_pos)
+	call_deferred("_tut_notify", "frame_spawned")
 
 func add_board() -> void:
 	if not Global.is_component_available("board", current_board_type):
@@ -877,6 +879,7 @@ func add_board() -> void:
 	calculate_drone_stats()
 	update_component_list()
 	start_component_dragging(drone_board, mouse_pos)
+	call_deferred("_tut_notify", "board_spawned")
 
 func add_motor() -> void:
 	if not Global.is_component_available("motor", current_motor_type):
@@ -905,6 +908,7 @@ func add_motor() -> void:
 	calculate_drone_stats()
 	update_component_list()
 	start_component_dragging(new_motor, mouse_pos)
+	call_deferred("_tut_notify", "motor_spawned")
 
 func add_propeller() -> void:
 	if not Global.is_component_available("propeller", current_propeller_type):
@@ -935,6 +939,7 @@ func add_propeller() -> void:
 	calculate_drone_stats()
 	update_component_list()
 	start_component_dragging(new_prop, mouse_pos)
+	call_deferred("_tut_notify", "propeller_spawned")
 
 func delete_frame() -> void:
 	if drone_frame != null and is_instance_valid(drone_frame):
@@ -1366,6 +1371,8 @@ func _on_frame_menu_toggled() -> void:
 	options.visible = not options.visible
 	if options.visible and options.get_child_count() == 0:
 		create_frame_options()
+	if options.visible:
+		call_deferred("_tut_notify", "frame_menu_open")
 
 func _on_board_menu_toggled() -> void:
 	_close_other_menus("board")
@@ -1373,6 +1380,8 @@ func _on_board_menu_toggled() -> void:
 	options.visible = not options.visible
 	if options.visible and options.get_child_count() == 0:
 		create_board_options()
+	if options.visible:
+		call_deferred("_tut_notify", "board_menu_open")
 
 func _on_motor_menu_toggled() -> void:
 	_close_other_menus("motor")
@@ -1380,6 +1389,8 @@ func _on_motor_menu_toggled() -> void:
 	options.visible = not options.visible
 	if options.visible and options.get_child_count() == 0:
 		create_motor_options()
+	if options.visible:
+		call_deferred("_tut_notify", "motor_menu_open")
 
 func _on_propeller_menu_toggled() -> void:
 	_close_other_menus("propeller")
@@ -1387,6 +1398,8 @@ func _on_propeller_menu_toggled() -> void:
 	options.visible = not options.visible
 	if options.visible and options.get_child_count() == 0:
 		create_propeller_options()
+	if options.visible:
+		call_deferred("_tut_notify", "propeller_menu_open")
 
 func _close_other_menus(except_menu: String) -> void:
 	var menus: Dictionary = {
@@ -1934,6 +1947,8 @@ func save_drone_to_slot(slot_index: int) -> void:
 		"has_board": drone_board != null
 	}
 
+	_tut_notify("saved")
+
 func load_drone_from_slot(slot_index: int) -> void:
 	var file_path: String = _slot_json_path(slot_index)
 	if not FileAccess.file_exists(file_path):
@@ -1958,10 +1973,14 @@ func load_drone_from_slot(slot_index: int) -> void:
 	clear_drone()
 	create_drone_from_data(data)
 
+	_tut_notify("loaded")
+
 	# Авто-экспорт после загрузки (кнопка "Экспорт" больше не нужна)
-	_suppress_export_popup = true
-	export_drone_scene()
-	_suppress_export_popup = false
+	# Во время обучения не авто-экспортируем, чтобы шаг "Экспорт" был вручную.
+	if not _is_tutorial_active():
+		_suppress_export_popup = true
+		export_drone_scene()
+		_suppress_export_popup = false
 
 func get_component_data(component: Node3D) -> Variant:
 	if component == null or not is_instance_valid(component):
@@ -2250,6 +2269,7 @@ func export_drone_scene() -> bool:
 
 		if not _suppress_export_popup:
 			show_export_success_message()
+		_tut_notify("exported")
 		return true
 
 	print("❌ Ошибка при упаковке сцены дрона")
@@ -3219,3 +3239,35 @@ func _on_pause_main_menu_pressed() -> void:
 
 func _on_pause_quit_pressed() -> void:
 	get_tree().quit()
+
+
+# ==================== TUTORIAL HOOKS ====================
+func _get_tut() -> Node:
+	var t := get_node_or_null("/root/tut")
+	return t
+
+func _is_tutorial_active() -> bool:
+	var t := _get_tut()
+	if t == null:
+		return false
+	return bool(t.get("active"))
+
+func _tut_notify(event_name: String, data: Variant = null) -> void:
+	var t := _get_tut()
+	if t == null:
+		return
+	if t.has_method("notify"):
+		t.notify(event_name, data)
+
+func _tut_notify_after_drop(component_type: String) -> void:
+	match component_type:
+		"frame":
+			_tut_notify("frame_added")
+		"board":
+			_tut_notify("board_added")
+		"motor":
+			_tut_notify("motors_count", motors.size())
+		"propeller":
+			_tut_notify("propellers_count", propellers.size())
+		_:
+			pass

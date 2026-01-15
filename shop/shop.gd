@@ -1,4 +1,9 @@
 extends Control
+
+# ==================== ОБУЧЕНИЕ (F1) ====================
+const TUTORIAL_POPUP_SCRIPT := "res://tutorial/TutorialPopup.gd"
+var tutorial_popup: Node = null
+
 @onready var back_button = $HBoxContainer/back_butt
 @onready var message_label = $"message label"
 @onready var refresh_button = $refresh
@@ -84,6 +89,7 @@ func _ready():
 	if message_label:
 		message_label.hide()
 		message_label.text = "Недостаточно средств!"
+	_init_tutorial()
 
 func update_refresh_button_text():
 	refresh_button.text = "Обновить\n(%d монет)" % refresh_cost
@@ -243,3 +249,37 @@ func show_message():
 		var timer = get_tree().create_timer(2.0)
 		await timer.timeout
 		message_label.hide()
+
+# ==================== ОБУЧЕНИЕ (F1) ====================
+func _init_tutorial() -> void:
+	var popup_script: Script = load(TUTORIAL_POPUP_SCRIPT)
+	if popup_script == null:
+		return
+	tutorial_popup = popup_script.new()
+	add_child(tutorial_popup)
+	if tutorial_popup.has_method("setup"):
+		tutorial_popup.setup("shop", "Магазин", _get_tutorial_steps())
+
+func _get_tutorial_steps() -> Array:
+	return [
+		{"title": "Как работает магазин", "text": """На экране 6 карточек-товаров (TextureButton). На каждой: название и цена.
+
+• Клик по товару — покупка (если хватает монет).
+• Купленные вещи складываются в [b]Global.purchased_items[/b] и станут доступны в создании дрона."""},
+		{"title": "Типы деталей", "text": """В магазине могут попадаться:
+• [b]Рамы[/b] (Рама1/2/3)
+• [b]Платы[/b] (Плата1/2/3)
+• [b]Моторы[/b] (Мотор1/2/3)
+• [b]Пропеллеры[/b] (Пропеллер1/2/3)
+• [b]Бусты[/b] (Буст1/2) — если ты используешь их в логике, они тоже покупаются как предмет."""},
+		{"title": "Обновление витрины", "text": """Кнопка [b]refresh[/b] меняет набор товаров.
+Стоимость обновления начинается с [b]10[/b] монет и увеличивается на [b]+5[/b] после каждого обновления."""},
+		{"title": "Назад", "text": """Кнопка [b]Вернуться[/b] возвращает в меню/назад."""}
+	]
+
+func _input(event: InputEvent) -> void:
+	# F1 -> открыть/закрыть обучение
+	if event is InputEventKey and event.pressed and event.keycode == KEY_F1:
+		if tutorial_popup != null and is_instance_valid(tutorial_popup) and tutorial_popup.has_method("toggle"):
+			tutorial_popup.toggle()
+			get_viewport().set_input_as_handled()
