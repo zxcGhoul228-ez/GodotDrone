@@ -644,6 +644,7 @@ func _tutorial_setup_button() -> void:
 		return
 
 	# Ищем VBoxContainer, где лежат кнопки, и вставляем между "Магазин" и "Выйти"
+	var root := get_tree().current_scene if get_tree() else self
 	var vbox: VBoxContainer = null
 
 	# Пытаемся найти по структуре: Control/TextureRect/HBoxContainer/VBoxContainer
@@ -667,50 +668,42 @@ func _tutorial_setup_button() -> void:
 	if vbox.get_node_or_null("TutorialStartButton") != null:
 		return
 
-	# Берем стиль/размер у кнопки "Магазин" (или у первой доступной)
-	var ref_btn: Button = null
-	for ch in vbox.get_children():
-		if ch is Button:
-			var b := ch as Button
-			if b.text.findn("Магазин") != -1:
-				ref_btn = b
-				break
-	if ref_btn == null:
-		for ch in vbox.get_children():
+	# Берем референс-кнопку (обычно "Магазин"), чтобы новая была такого же размера/стиля
+	var ref_ctrl: Control = null
+	for i in range(vbox.get_child_count()):
+		var ch: Node = vbox.get_child(i)
+		if ch is BaseButton:
+			ref_ctrl = ch as Control
 			if ch is Button:
-				ref_btn = ch as Button
-				break
+				var rb: Button = ch as Button
+				if rb.text.findn("Магазин") != -1:
+					ref_ctrl = ch as Control
+					break
 
 	var btn := Button.new()
 	btn.name = "TutorialStartButton"
 	btn.text = "Начать обучение"
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.size_flags_vertical = 0
 
-	# Размер/стиль как у остальных кнопок
-	if ref_btn != null:
-		btn.size_flags_horizontal = ref_btn.size_flags_horizontal
-		if btn.size_flags_horizontal == 0:
-			btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.size_flags_vertical = ref_btn.size_flags_vertical
-		btn.size_flags_stretch_ratio = ref_btn.size_flags_stretch_ratio
-		btn.custom_minimum_size = ref_btn.custom_minimum_size
-		if btn.custom_minimum_size.y <= 0.0:
-			btn.custom_minimum_size.y = maxf(ref_btn.size.y, 60.0)
-
-		btn.theme = ref_btn.theme
-		btn.theme_type_variation = ref_btn.theme_type_variation
-
-		# Копируем overrides (если кнопки в сцене их используют)
-		var style_keys := ["normal", "hover", "pressed", "disabled", "focus"]
-		for k in style_keys:
-			if ref_btn.has_theme_stylebox_override(k):
-				btn.add_theme_stylebox_override(k, ref_btn.get_theme_stylebox(k))
-		if ref_btn.has_theme_font_size_override("font_size"):
-			btn.add_theme_font_size_override("font_size", ref_btn.get_theme_font_size("font_size"))
-		if ref_btn.has_theme_color_override("font_color"):
-			btn.add_theme_color_override("font_color", ref_btn.get_theme_color("font_color"))
+	if ref_ctrl != null:
+		btn.custom_minimum_size = ref_ctrl.custom_minimum_size
+		btn.size_flags_horizontal = ref_ctrl.size_flags_horizontal
+		btn.size_flags_vertical = ref_ctrl.size_flags_vertical
+		btn.theme = ref_ctrl.theme
+		btn.theme_type_variation = ref_ctrl.theme_type_variation
+		btn.focus_mode = ref_ctrl.focus_mode
+		if ref_ctrl is Button:
+			var rb2: Button = ref_ctrl as Button
+			btn.flat = rb2.flat
+			# Подгоняем стиль текста под референс-кнопку (у тебя warning'и = error, поэтому без :=)
+			btn.add_theme_font_size_override("font_size", rb2.get_theme_font_size("font_size"))
+			btn.add_theme_color_override("font_color", rb2.get_theme_color("font_color"))
+			btn.add_theme_color_override("font_hover_color", rb2.get_theme_color("font_hover_color"))
+			btn.add_theme_color_override("font_pressed_color", rb2.get_theme_color("font_pressed_color"))
+			btn.add_theme_color_override("font_disabled_color", rb2.get_theme_color("font_disabled_color"))
 	else:
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		btn.custom_minimum_size = Vector2(0, 60)
+		btn.custom_minimum_size = Vector2(0, 64)
 
 	# Находим индексы Shop и Exit
 	var shop_index := -1
@@ -735,6 +728,31 @@ func _tutorial_setup_button() -> void:
 	vbox.add_child(btn)
 	vbox.move_child(btn, insert_at)
 
+	# Подгоняем высоту после раскладки, чтобы кнопка была ровно как остальные
+	if ref_ctrl != null:
+		call_deferred("_tutorial_sync_button_height", btn, ref_ctrl)
+
 	btn.pressed.connect(func():
 		tut.start_tutorial()
 	)
+
+func _tutorial_sync_button_height(btn: Control, ref_ctrl: Control) -> void:
+	if btn == null or not is_instance_valid(btn):
+		return
+	if ref_ctrl == null or not is_instance_valid(ref_ctrl):
+		return
+
+	# Ждем, пока VBoxContainer сделает layout
+	if get_tree():
+		await get_tree().process_frame
+		await get_tree().process_frame
+
+	var h: float = ref_ctrl.size.y
+	if h <= 0.0:
+		h = ref_ctrl.custom_minimum_size.y
+	if h <= 0.0:
+		return
+
+	var cm: Vector2 = btn.custom_minimum_size
+	cm.y = h
+	btn.custom_minimum_size = cm
