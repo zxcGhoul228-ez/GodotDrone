@@ -93,7 +93,7 @@ func _load_level():
 	if Global:
 		Global.current_level = selected_level
 	
-	var level_path = "res://DroneLevels/Levels/Level%d.tscn" % selected_level
+	var level_path = "res://DroneLevels/levels/Level%d.tscn" % selected_level
 	if not FileAccess.file_exists(level_path):
 		level_path = "res://DroneLevels/DroneScene.tscn"
 	
