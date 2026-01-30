@@ -1811,14 +1811,19 @@ func _spawn_debug_track(drone_node: Node3D, expected_y: float) -> void:
 	# Если ты не видишь эти логи — значит у тебя запущен ДРУГОЙ DroneScene.gd.
 	if drone_node == null or not is_instance_valid(drone_node):
 		return
+	if not is_inside_tree():
+		return
+	var tree := get_tree()
+	if tree == null:
+		return
 
 	for i in range(3):
-		await get_tree().process_frame
+		await tree.process_frame
 		if drone_node == null or not is_instance_valid(drone_node):
 			return
 		print("🛠️ [SpawnDebug] frame=", i, " pos=", (drone_node as Node3D).global_position)
 
-	await get_tree().physics_frame
+	await tree.physics_frame
 	if drone_node == null or not is_instance_valid(drone_node):
 		return
 	print("🛠️ [SpawnDebug] physics_frame pos=", (drone_node as Node3D).global_position)
