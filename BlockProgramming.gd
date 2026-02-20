@@ -45,6 +45,10 @@ func create_available_blocks():
 		{"name": "Вверх", "type": 4, "color": Color.GOLD, "icon": "🔼"},
 		{"name": "Вниз", "type": 5, "color": Color.GOLD, "icon": "🔽"}
 	]
+
+	# В сложных уровнях открываем блок захвата
+	if Global and Global.current_level >= 11:
+		blocks.append({"name": "Захват", "type": 6, "color": Color(0.75, 0.4, 1.0), "icon": "🧲"})
 	
 	# Очищаем старые кнопки
 	for child in block_palette.get_children():
@@ -497,6 +501,7 @@ func get_direction_name(direction: int) -> String:
 		3: return "ВПРАВО"
 		4: return "ВВЕРХ"
 		5: return "ВНИЗ"
+		6: return "ЗАХВАТ/ОТПУСТИТЬ"
 		_: return "???"
 
 # Вспомогательная функция для выполнения движения

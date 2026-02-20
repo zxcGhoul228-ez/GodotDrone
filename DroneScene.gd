@@ -212,6 +212,7 @@ func calculate_next_position(current_pos: Vector3, direction: int) -> Vector3:
 		3: next_pos.x += GRID_SIZE  # Вправо
 		4: next_pos.y += GRID_SIZE  # Вверх
 		5: next_pos.y = max(next_pos.y - GRID_SIZE, grid_boundary_min.y)  # Вниз
+		6: pass  # Захват/отпустить не меняет позицию
 	return next_pos
 
 func clear_trajectory_preview():

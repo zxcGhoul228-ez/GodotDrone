@@ -11,6 +11,7 @@ var drone_physics: DronePhysics
 var flight_behavior: Dictionary = {}
 var is_crashed: bool = false
 var crash_position: Vector3 = Vector3.ZERO
+var carried_cargo: Node3D = null
 
 const GRID_SIZE = 32
 const MOVE_SPEED = 1.0
@@ -25,6 +26,7 @@ var max_propeller_speed: float = 2160.0
 
 signal program_finished(success: bool)
 signal drone_moved
+signal action_executed(action_type: int)
 
 func _ready():
 	await get_tree().process_frame
@@ -544,6 +546,7 @@ func execute_actions(sequence: Array) -> bool:
 			await return_to_start()
 			return false
 		
+		action_executed.emit(action)
 		await get_tree().create_timer(0.1).timeout
 	
 	print("✅ Все команды выполнены успешно")
@@ -570,6 +573,8 @@ func perform_movement_with_physics(direction: int) -> bool:
 		3: target_pos.x += GRID_SIZE  # Вправо
 		4: target_pos.y += GRID_SIZE  # Вверх
 		5: target_pos.y = max(target_pos.y - GRID_SIZE, 0)  # Вниз
+		6:
+			return try_toggle_grab()
 	
 	# Применяем физику к движению
 	if drone_physics:
@@ -685,7 +690,54 @@ func get_direction_name(direction: int) -> String:
 		3: return "ВПРАВО"
 		4: return "ВВЕРХ"
 		5: return "ВНИЗ"
+		6: return "ЗАХВАТ/ОТПУСТИТЬ"
 		_: return "???"
+
+func has_carried_cargo() -> bool:
+	return carried_cargo != null and is_instance_valid(carried_cargo)
+
+func try_toggle_grab() -> bool:
+	if has_carried_cargo():
+		return drop_cargo()
+	return pick_up_nearest_cargo()
+
+func pick_up_nearest_cargo() -> bool:
+	var candidates = get_tree().get_nodes_in_group("grabbable_cargo")
+	var nearest: Node3D = null
+	var nearest_distance = 999999.0
+	for node in candidates:
+		if node is Node3D and is_instance_valid(node):
+			var dist = global_position.distance_to(node.global_position)
+			if dist < nearest_distance:
+				nearest_distance = dist
+				nearest = node
+
+	if nearest == null or nearest_distance > GRID_SIZE * 0.8:
+		print("⚠️ Нет объекта для захвата рядом")
+		return true
+
+	carried_cargo = nearest
+	if carried_cargo.get_parent() != self:
+		carried_cargo.reparent(self)
+	carried_cargo.position = Vector3(0, 10, 0)
+	print("🧲 Объект захвачен: ", carried_cargo.name)
+	return true
+
+func drop_cargo() -> bool:
+	if not has_carried_cargo():
+		return true
+
+	var scene_root = get_tree().current_scene
+	if scene_root == null:
+		print("⚠️ Не удалось отпустить объект: сцена недоступна")
+		return false
+
+	var drop_position = global_position + Vector3(0, 2, 0)
+	carried_cargo.reparent(scene_root)
+	carried_cargo.global_position = drop_position
+	print("📦 Объект отпущен в: ", drop_position)
+	carried_cargo = null
+	return true
 
 func perform_movement(direction: int) -> bool:
 	if is_crashed:
@@ -701,7 +753,9 @@ func perform_movement(direction: int) -> bool:
 		2: target_pos.x -= GRID_SIZE  # Влево
 		3: target_pos.x += GRID_SIZE  # Вправо
 		4: target_pos.y += GRID_SIZE  # Вверх
-		5: target_pos.y = max(target_pos.y - GRID_SIZE, 0)  # Вниз (но не ниже земли)
+		5: target_pos.y = max(target_pos.y - GRID_SIZE, 0)  # Вниз
+		6:
+			return try_toggle_grab()
 	
 	# Создаем твин для плавного движения
 	var tween = create_tween()
