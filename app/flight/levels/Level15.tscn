@@ -1,0 +1,9 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://app/flight/levels/Level15.gd" id="1_lvl15"]
+[ext_resource type="PackedScene" path="res://app/flight/DroneScene.tscn" id="2_drone"]
+
+[node name="Level15" type="Node3D"]
+script = ExtResource("1_lvl15")
+
+[node name="DroneScene" parent="." instance=ExtResource("2_drone")]

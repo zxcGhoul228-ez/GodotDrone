@@ -1,0 +1,393 @@
+[gd_scene load_steps=4 format=3 uid="uid://sxdw37dtk4h"]
+
+[ext_resource type="Script" path="res://app/ui/SettingsScene.gd" id="1_settings"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+bg_color = Color(0.176471, 0.129412, 0.0901961, 0.97)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.721569, 0.560784, 0.372549, 0.8)
+corner_radius_top_left = 18
+corner_radius_top_right = 18
+corner_radius_bottom_right = 18
+corner_radius_bottom_left = 18
+shadow_color = Color(0, 0, 0, 0.35)
+shadow_size = 12
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tab"]
+bg_color = Color(0.239216, 0.172549, 0.121569, 0.97)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[node name="SettingsScene" type="CanvasLayer"]
+script = ExtResource("1_settings")
+
+[node name="Backdrop" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.109804, 0.0784314, 0.0588235, 0.86)
+
+[node name="CenterContainer" type="CenterContainer" parent="Backdrop"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="Panel" parent="Backdrop/CenterContainer"]
+custom_minimum_size = Vector2(1060, 790)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_panel")
+
+[node name="MarginContainer" type="MarginContainer" parent="Backdrop/CenterContainer/Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 36
+theme_override_constants/margin_top = 34
+theme_override_constants/margin_right = 36
+theme_override_constants/margin_bottom = 30
+
+[node name="Root" type="VBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="Header" type="VBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="Title" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/Header"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 34
+text = "Настройки"
+
+[node name="Subtitle" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/Header"]
+layout_mode = 2
+modulate = Color(0.901961, 0.823529, 0.72549, 0.82)
+theme_override_font_sizes/font_size = 14
+text = "Управление, звук и графика собраны в одном окне."
+
+[node name="ContentTabs" type="TabContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root"]
+custom_minimum_size = Vector2(0, 590)
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_tab")
+
+[node name="Controls" type="VBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs"]
+layout_mode = 2
+theme_override_constants/separation = 22
+
+[node name="ControlsHint" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Controls"]
+layout_mode = 2
+modulate = Color(0.87451, 0.780392, 0.678431, 0.84)
+text = "Настройте камеру для сцены сборки и полета."
+
+[node name="MouseRow" type="HBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Controls"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="MouseLabel" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Controls/MouseRow"]
+custom_minimum_size = Vector2(252, 0)
+layout_mode = 2
+text = "Чувствительность мыши"
+
+[node name="MouseSensitivitySlider" type="HSlider" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Controls/MouseRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.1
+max_value = 3.0
+step = 0.05
+value = 1.0
+
+[node name="MouseSensitivityValue" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Controls/MouseRow"]
+custom_minimum_size = Vector2(96, 0)
+layout_mode = 2
+horizontal_alignment = 2
+text = "1.00x"
+
+[node name="FOVRow" type="HBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Controls"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="FOVLabel" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Controls/FOVRow"]
+custom_minimum_size = Vector2(252, 0)
+layout_mode = 2
+text = "FOV камеры"
+
+[node name="FOVSlider" type="HSlider" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Controls/FOVRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 60.0
+max_value = 120.0
+step = 1.0
+value = 75.0
+
+[node name="FOVValue" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Controls/FOVRow"]
+custom_minimum_size = Vector2(96, 0)
+layout_mode = 2
+horizontal_alignment = 2
+text = "75"
+
+[node name="Audio" type="VBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs"]
+layout_mode = 2
+theme_override_constants/separation = 22
+
+[node name="AudioHint" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Audio"]
+layout_mode = 2
+modulate = Color(0.87451, 0.780392, 0.678431, 0.84)
+text = "Сбалансируйте музыку и эффекты, не выходя из сцены."
+
+[node name="MusicRow" type="HBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Audio"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="MusicLabel" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Audio/MusicRow"]
+custom_minimum_size = Vector2(252, 0)
+layout_mode = 2
+text = "Музыка"
+
+[node name="MusicSlider" type="HSlider" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Audio/MusicRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 100.0
+step = 1.0
+value = 50.0
+
+[node name="MusicValue" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Audio/MusicRow"]
+custom_minimum_size = Vector2(96, 0)
+layout_mode = 2
+horizontal_alignment = 2
+text = "50%"
+
+[node name="SFXRow" type="HBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Audio"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="SFXLabel" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Audio/SFXRow"]
+custom_minimum_size = Vector2(252, 0)
+layout_mode = 2
+text = "Эффекты"
+
+[node name="SFXSlider" type="HSlider" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Audio/SFXRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+max_value = 100.0
+step = 1.0
+value = 50.0
+
+[node name="SFXValue" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/Audio/SFXRow"]
+custom_minimum_size = Vector2(96, 0)
+layout_mode = 2
+horizontal_alignment = 2
+text = "50%"
+
+[node name="GraphicsScroll" type="ScrollContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+follow_focus = true
+
+[node name="Graphics" type="VBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 20
+
+[node name="GraphicsHint" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics"]
+layout_mode = 2
+modulate = Color(0.87451, 0.780392, 0.678431, 0.84)
+text = "Настройте производительность, освещение и визуальные акценты для сборки."
+
+[node name="FPSRow" type="HBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="FPSLabel" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/FPSRow"]
+custom_minimum_size = Vector2(252, 0)
+layout_mode = 2
+text = "Режим кадров"
+
+[node name="FPSOption" type="OptionButton" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/FPSRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="FullscreenRow" type="HBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="FullscreenLabel" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/FullscreenRow"]
+custom_minimum_size = Vector2(252, 0)
+layout_mode = 2
+text = "Полноэкранный режим"
+
+[node name="FullscreenToggle" type="OptionButton" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/FullscreenRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ResolutionRow" type="HBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="ResolutionLabel" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/ResolutionRow"]
+custom_minimum_size = Vector2(252, 0)
+layout_mode = 2
+text = "Разрешение"
+
+[node name="ResolutionOption" type="OptionButton" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/ResolutionRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="BrightnessRow" type="HBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="BrightnessLabel" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/BrightnessRow"]
+custom_minimum_size = Vector2(252, 0)
+layout_mode = 2
+text = "Яркость"
+
+[node name="BrightnessSlider" type="HSlider" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/BrightnessRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.55
+max_value = 1.6
+step = 0.01
+value = 1.0
+
+[node name="BrightnessValue" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/BrightnessRow"]
+custom_minimum_size = Vector2(96, 0)
+layout_mode = 2
+horizontal_alignment = 2
+text = "100%"
+
+[node name="RenderScaleRow" type="HBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="RenderScaleLabel" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/RenderScaleRow"]
+custom_minimum_size = Vector2(252, 0)
+layout_mode = 2
+text = "Масштаб рендера"
+
+[node name="RenderScaleSlider" type="HSlider" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/RenderScaleRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 0.55
+max_value = 1.3
+step = 0.01
+value = 1.0
+
+[node name="RenderScaleValue" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/RenderScaleRow"]
+custom_minimum_size = Vector2(96, 0)
+layout_mode = 2
+horizontal_alignment = 2
+text = "100%"
+
+[node name="ShadowRow" type="HBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="ShadowLabel" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/ShadowRow"]
+custom_minimum_size = Vector2(252, 0)
+layout_mode = 2
+text = "Тени"
+
+[node name="ShadowQualityOption" type="OptionButton" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/ShadowRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="GlowRow" type="HBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="GlowLabel" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/GlowRow"]
+custom_minimum_size = Vector2(252, 0)
+layout_mode = 2
+text = "Glow"
+
+[node name="GlowToggle" type="CheckButton" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/GlowRow"]
+layout_mode = 2
+text = "Включен"
+
+[node name="SSAORow" type="HBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="SSAOLabel" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/SSAORow"]
+custom_minimum_size = Vector2(252, 0)
+layout_mode = 2
+text = "SSAO"
+
+[node name="SSAOToggle" type="CheckButton" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/SSAORow"]
+layout_mode = 2
+text = "Включен"
+
+[node name="HighlightRow" type="HBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="HighlightLabel" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/HighlightRow"]
+custom_minimum_size = Vector2(252, 0)
+layout_mode = 2
+text = "Цвет подсветки"
+
+[node name="HighlightPicker" type="ColorPickerButton" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/HighlightRow"]
+custom_minimum_size = Vector2(260, 42)
+layout_mode = 2
+
+[node name="TrailRow" type="HBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics"]
+custom_minimum_size = Vector2(0, 58)
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="TrailLabel" type="Label" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/TrailRow"]
+custom_minimum_size = Vector2(252, 0)
+layout_mode = 2
+text = "Цвет следа"
+
+[node name="TrailPicker" type="ColorPickerButton" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/ContentTabs/GraphicsScroll/Graphics/TrailRow"]
+custom_minimum_size = Vector2(260, 42)
+layout_mode = 2
+
+[node name="Footer" type="HBoxContainer" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root"]
+layout_mode = 2
+alignment = 2
+theme_override_constants/separation = 18
+
+[node name="SaveButton" type="Button" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/Footer"]
+custom_minimum_size = Vector2(176, 54)
+layout_mode = 2
+text = "Сохранить"
+
+[node name="DefaultButton" type="Button" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/Footer"]
+custom_minimum_size = Vector2(176, 54)
+layout_mode = 2
+text = "По умолчанию"
+
+[node name="CancelButton" type="Button" parent="Backdrop/CenterContainer/Panel/MarginContainer/Root/Footer"]
+custom_minimum_size = Vector2(176, 54)
+layout_mode = 2
+text = "Отмена"

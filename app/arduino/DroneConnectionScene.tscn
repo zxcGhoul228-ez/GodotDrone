@@ -1,0 +1,221 @@
+[gd_scene load_steps=4 format=3 uid="uid://25s66bhpx53v"]
+
+[ext_resource type="Script" path="res://app/arduino/drone_connection_scene.gd" id="1_arduino"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_card"]
+bg_color = Color(0.176471, 0.129412, 0.0901961, 0.97)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.721569, 0.560784, 0.372549, 0.8)
+corner_radius_top_left = 16
+corner_radius_top_right = 16
+corner_radius_bottom_right = 16
+corner_radius_bottom_left = 16
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_status"]
+bg_color = Color(0.239216, 0.172549, 0.121569, 0.97)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[node name="DroneConnectionScene" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+script = ExtResource("1_arduino")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.109804, 0.0784314, 0.0588235, 1)
+
+[node name="MarginContainer" type="MarginContainer" parent="Background"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="MainVBox" type="VBoxContainer" parent="Background/MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="TopBar" type="HBoxContainer" parent="Background/MarginContainer/MainVBox"]
+custom_minimum_size = Vector2(0, 84)
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="TitleBlock" type="VBoxContainer" parent="Background/MarginContainer/MainVBox/TopBar"]
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Title" type="Label" parent="Background/MarginContainer/MainVBox/TopBar/TitleBlock"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 30
+text = "Подключение Arduino"
+
+[node name="Subtitle" type="Label" parent="Background/MarginContainer/MainVBox/TopBar/TitleBlock"]
+layout_mode = 2
+modulate = Color(0.894118, 0.796078, 0.690196, 0.84)
+text = "Свяжите лучи экспортированного дрона с PWM-каналами и выходами на пропеллеры."
+
+[node name="StatusPanel" type="PanelContainer" parent="Background/MarginContainer/MainVBox/TopBar"]
+custom_minimum_size = Vector2(340, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_status")
+
+[node name="StatusMargin" type="MarginContainer" parent="Background/MarginContainer/MainVBox/TopBar/StatusPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 14
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 14
+theme_override_constants/margin_bottom = 12
+
+[node name="StatusLabel" type="Label" parent="Background/MarginContainer/MainVBox/TopBar/StatusPanel/StatusMargin"]
+layout_mode = 2
+vertical_alignment = 1
+text = "Ожидание профиля экспортированного дрона..."
+
+[node name="AutoButton" type="Button" parent="Background/MarginContainer/MainVBox/TopBar"]
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+text = "Авто"
+
+[node name="SaveButton" type="Button" parent="Background/MarginContainer/MainVBox/TopBar"]
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+text = "Сохранить"
+
+[node name="BackButton" type="Button" parent="Background/MarginContainer/MainVBox/TopBar"]
+custom_minimum_size = Vector2(120, 48)
+layout_mode = 2
+text = "Назад"
+
+[node name="ContentSplit" type="HSplitContainer" parent="Background/MarginContainer/MainVBox"]
+layout_mode = 2
+size_flags_vertical = 3
+split_offset = 250
+
+[node name="LeftPanel" type="PanelContainer" parent="Background/MarginContainer/MainVBox/ContentSplit"]
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_card")
+
+[node name="LeftMargin" type="MarginContainer" parent="Background/MarginContainer/MainVBox/ContentSplit/LeftPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 18
+
+[node name="LeftVBox" type="VBoxContainer" parent="Background/MarginContainer/MainVBox/ContentSplit/LeftPanel/LeftMargin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="DroneSummaryTitle" type="Label" parent="Background/MarginContainer/MainVBox/ContentSplit/LeftPanel/LeftMargin/LeftVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Профиль дрона"
+
+[node name="DroneSummaryLabel" type="Label" parent="Background/MarginContainer/MainVBox/ContentSplit/LeftPanel/LeftMargin/LeftVBox"]
+layout_mode = 2
+autowrap_mode = 3
+text = "..."
+
+[node name="PinLegendTitle" type="Label" parent="Background/MarginContainer/MainVBox/ContentSplit/LeftPanel/LeftMargin/LeftVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Рекомендуемые пины"
+
+[node name="PinLegendLabel" type="Label" parent="Background/MarginContainer/MainVBox/ContentSplit/LeftPanel/LeftMargin/LeftVBox"]
+layout_mode = 2
+autowrap_mode = 3
+text = "..."
+
+[node name="WiringSummaryTitle" type="Label" parent="Background/MarginContainer/MainVBox/ContentSplit/LeftPanel/LeftMargin/LeftVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Сохраненная схема"
+
+[node name="WiringSummaryLabel" type="Label" parent="Background/MarginContainer/MainVBox/ContentSplit/LeftPanel/LeftMargin/LeftVBox"]
+layout_mode = 2
+autowrap_mode = 3
+text = "..."
+
+[node name="GraphPanel" type="PanelContainer" parent="Background/MarginContainer/MainVBox/ContentSplit"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_styles/panel = SubResource("StyleBoxFlat_card")
+
+[node name="GraphMargin" type="MarginContainer" parent="Background/MarginContainer/MainVBox/ContentSplit/GraphPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 12
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 12
+theme_override_constants/margin_bottom = 12
+
+[node name="GraphEdit" type="GraphEdit" parent="Background/MarginContainer/MainVBox/ContentSplit/GraphPanel/GraphMargin"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="RightPanel" type="PanelContainer" parent="Background/MarginContainer/MainVBox/ContentSplit"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_card")
+
+[node name="RightMargin" type="MarginContainer" parent="Background/MarginContainer/MainVBox/ContentSplit/RightPanel"]
+layout_mode = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 18
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 18
+
+[node name="RightVBox" type="VBoxContainer" parent="Background/MarginContainer/MainVBox/ContentSplit/RightPanel/RightMargin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ChecklistTitle" type="Label" parent="Background/MarginContainer/MainVBox/ContentSplit/RightPanel/RightMargin/RightVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Проверка"
+
+[node name="ChecklistLabel" type="Label" parent="Background/MarginContainer/MainVBox/ContentSplit/RightPanel/RightMargin/RightVBox"]
+layout_mode = 2
+autowrap_mode = 3
+text = "..."
+
+[node name="TipsTitle" type="Label" parent="Background/MarginContainer/MainVBox/ContentSplit/RightPanel/RightMargin/RightVBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "Порядок работы"
+
+[node name="TipsLabel" type="Label" parent="Background/MarginContainer/MainVBox/ContentSplit/RightPanel/RightMargin/RightVBox"]
+layout_mode = 2
+autowrap_mode = 3
+text = "..."
+
+[node name="SettingsButton" type="Button" parent="Background/MarginContainer/MainVBox/ContentSplit/RightPanel/RightMargin/RightVBox"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Открыть настройки"
+
+[node name="ResetButton" type="Button" parent="Background/MarginContainer/MainVBox/ContentSplit/RightPanel/RightMargin/RightVBox"]
+custom_minimum_size = Vector2(0, 44)
+layout_mode = 2
+text = "Сбросить схему"

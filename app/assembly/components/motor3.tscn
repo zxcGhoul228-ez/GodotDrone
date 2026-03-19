@@ -1,0 +1,3 @@
+[gd_scene format=3 uid="uid://c6fi3htbyxbru"]
+
+[node name="Motor3" type="Node3D"]

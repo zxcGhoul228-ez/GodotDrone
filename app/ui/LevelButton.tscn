@@ -1,0 +1,57 @@
+[gd_scene load_steps=3 format=3 uid="uid://dx5pc12i4788v"]
+
+[ext_resource type="Script" uid="uid://dcgct8adrkkbg" path="res://app/ui/LevelButton.gd" id="1_ju1u4"]
+[ext_resource type="Texture2D" uid="uid://deem2whvf0dma" path="res://content/ui/icons/lvl_frame.png" id="2_dvq7i"]
+
+[node name="LevelButton" type="Button"]
+custom_minimum_size = Vector2(188, 154)
+layout_mode = 2
+script = ExtResource("1_ju1u4")
+
+[node name="TextureRect" type="TextureRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 4.0
+offset_top = 6.0
+offset_right = -4.0
+offset_bottom = -6.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("2_dvq7i")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="MarginContainer" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 18
+theme_override_constants/margin_top = 12
+theme_override_constants/margin_right = 18
+theme_override_constants/margin_bottom = 10
+
+[node name="VBoxContainer" type="VBoxContainer" parent="MarginContainer"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="LevelNumber" type="Label" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 36
+text = "1"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="StarsContainer" type="HBoxContainer" parent="MarginContainer/VBoxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 4
+alignment = 1
+
+[node name="LockIcon" type="TextureRect" parent="MarginContainer/VBoxContainer"]
+visible = false
+layout_mode = 2
+custom_minimum_size = Vector2(34, 34)

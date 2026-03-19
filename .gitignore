@@ -1,0 +1,10 @@
+# Godot 4+ 
+.godot/ 
+export.cfg 
+export_presets.cfg 
+Режим вывода команд на экран (ECHO) включен.
+# Temporary files 
+*.tmp 
+*.bak 
+Game_1.8.exe
+*.exe

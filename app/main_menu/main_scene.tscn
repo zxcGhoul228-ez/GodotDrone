@@ -1,0 +1,118 @@
+[gd_scene format=3 uid="uid://bofqavxfukbhw"]
+
+[ext_resource type="Script" uid="uid://c5oh5mlxm5aeu" path="res://app/main_menu/main_script.gd" id="1_d5x1h"]
+[ext_resource type="Texture2D" uid="uid://cl438cesrvewg" path="res://content/ui/backgrounds/main_menu.png" id="2_gyfs4"]
+[ext_resource type="AudioStream" uid="uid://cs4ongwwq0ht" path="res://content/audio/C418_-_Key_30921622.mp3" id="3_gyfs4"]
+[ext_resource type="FontFile" uid="uid://cjkejlnbt8pdg" path="res://content/fonts/Zerove/Zerove-Regular.otf" id="4_d5x1h"]
+[ext_resource type="Texture2D" uid="uid://82p0ajarkm23" path="res://content/ui/icons/settings.png" id="5_8mm7a"]
+
+[node name="Node2D" type="Node2D" unique_id=1404520890]
+
+[node name="Control" type="Control" parent="." unique_id=1826589165]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_d5x1h")
+
+[node name="TextureRect" type="TextureRect" parent="Control" unique_id=913612644]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+texture = ExtResource("2_gyfs4")
+expand_mode = 1
+stretch_mode = 6
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Control/TextureRect" unique_id=675630931]
+custom_minimum_size = Vector2(300, 200)
+layout_mode = 0
+offset_left = 83.0
+offset_top = 318.0
+offset_right = 657.0
+offset_bottom = 865.0
+theme_override_constants/separation = 149
+alignment = 1
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Control/TextureRect/HBoxContainer" unique_id=1927536096]
+custom_minimum_size = Vector2(500, 292.595)
+layout_mode = 2
+theme_override_constants/separation = 49
+alignment = 2
+
+[node name="InvButt" type="Button" parent="Control/TextureRect/HBoxContainer/VBoxContainer" unique_id=2107987725]
+custom_minimum_size = Vector2(200, 80)
+layout_mode = 2
+theme_override_font_sizes/font_size = 51
+text = "Сборка дрона"
+
+[node name="GameButt" type="Button" parent="Control/TextureRect/HBoxContainer/VBoxContainer" unique_id=714895328]
+custom_minimum_size = Vector2(200, 80)
+layout_mode = 2
+theme_override_font_sizes/font_size = 51
+text = "Выбор уровня"
+
+[node name="ShopButt" type="Button" parent="Control/TextureRect/HBoxContainer/VBoxContainer" unique_id=1560271164]
+custom_minimum_size = Vector2(200, 80)
+layout_mode = 2
+theme_override_font_sizes/font_size = 51
+text = "Магазин"
+
+[node name="Button" type="Button" parent="Control/TextureRect/HBoxContainer/VBoxContainer" unique_id=45984591]
+custom_minimum_size = Vector2(80, 80)
+layout_mode = 2
+theme_override_font_sizes/font_size = 51
+text = "Выйти"
+
+[node name="AudioStreamPlayer" type="AudioStreamPlayer" parent="Control" unique_id=11021518]
+stream = ExtResource("3_gyfs4")
+
+[node name="Label" type="Label" parent="Control" unique_id=298788508]
+layout_mode = 0
+offset_left = 137.0
+offset_top = 175.0
+offset_right = 609.0
+offset_bottom = 318.0
+theme_override_colors/font_color = Color(0.97, 0.91, 0.84, 1)
+theme_override_fonts/font = ExtResource("4_d5x1h")
+theme_override_font_sizes/font_size = 80
+text = "DroneScript"
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Control" unique_id=822211204]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 0
+offset_left = 959.0
+offset_top = 22.0
+offset_right = 1862.0
+offset_bottom = 122.0
+theme_override_constants/separation = 0
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Control/VBoxContainer" unique_id=661702972]
+layout_mode = 2
+theme_override_constants/separation = 0
+alignment = 2
+
+[node name="ScoreLabel" type="Label" parent="Control/VBoxContainer/HBoxContainer" unique_id=1061449029]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.94, 0.87, 0.78, 1)
+theme_override_fonts/font = ExtResource("4_d5x1h")
+theme_override_font_sizes/font_size = 65
+
+[node name="sett_button" type="Button" parent="Control" unique_id=1474113700]
+custom_minimum_size = Vector2(60, 60)
+layout_mode = 0
+offset_left = 1834.0
+offset_top = 24.0
+offset_right = 1894.0
+offset_bottom = 84.0
+theme_override_font_sizes/font_size = 51
+icon = ExtResource("5_8mm7a")
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="Control" unique_id=307409079]
+layout_mode = 0
+offset_right = 40.0
+offset_bottom = 40.0
