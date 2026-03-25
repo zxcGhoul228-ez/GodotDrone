@@ -1,3 +1,9 @@
-[gd_scene format=3 uid="uid://o04p6i8edctf"]
+[gd_scene load_steps=2 format=3 uid="uid://o04p6i8edctf"]
+
+[ext_resource type="Script" uid="uid://bvfmba7s51c35" path="res://app/assembly/component.gd" id="1_wwprr"]
 
 [node name="Propeller2" type="Node3D"]
+script = ExtResource("1_wwprr")
+component_name = "Пропеллер"
+component_type = "propeller"
+component_variant = 2

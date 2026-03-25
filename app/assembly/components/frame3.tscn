@@ -1,3 +1,9 @@
-[gd_scene format=3 uid="uid://d22mnttmrrony"]
+[gd_scene load_steps=2 format=3 uid="uid://d22mnttmrrony"]
+
+[ext_resource type="Script" uid="uid://bvfmba7s51c35" path="res://app/assembly/component.gd" id="1_oovg8"]
 
 [node name="Frame3" type="Node3D"]
+script = ExtResource("1_oovg8")
+component_name = "Рама3"
+component_type = "frame"
+component_variant = 3

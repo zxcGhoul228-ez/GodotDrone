@@ -1,3 +1,9 @@
-[gd_scene format=3 uid="uid://djbjdf4f487p"]
+[gd_scene load_steps=2 format=3 uid="uid://djbjdf4f487p"]
+
+[ext_resource type="Script" uid="uid://bvfmba7s51c35" path="res://app/assembly/component.gd" id="1_a2lna"]
 
 [node name="Motor2" type="Node3D"]
+script = ExtResource("1_a2lna")
+component_name = "мотор"
+component_type = "motor"
+component_variant = 2

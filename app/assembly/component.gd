@@ -3,6 +3,7 @@ extends Node3D
 @export var component_name: String = ""
 @export var component_type: String = ""  # "frame", "board", "motor", "propeller"
 @export var component_variant: int = 1  # 1, 2 или 3
+@export var drone_platform_type: String = DronePlatformConfig.PLATFORM_QUAD
 @export var can_attach_to: PackedStringArray = []
 
 # ФИЗИЧЕСКИЕ СВОЙСТВА
@@ -20,7 +21,7 @@ func _ready():
 	match component_type:
 		"frame":
 			component_mass = get_frame_mass(component_variant)
-			component_name = "Рама%d" % component_variant
+			component_name = DronePlatformConfig.get_default_frame_type(drone_platform_type) if drone_platform_type != DronePlatformConfig.PLATFORM_QUAD else "Рама%d" % component_variant
 			can_attach_to = ["board", "motor"]
 		"board":
 			component_mass = 0.3
@@ -98,6 +99,9 @@ func _should_preserve_child_on_setup(child: Node) -> bool:
 func get_component_type() -> String:
 	return component_type
 
+func get_drone_platform_type() -> String:
+	return DronePlatformConfig.normalize_platform_type(drone_platform_type)
+
 func get_component_mass() -> float:
 	return component_mass
 
@@ -140,7 +144,24 @@ func setup_component():
 			create_propeller()
 
 # УНИВЕРСАЛЬНАЯ ФУНКЦИЯ ДЛЯ ЗАГРУЗКИ МОДЕЛЕЙ
+func _load_obj_mesh(mesh_path: String, scale_value: Vector3) -> Node3D:
+	if mesh_path.is_empty() or not ResourceLoader.exists(mesh_path):
+		return null
+	var mesh = load(mesh_path)
+	if mesh == null:
+		return null
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.mesh = mesh
+	mesh_instance.scale = scale_value
+	return mesh_instance
+
 func load_model(base_name: String, default_scale: Vector3 = Vector3(0.1, 0.1, 0.1)) -> Node3D:
+	if component_type == "frame":
+		var frame_visual: Dictionary = DronePlatformConfig.get_frame_visual_settings(drone_platform_type, component_variant)
+		var frame_model: Node3D = _load_obj_mesh(str(frame_visual.get("path", "")), frame_visual.get("scale", default_scale))
+		if frame_model != null:
+			return frame_model
+
 	var variant_str = str(component_variant)
 	
 	# Сначала пробуем .glb (только для платы)
@@ -224,7 +245,8 @@ func load_model(base_name: String, default_scale: Vector3 = Vector3(0.1, 0.1, 0.
 
 func create_frame():
 	print("DEBUG: Creating frame...")
-	var model = load_model("frame", Vector3(0.1, 0.1, 0.1))
+	var default_scale: Vector3 = DronePlatformConfig.get_frame_visual_settings(drone_platform_type, component_variant).get("scale", Vector3(0.1, 0.1, 0.1))
+	var model = load_model("frame", default_scale)
 	if model:
 		print("DEBUG: Frame model loaded successfully")
 		add_child(model)

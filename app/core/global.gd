@@ -17,7 +17,7 @@ const QUEST_REFRESH_COST_STEP := 80
 const TEST_CRYSTAL_RESERVE := 50000
 const LEVEL_IDEAL_COMMAND_DURATION_MS := 1000
 const LEVEL_IDEAL_SEQUENCE_OVERHEAD_MS := 600
-const DEFAULT_PURCHASED_ITEMS: Array[String] = ["Рама1", "Плата1", "Мотор1", "Пропеллер1"]
+const DEFAULT_PURCHASED_ITEMS: Array[String] = ["Рама1", "РамаГекса", "РамаОкто", "Плата1", "Мотор1", "Пропеллер1"]
 const DEFAULT_COSMETIC_UNLOCKS: Array[String] = ["color_default", "pattern_default", "texture_default", "aura_default", "trail_default"]
 const LEVEL_IDEAL_COMMANDS := {
 	1: 6,
@@ -269,6 +269,7 @@ func _ready():
 	print("=== GLOBAL INIT ===")
 	quest_definitions = _build_quest_definitions()
 	load_game()
+	_ensure_default_purchased_items()
 	if crystals < TEST_CRYSTAL_RESERVE:
 		crystals = TEST_CRYSTAL_RESERVE
 		save_game()
@@ -651,8 +652,13 @@ func clear_arduino_wiring():
 	if FileAccess.file_exists(ARDUINO_WIRING_PATH):
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(ARDUINO_WIRING_PATH))
 
-func get_recommended_motor_pins() -> PackedStringArray:
-	return PackedStringArray(["D3", "D5", "D6", "D9"])
+func get_recommended_motor_pins(platform_type: String = "") -> PackedStringArray:
+	var effective_platform: String = platform_type
+	if effective_platform.is_empty() and not last_exported_drone_info.is_empty():
+		effective_platform = str(last_exported_drone_info.get("platform_type", ""))
+	if effective_platform.is_empty():
+		effective_platform = DronePlatformConfig.PLATFORM_QUAD
+	return DronePlatformConfig.get_recommended_motor_pins(effective_platform)
 
 func get_drone_signature(profile: Dictionary) -> String:
 	if profile.is_empty():
@@ -669,6 +675,7 @@ func get_drone_signature(profile: Dictionary) -> String:
 		slot_parts.append(str(slot))
 	var slot_signature := ",".join(slot_parts)
 	return "%s|%s|%s|%d|%d|%s" % [
+		str(profile.get("platform_type", DronePlatformConfig.get_platform_for_frame_type(str(profile.get("frame_type", ""))))),
 		str(profile.get("frame_type", "frame")),
 		str(profile.get("board_type", "board")),
 		str(profile.get("motor_type", "motor")),
@@ -1182,7 +1189,15 @@ func get_part_customization(part_id: String) -> Dictionary:
 		return effect_variant if typeof(effect_variant) == TYPE_DICTIONARY else {}
 	var parts: Dictionary = drone_cosmetic_profile.get("parts", {})
 	var part_variant: Variant = parts.get(part_id, {})
-	return part_variant if typeof(part_variant) == TYPE_DICTIONARY else {}
+	if typeof(part_variant) == TYPE_DICTIONARY:
+		return part_variant
+	if part_id.begins_with("motor_"):
+		var grouped_motor_variant: Variant = parts.get("motors", {})
+		return grouped_motor_variant if typeof(grouped_motor_variant) == TYPE_DICTIONARY else {}
+	if part_id.begins_with("propeller_"):
+		var grouped_prop_variant: Variant = parts.get("propellers", {})
+		return grouped_prop_variant if typeof(grouped_prop_variant) == TYPE_DICTIONARY else {}
+	return {}
 
 func get_part_base_color(part_id: String) -> Color:
 	var style: Dictionary = get_part_customization(part_id)
@@ -1242,18 +1257,20 @@ func _sync_effect_colors_from_cosmetics() -> void:
 func apply_customization_to_drone(frame: Node3D, board: Node3D, motor_nodes: Array, prop_nodes: Array) -> void:
 	_apply_style_to_node(frame, get_part_customization("frame"))
 	_apply_style_to_node(board, get_part_customization("board"))
+	var grouped_motor_style: Dictionary = get_part_customization("motors")
+	var grouped_prop_style: Dictionary = get_part_customization("propellers")
 	for index in range(motor_nodes.size()):
 		var motor: Node3D = motor_nodes[index] as Node3D
 		if motor == null or not is_instance_valid(motor):
 			continue
 		var slot: int = int(motor.get_meta("motor_slot")) if motor.has_meta("motor_slot") else index
-		_apply_style_to_node(motor, get_part_customization("motor_%d" % slot))
+		_apply_style_to_node(motor, grouped_motor_style if not grouped_motor_style.is_empty() else get_part_customization("motor_%d" % slot))
 	for index in range(prop_nodes.size()):
 		var propeller: Node3D = prop_nodes[index] as Node3D
 		if propeller == null or not is_instance_valid(propeller):
 			continue
 		var slot: int = int(propeller.get_meta("motor_slot")) if propeller.has_meta("motor_slot") else index
-		_apply_style_to_node(propeller, get_part_customization("propeller_%d" % slot))
+		_apply_style_to_node(propeller, grouped_prop_style if not grouped_prop_style.is_empty() else get_part_customization("propeller_%d" % slot))
 
 func apply_customization_to_drone_root(root: Node) -> void:
 	if root == null or not is_instance_valid(root):
@@ -1877,6 +1894,16 @@ func load_game():
 		drone_cosmetic_profile = _get_default_cosmetic_profile()
 		_ensure_quest_state()
 		_ensure_cosmetic_state()
+		save_game()
+
+func _ensure_default_purchased_items() -> void:
+	var did_change: bool = false
+	for item_name in DEFAULT_PURCHASED_ITEMS:
+		if item_name in purchased_items:
+			continue
+		purchased_items.append(item_name)
+		did_change = true
+	if did_change:
 		save_game()
 
 func save_levels_data():

@@ -40,6 +40,15 @@ var max_propeller_speed: float = 2160.0
 signal program_finished(success: bool)
 signal drone_moved
 
+func _get_dynamic_step_duration(direction: int, steps: int = 1) -> float:
+	var normalized_steps: int = maxi(steps, 1)
+	if drone_physics != null and drone_physics.has_method("get_step_duration"):
+		return maxf(float(drone_physics.call("get_step_duration", direction, normalized_steps)), 0.12)
+
+	var is_vertical_move: bool = direction == 4 or direction == 5
+	var base_duration: float = MOVE_SPEED * (0.78 if is_vertical_move else 0.92)
+	return base_duration * float(normalized_steps)
+
 func _ready():
 	await get_tree().process_frame
 	start_position = global_position
@@ -972,13 +981,13 @@ func perform_movement_with_physics(direction: int, steps: int = 1) -> bool:
 			return false
 		
 		# Рассчитываем скорость (расстояние / время)
-		var move_speed = GRID_SIZE / MOVE_SPEED
+		var start_pos = global_position
+		var move_duration: float = _get_dynamic_step_duration(direction, steps)
+		var total_distance: float = start_pos.distance_to(target_pos)
+		var move_speed: float = total_distance / maxf(move_duration, 0.001)
 		
 		# Симулируем движение с физикой
 		var time_elapsed = 0.0
-		var move_duration = MOVE_SPEED
-		move_duration *= float(maxi(steps, 1))
-		var start_pos = global_position
 		var snap_to_grid: bool = false
 		if drone_physics and drone_physics.has_method("is_grid_stable"):
 			snap_to_grid = drone_physics.is_grid_stable()
@@ -1127,7 +1136,11 @@ func execute_actions_grid(sequence: Array) -> bool:
 		var action: int = int(sequence[i])
 		print("   ", i + 1, "/", sequence.size(), ": ", get_direction_name(action))
 
-		var move_success: bool = await perform_grid_step_precise(action)
+		var move_success: bool = false
+		if drone_physics != null:
+			move_success = await perform_grid_step(action)
+		else:
+			move_success = await perform_grid_step_precise(action)
 		if not move_success:
 			print("❌ Ошибка движения или падение")
 			return false
@@ -1160,7 +1173,7 @@ func perform_grid_step_precise(direction: int) -> bool:
 	target_pos = _clamp_above_floor(target_pos)
 	var start_pos: Vector3 = global_position
 	var is_vertical_move: bool = direction == 4 or direction == 5
-	var move_duration: float = MOVE_SPEED * (0.78 if is_vertical_move else 0.92)
+	var move_duration: float = _get_dynamic_step_duration(direction, 1)
 	var time_elapsed: float = 0.0
 
 	if drone_physics != null:
@@ -1271,11 +1284,11 @@ func perform_grid_step(direction: int) -> bool:
 			emit_crash_effect()
 			return false
 
-		var move_speed: float = GRID_SIZE / maxf(MOVE_SPEED, 0.001)
-		var time_elapsed: float = 0.0
-		var move_duration: float = MOVE_SPEED
-		var max_duration: float = MOVE_SPEED * 1.4
 		var start_pos: Vector3 = global_position
+		var move_duration: float = _get_dynamic_step_duration(direction, 1)
+		var move_speed: float = start_pos.distance_to(target_pos) / maxf(move_duration, 0.001)
+		var time_elapsed: float = 0.0
+		var max_duration: float = move_duration + MOVE_SETTLE_TIME
 		var reached_target: bool = false
 
 		while time_elapsed < max_duration:
@@ -1343,7 +1356,10 @@ func perform_grid_step(direction: int) -> bool:
 			return false
 
 		var snapped_pos: Vector3 = _clamp_above_floor(target_pos if reached_target else final_pos)
-		if snapped_pos.distance_to(target_pos) <= GRID_SIZE * 0.25:
+		var should_snap_to_target: bool = false
+		if drone_physics != null and drone_physics.has_method("is_grid_stable"):
+			should_snap_to_target = drone_physics.is_grid_stable()
+		if should_snap_to_target and snapped_pos.distance_to(target_pos) <= GRID_SIZE * 0.25:
 			global_position = _clamp_above_floor(target_pos)
 		else:
 			global_position = snapped_pos
