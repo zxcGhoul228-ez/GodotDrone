@@ -573,27 +573,61 @@ func stop_component_dragging() -> void:
 func _get_motor_slot_index(motor: Node3D) -> int:
 	if motor == null or not is_instance_valid(motor):
 		return -1
-	if motor.has_meta("motor_slot"):
-		return int(motor.get_meta("motor_slot"))
-	var idx: int = motors.find(motor)
-	return idx
+	return _resolve_component_slot(motor, motors.find(motor))
+
+func _get_component_position_relative_to_frame(component: Node3D) -> Vector3:
+	if component == null or not is_instance_valid(component):
+		return Vector3.ZERO
+	if drone_frame != null and is_instance_valid(drone_frame):
+		return drone_frame.to_local(component.global_position)
+
+	var components_3d: Node3D = $Components as Node3D
+	if components_3d != null:
+		return components_3d.to_local(component.global_position)
+	return component.position
+
+func _get_slot_distance_from_local_pos(local_pos: Vector3, slot_index: int) -> float:
+	var slot_configs: Array[Dictionary] = _get_motor_slot_configs()
+	if slot_index < 0 or slot_index >= slot_configs.size():
+		return INF
+	var slot_position: Vector3 = (slot_configs[slot_index] as Dictionary).get("position", Vector3.ZERO)
+	return local_pos.distance_to(slot_position)
+
+func _resolve_slot_from_local_pos(local_pos: Vector3, preferred_slot: int = -1) -> int:
+	var slot_configs: Array[Dictionary] = _get_motor_slot_configs()
+	if slot_configs.is_empty():
+		return _clamp_slot_index(preferred_slot if preferred_slot >= 0 else 0)
+
+	var nearest_slot: int = _get_motor_slot_from_local_pos(local_pos)
+	if preferred_slot < 0:
+		return nearest_slot
+
+	preferred_slot = _clamp_slot_index(preferred_slot)
+	if preferred_slot == nearest_slot:
+		return preferred_slot
+
+	var preferred_distance: float = _get_slot_distance_from_local_pos(local_pos, preferred_slot)
+	var nearest_distance: float = _get_slot_distance_from_local_pos(local_pos, nearest_slot)
+	if preferred_distance > nearest_distance + 0.35:
+		return nearest_slot
+	return preferred_slot
 
 func _resolve_component_slot(component: Node3D, fallback_slot: int = -1) -> int:
 	if component == null or not is_instance_valid(component):
 		return fallback_slot
-	if component.has_meta("motor_slot"):
-		return _clamp_slot_index(int(component.get_meta("motor_slot")))
-
+	var preferred_slot: int = -1
 	var parent_node: Node = component.get_parent()
-	if parent_node is Node3D and (parent_node as Node3D).has_meta("motor_slot"):
-		return _clamp_slot_index(int((parent_node as Node3D).get_meta("motor_slot")))
+	if parent_node is Node3D and motors.has(parent_node):
+		preferred_slot = _get_motor_slot_index(parent_node as Node3D)
+	elif component.has_meta("attached_motor_slot"):
+		preferred_slot = int(component.get_meta("attached_motor_slot"))
+	elif component.has_meta("motor_slot"):
+		preferred_slot = int(component.get_meta("motor_slot"))
+	elif parent_node is Node3D and (parent_node as Node3D).has_meta("motor_slot"):
+		preferred_slot = int((parent_node as Node3D).get_meta("motor_slot"))
 
-	var components_3d: Node3D = $Components as Node3D
-	if components_3d != null:
-		var local_position: Vector3 = components_3d.to_local(component.global_position)
-		return _clamp_slot_index(_get_motor_slot_from_local_pos(local_position))
-
-	return fallback_slot
+	var local_position: Vector3 = _get_component_position_relative_to_frame(component)
+	return _resolve_slot_from_local_pos(local_position, preferred_slot)
 
 func _is_propeller_node(node: Node) -> bool:
 	if node == null or not is_instance_valid(node) or not (node is Node3D):
@@ -654,6 +688,34 @@ func _cleanup_component_arrays() -> void:
 		if mapped_motor == null or not is_instance_valid(mapped_motor) or mapped_propeller == null or not is_instance_valid(mapped_propeller):
 			motor_propeller_map.erase(mapped_motor)
 
+func _clear_motor_slot_recursive(node: Node) -> void:
+	if node == null or not is_instance_valid(node):
+		return
+	if node.has_meta("motor_slot"):
+		node.remove_meta("motor_slot")
+	for child in node.get_children():
+		_clear_motor_slot_recursive(child)
+
+func _detach_propeller_to_components_root(propeller: Node3D) -> void:
+	if propeller == null or not is_instance_valid(propeller):
+		return
+
+	for key_variant in motor_propeller_map.keys():
+		var mapped_motor: Node3D = key_variant as Node3D
+		if mapped_motor == null or not is_instance_valid(mapped_motor):
+			motor_propeller_map.erase(mapped_motor)
+			continue
+		if motor_propeller_map.get(mapped_motor) == propeller:
+			motor_propeller_map.erase(mapped_motor)
+
+	var components_root: Node3D = $Components as Node3D
+	if components_root != null and propeller.get_parent() != components_root:
+		propeller.reparent(components_root, true)
+
+	if propeller.has_meta("attached_motor_slot"):
+		propeller.remove_meta("attached_motor_slot")
+	_clear_motor_slot_recursive(propeller)
+
 func _refresh_motor_slots_from_positions() -> void:
 	var components_root: Node3D = $Components as Node3D
 	if components_root == null or motors.is_empty():
@@ -678,6 +740,7 @@ func _normalize_motor_propeller_links(force_snap_loose_propellers: bool = false)
 
 	_cleanup_component_arrays()
 	_refresh_motor_slots_from_positions()
+	var previous_map: Dictionary = motor_propeller_map.duplicate()
 	motor_propeller_map.clear()
 
 	var motors_by_slot: Dictionary = {}
@@ -690,9 +753,43 @@ func _normalize_motor_propeller_links(force_snap_loose_propellers: bool = false)
 			motors_by_slot[motor_slot] = motor
 
 	var claimed_slots: Dictionary = {}
+	var assigned_propellers: Dictionary = {}
+
+	for slot_variant in motors_by_slot.keys():
+		var slot: int = int(slot_variant)
+		var motor: Node3D = motors_by_slot[slot] as Node3D
+		if motor == null or not is_instance_valid(motor):
+			continue
+
+		var preferred_propeller: Node3D = null
+		if previous_map.has(motor):
+			var mapped_propeller: Node3D = previous_map.get(motor) as Node3D
+			if mapped_propeller != null and is_instance_valid(mapped_propeller):
+				preferred_propeller = mapped_propeller
+
+		if preferred_propeller == null:
+			for child in motor.get_children():
+				var child_propeller: Node3D = child as Node3D
+				if child_propeller == null or not is_instance_valid(child_propeller):
+					continue
+				if not _is_propeller_node(child_propeller):
+					continue
+				preferred_propeller = child_propeller
+				break
+
+		if preferred_propeller == null:
+			continue
+
+		_attach_propeller_to_motor_clean(preferred_propeller, motor)
+		claimed_slots[slot] = preferred_propeller
+		assigned_propellers[int(preferred_propeller.get_instance_id())] = true
+
 	for prop_variant in propellers:
 		var propeller: Node3D = prop_variant as Node3D
 		if propeller == null or not is_instance_valid(propeller):
+			continue
+		var propeller_id: int = int(propeller.get_instance_id())
+		if assigned_propellers.has(propeller_id):
 			continue
 
 		var target_slot: int = -1
@@ -709,14 +806,33 @@ func _normalize_motor_propeller_links(force_snap_loose_propellers: bool = false)
 				target_slot = _get_motor_slot_index(nearest_motor)
 
 		if target_slot < 0 or not motors_by_slot.has(target_slot):
-			if force_snap_loose_propellers and propeller.get_parent() != components_root:
-				propeller.reparent(components_root, true)
+			if force_snap_loose_propellers:
+				var nearest_motor: Node3D = null
+				var nearest_slot: int = -1
+				var nearest_distance: float = INF
+				for slot_variant in motors_by_slot.keys():
+					var candidate_slot: int = int(slot_variant)
+					if claimed_slots.has(candidate_slot):
+						continue
+					var candidate_motor: Node3D = motors_by_slot[candidate_slot] as Node3D
+					if candidate_motor == null or not is_instance_valid(candidate_motor):
+						continue
+					var distance: float = propeller.global_position.distance_to(candidate_motor.global_position)
+					if distance < nearest_distance:
+						nearest_distance = distance
+						nearest_motor = candidate_motor
+						nearest_slot = candidate_slot
+
+				if nearest_motor != null and nearest_distance < PROP_SNAP_RADIUS:
+					_attach_propeller_to_motor_clean(propeller, nearest_motor)
+					claimed_slots[nearest_slot] = propeller
+					assigned_propellers[propeller_id] = true
+				else:
+					_detach_propeller_to_components_root(propeller)
 			continue
 
 		if claimed_slots.has(target_slot):
-			if propeller.get_parent() != components_root:
-				propeller.reparent(components_root, true)
-			propeller.set_meta("attached_motor_slot", -1)
+			_detach_propeller_to_components_root(propeller)
 			continue
 
 		var target_motor: Node3D = motors_by_slot[target_slot] as Node3D
@@ -724,8 +840,16 @@ func _normalize_motor_propeller_links(force_snap_loose_propellers: bool = false)
 			continue
 
 		_attach_propeller_to_motor_clean(propeller, target_motor)
-		propeller.set_meta("attached_motor_slot", target_slot)
 		claimed_slots[target_slot] = propeller
+		assigned_propellers[propeller_id] = true
+
+	for prop_variant in propellers:
+		var propeller: Node3D = prop_variant as Node3D
+		if propeller == null or not is_instance_valid(propeller):
+			continue
+		if assigned_propellers.has(int(propeller.get_instance_id())):
+			continue
+		_detach_propeller_to_components_root(propeller)
 
 func _attach_propeller_to_motor(propeller: Node3D, motor: Node3D) -> void:
 	_attach_propeller_to_motor_clean(propeller, motor)
@@ -804,8 +928,7 @@ func _attach_propeller_to_motor_clean(propeller: Node3D, motor: Node3D) -> void:
 		if mapped_propeller == propeller and mapped_motor != motor:
 			motor_propeller_map.erase(mapped_motor)
 		elif mapped_motor == motor and mapped_propeller != propeller and components_root != null:
-			mapped_propeller.reparent(components_root, true)
-			motor_propeller_map.erase(mapped_motor)
+			_detach_propeller_to_components_root(mapped_propeller)
 
 	if components_root != null:
 		for child in motor.get_children():
@@ -813,12 +936,15 @@ func _attach_propeller_to_motor_clean(propeller: Node3D, motor: Node3D) -> void:
 				continue
 			var other_propeller: Node3D = child as Node3D
 			if other_propeller != null and is_instance_valid(other_propeller) and (other_propeller.has_meta("is_drone_propeller") or propellers.has(other_propeller)):
-				other_propeller.reparent(components_root, true)
+				_detach_propeller_to_components_root(other_propeller)
 
 	var slot: int = _get_motor_slot_index(motor)
 	if slot >= 0:
+		propeller.set_meta("attached_motor_slot", slot)
 		propeller.set_meta("motor_slot", slot)
 		_apply_motor_slot_recursive(propeller, slot)
+	elif propeller.has_meta("attached_motor_slot"):
+		propeller.remove_meta("attached_motor_slot")
 
 	propeller.set_meta("is_drone_propeller", true)
 	if not propeller.is_in_group("drone_propellers"):
@@ -891,9 +1017,7 @@ func _snap_propeller_to_motor_clean(propeller: Node3D) -> void:
 	var previous_motor: Node3D = _find_mapped_motor_for_propeller(propeller)
 	if previous_motor != null and motor_propeller_map.has(previous_motor):
 		motor_propeller_map.erase(previous_motor)
-	var components_root: Node3D = $Components as Node3D
-	if components_root != null and propeller.get_parent() != components_root:
-		propeller.reparent(components_root, true)
+	_detach_propeller_to_components_root(propeller)
 
 func update_motor_propeller_connection(motor: Node3D) -> void:
 	_update_motor_propeller_connection_clean(motor)
@@ -969,7 +1093,7 @@ func snap_propeller_to_motor(propeller: Node3D) -> void:
 
 		# 2) иначе считаем по позиции мотора в $Components
 		if slot < 0:
-			var local_motor_pos: Vector3 = ($Components as Node3D).to_local(closest_motor.global_position)
+			var local_motor_pos: Vector3 = _get_component_position_relative_to_frame(closest_motor)
 			slot = _get_motor_slot_from_local_pos(local_motor_pos)
 			closest_motor.set_meta("motor_slot", slot)
 
@@ -1331,18 +1455,8 @@ func delete_motor(index: int) -> void:
 	if index < 0 or index >= motors.size():
 		return
 
-	var motor: Node3D = motors[index]
-	if motor != null and is_instance_valid(motor):
-		if motor_propeller_map.has(motor):
-			var prop: Node3D = motor_propeller_map[motor] as Node3D
-			if prop != null and is_instance_valid(prop):
-				propellers.erase(prop)
-				prop.queue_free()
-			motor_propeller_map.erase(motor)
-
-		motor.queue_free()
-
-	motors.remove_at(index)
+	var motor: Node3D = motors[index] as Node3D
+	_delete_motor_with_attached_propellers(motor)
 	calculate_drone_stats()
 	update_component_list()
 	_apply_current_customization_to_assembly()
@@ -1352,41 +1466,293 @@ func delete_propeller(index: int) -> void:
 	if index < 0 or index >= propellers.size():
 		return
 
-	var prop: Node3D = propellers[index]
-	if prop != null and is_instance_valid(prop):
-		var key_to_erase: Node3D = null
-		for k in motor_propeller_map.keys():
-			var mot: Node3D = k as Node3D
-			if mot != null and motor_propeller_map[mot] == prop:
-				key_to_erase = mot
-				break
-		if key_to_erase != null:
-			motor_propeller_map.erase(key_to_erase)
-
-		prop.queue_free()
-
-	propellers.remove_at(index)
+	var prop: Node3D = propellers[index] as Node3D
+	_remove_propeller_node(prop)
 	calculate_drone_stats()
 	update_component_list()
 	_apply_current_customization_to_assembly()
 	_save_assembly_autosave()
 
-func clear_drone() -> void:
+func _clear_drone_components_only() -> void:
 	var components_root: Node3D = $Components as Node3D
 	if components_root != null:
 		for child in components_root.get_children():
 			if child != null and is_instance_valid(child):
 				child.free()
+
 	drone_frame = null
-
 	drone_board = null
-
 	motors.clear()
-
 	propellers.clear()
-
 	motor_propeller_map.clear()
 	_components_center_valid = false
+
+func _get_rebuild_anchor_position() -> Vector3:
+	if drone_frame != null and is_instance_valid(drone_frame):
+		return drone_frame.global_position
+	return Vector3(0.0, 0.5, 0.0)
+
+func _vector3_to_storage_dict(value: Vector3) -> Dictionary:
+	return {"x": value.x, "y": value.y, "z": value.z}
+
+func _build_full_drone_data_for_current_type(anchor_position: Vector3) -> Dictionary:
+	var components_root: Node3D = $Components as Node3D
+	var anchor_local: Vector3 = anchor_position
+	if components_root != null:
+		anchor_local = components_root.to_local(anchor_position)
+
+	var frame_rotation: Vector3 = drone_frame.rotation if (drone_frame != null and is_instance_valid(drone_frame)) else Vector3.ZERO
+	var board_local: Vector3 = anchor_local + _get_board_attachment_position()
+	var propeller_offset: Vector3 = _get_propeller_attachment_offset()
+	var slot_configs: Array[Dictionary] = _get_motor_slot_configs()
+
+	var drone_data: Dictionary = {
+		"platform_type": current_platform_type,
+		"frame": {
+			"component_type": current_frame_type,
+			"component_name": current_frame_type,
+			"position": _vector3_to_storage_dict(anchor_local),
+			"rotation": _vector3_to_storage_dict(frame_rotation)
+		},
+		"board": {
+			"component_type": current_board_type,
+			"component_name": current_board_type,
+			"position": _vector3_to_storage_dict(board_local),
+			"rotation": _vector3_to_storage_dict(frame_rotation)
+		},
+		"motors": [],
+		"propellers": []
+	}
+
+	for slot_index in range(slot_configs.size()):
+		var slot_position: Vector3 = (slot_configs[slot_index] as Dictionary).get("position", Vector3.ZERO)
+		var motor_local: Vector3 = anchor_local + slot_position
+		var propeller_local: Vector3 = motor_local + propeller_offset
+
+		(drone_data["motors"] as Array).append({
+			"component_type": current_motor_type,
+			"component_name": current_motor_type,
+			"position": _vector3_to_storage_dict(motor_local),
+			"rotation": _vector3_to_storage_dict(frame_rotation),
+			"slot": slot_index
+		})
+		(drone_data["propellers"] as Array).append({
+			"component_type": current_propeller_type,
+			"component_name": current_propeller_type,
+			"position": _vector3_to_storage_dict(propeller_local),
+			"rotation": _vector3_to_storage_dict(Vector3.ZERO),
+			"slot": slot_index,
+			"attached_motor_slot": slot_index
+		})
+
+	return drone_data
+
+func _remove_propeller_node(propeller: Node3D) -> void:
+	if propeller == null or not is_instance_valid(propeller):
+		return
+
+	for key_variant in motor_propeller_map.keys():
+		var mapped_motor: Node3D = key_variant as Node3D
+		if mapped_motor == null:
+			continue
+		if motor_propeller_map.get(mapped_motor) == propeller:
+			motor_propeller_map.erase(mapped_motor)
+
+	propellers.erase(propeller)
+	propeller.queue_free()
+
+func _collect_propellers_for_motor(motor: Node3D) -> Array[Node3D]:
+	var attached_propellers: Array[Node3D] = []
+	var known_propellers: Dictionary = {}
+	if motor == null or not is_instance_valid(motor):
+		return attached_propellers
+
+	var motor_slot: int = _get_motor_slot_index(motor)
+	var mapped_propeller: Node3D = motor_propeller_map.get(motor, null) as Node3D
+	if mapped_propeller != null and is_instance_valid(mapped_propeller):
+		known_propellers[int(mapped_propeller.get_instance_id())] = true
+		attached_propellers.append(mapped_propeller)
+
+	for child in motor.get_children():
+		var child_propeller: Node3D = child as Node3D
+		if child_propeller == null or not is_instance_valid(child_propeller):
+			continue
+		if not _is_propeller_node(child_propeller):
+			continue
+		var child_id: int = int(child_propeller.get_instance_id())
+		if known_propellers.has(child_id):
+			continue
+		known_propellers[child_id] = true
+		attached_propellers.append(child_propeller)
+
+	for prop_variant in propellers:
+		var propeller: Node3D = prop_variant as Node3D
+		if propeller == null or not is_instance_valid(propeller):
+			continue
+		var prop_id: int = int(propeller.get_instance_id())
+		if known_propellers.has(prop_id):
+			continue
+		if _find_mapped_motor_for_propeller(propeller) == motor:
+			known_propellers[prop_id] = true
+			attached_propellers.append(propeller)
+			continue
+		if motor_slot >= 0:
+			var attached_slot: int = -1
+			if propeller.has_meta("attached_motor_slot"):
+				attached_slot = int(propeller.get_meta("attached_motor_slot"))
+			elif propeller.has_meta("motor_slot"):
+				attached_slot = int(propeller.get_meta("motor_slot"))
+			if attached_slot == motor_slot:
+				known_propellers[prop_id] = true
+				attached_propellers.append(propeller)
+
+	return attached_propellers
+
+func _delete_motor_with_attached_propellers(motor: Node3D) -> void:
+	if motor == null or not is_instance_valid(motor):
+		return
+
+	var attached_propellers: Array[Node3D] = _collect_propellers_for_motor(motor)
+	for propeller_variant in attached_propellers:
+		var propeller: Node3D = propeller_variant as Node3D
+		if propeller == null or not is_instance_valid(propeller):
+			continue
+		_remove_propeller_node(propeller)
+
+	motor_propeller_map.erase(motor)
+	motors.erase(motor)
+	motor.queue_free()
+
+func _get_component_slot_hint(component: Node3D) -> int:
+	if component == null or not is_instance_valid(component):
+		return -1
+	if component.has_meta("attached_motor_slot"):
+		return int(component.get_meta("attached_motor_slot"))
+	if component.has_meta("motor_slot"):
+		return int(component.get_meta("motor_slot"))
+	var parent_node: Node = component.get_parent()
+	if parent_node is Node3D and (parent_node as Node3D).has_meta("motor_slot"):
+		return int((parent_node as Node3D).get_meta("motor_slot"))
+	return -1
+
+func _get_motor_slot_distance_score(motor: Node3D, slot: int) -> float:
+	var slot_configs: Array[Dictionary] = _get_motor_slot_configs()
+	if motor == null or not is_instance_valid(motor):
+		return INF
+	if slot < 0 or slot >= slot_configs.size():
+		return INF
+	var local_position: Vector3 = _get_component_position_relative_to_frame(motor)
+	var slot_position: Vector3 = (slot_configs[slot] as Dictionary).get("position", Vector3.ZERO)
+	return local_position.distance_squared_to(slot_position)
+
+func _trim_loaded_components_to_platform_limits() -> void:
+	var required_slots: int = _get_slot_count()
+	if required_slots <= 0:
+		return
+
+	_cleanup_component_arrays()
+
+	var kept_motors_by_slot: Dictionary = {}
+	var motor_scores: Dictionary = {}
+	var motors_to_remove: Array[Node3D] = []
+	for motor_variant in motors:
+		var motor: Node3D = motor_variant as Node3D
+		if motor == null or not is_instance_valid(motor):
+			continue
+		var slot_hint: int = _get_component_slot_hint(motor)
+		var slot: int = slot_hint if slot_hint >= 0 and slot_hint < required_slots else _resolve_component_slot(motor, -1)
+		if slot < 0 or slot >= required_slots:
+			motors_to_remove.append(motor)
+			continue
+
+		var motor_score: Dictionary = {
+			"props": _collect_propellers_for_motor(motor).size(),
+			"distance": _get_motor_slot_distance_score(motor, slot)
+		}
+		if not kept_motors_by_slot.has(slot):
+			kept_motors_by_slot[slot] = motor
+			motor_scores[slot] = motor_score
+			continue
+
+		var best_score_variant: Variant = motor_scores.get(slot, {})
+		var best_score: Dictionary = best_score_variant if typeof(best_score_variant) == TYPE_DICTIONARY else {}
+		var best_props: int = int(best_score.get("props", -1))
+		var best_distance: float = float(best_score.get("distance", INF))
+		var current_props: int = int(motor_score.get("props", 0))
+		var current_distance: float = float(motor_score.get("distance", INF))
+		if current_props > best_props or (current_props == best_props and current_distance < best_distance):
+			motors_to_remove.append(kept_motors_by_slot[slot] as Node3D)
+			kept_motors_by_slot[slot] = motor
+			motor_scores[slot] = motor_score
+		else:
+			motors_to_remove.append(motor)
+
+	for motor_variant in motors_to_remove:
+		var motor_to_remove: Node3D = motor_variant as Node3D
+		if motor_to_remove == null or not is_instance_valid(motor_to_remove):
+			continue
+		_delete_motor_with_attached_propellers(motor_to_remove)
+
+	_cleanup_component_arrays()
+	_normalize_motor_propeller_links(true)
+
+	var kept_propellers_by_slot: Dictionary = {}
+	var propellers_to_remove: Array[Node3D] = []
+	for prop_variant in propellers:
+		var propeller: Node3D = prop_variant as Node3D
+		if propeller == null or not is_instance_valid(propeller):
+			continue
+		var slot_hint: int = _get_component_slot_hint(propeller)
+		var slot: int = slot_hint if slot_hint >= 0 and slot_hint < required_slots else _resolve_component_slot(propeller, -1)
+		if slot < 0 or slot >= required_slots:
+			propellers_to_remove.append(propeller)
+			continue
+		if kept_propellers_by_slot.has(slot):
+			propellers_to_remove.append(propeller)
+			continue
+		kept_propellers_by_slot[slot] = propeller
+
+	for prop_variant in propellers_to_remove:
+		var propeller_to_remove: Node3D = prop_variant as Node3D
+		if propeller_to_remove == null or not is_instance_valid(propeller_to_remove):
+			continue
+		_remove_propeller_node(propeller_to_remove)
+
+	_cleanup_component_arrays()
+	_normalize_motor_propeller_links(true)
+
+func _rebuild_full_drone_for_current_type() -> void:
+	if not Global.is_component_available("frame", current_frame_type):
+		return
+
+	var components_root: Node3D = $Components as Node3D
+	if components_root == null:
+		return
+
+	var frame_prefab: PackedScene = frame_prefabs.get(current_frame_type, null)
+	var board_prefab: PackedScene = board_prefabs.get(current_board_type, null)
+	var motor_prefab: PackedScene = motor_prefabs.get(current_motor_type, null)
+	var propeller_prefab: PackedScene = propeller_prefabs.get(current_propeller_type, null)
+	if frame_prefab == null or board_prefab == null or motor_prefab == null or propeller_prefab == null:
+		return
+
+	var anchor_position: Vector3 = _get_rebuild_anchor_position()
+	_assembly_autosave_suspended = true
+	create_drone_from_data(_build_full_drone_data_for_current_type(anchor_position))
+	_assembly_autosave_suspended = false
+	calculate_drone_stats()
+	update_component_list()
+	update_platform_selection()
+	update_frame_selection()
+	update_board_selection()
+	update_motor_selection()
+	update_propeller_selection()
+	_apply_current_customization_to_assembly()
+	update_camera_position()
+	_save_assembly_autosave()
+
+func clear_drone() -> void:
+	_clear_drone_components_only()
 
 	current_frame_type = "Рама1"
 	current_board_type = "Плата1"
@@ -1839,12 +2205,25 @@ func update_component_list() -> void:
 	for i in range(motors.size()):
 		var motor: Node3D = motors[i]
 		if motor != null and is_instance_valid(motor):
-			component_list.add_item("Двигатель " + str(i + 1) + ": " + current_motor_type)
+			var motor_type: String = str(motor.get_meta("component_type")) if motor.has_meta("component_type") else current_motor_type
+			var motor_slot: int = _get_motor_slot_index(motor)
+			var motor_suffix: String = " [%s]" % _slot_name_from_index(motor_slot) if motor_slot >= 0 else ""
+			component_list.add_item("Двигатель " + str(i + 1) + ": " + motor_type + motor_suffix)
 
 	for i2 in range(propellers.size()):
 		var prop: Node3D = propellers[i2]
 		if prop != null and is_instance_valid(prop):
-			component_list.add_item("Пропеллер " + str(i2 + 1) + ": " + current_propeller_type)
+			var prop_type: String = str(prop.get_meta("component_type")) if prop.has_meta("component_type") else current_propeller_type
+			var attached_motor: Node3D = _find_mapped_motor_for_propeller(prop)
+			var prop_slot: int = _resolve_component_slot(prop, i2)
+			var prop_suffix: String = " [не закреплен]"
+			if attached_motor != null and is_instance_valid(attached_motor):
+				var attached_slot: int = _get_motor_slot_index(attached_motor)
+				if attached_slot >= 0:
+					prop_suffix = " [закреплен: %s]" % _slot_name_from_index(attached_slot)
+			elif prop_slot >= 0:
+				prop_suffix = " [слот: %s]" % _slot_name_from_index(prop_slot)
+			component_list.add_item("Пропеллер " + str(i2 + 1) + ": " + prop_type + prop_suffix)
 
 func _on_component_list_item_clicked(index: int, at_position: Vector2, mouse_button_index: int) -> void:
 	if mouse_button_index == MOUSE_BUTTON_LEFT:
@@ -2246,8 +2625,7 @@ func _on_platform_selected(platform_id: String) -> void:
 	create_frame_options()
 	update_frame_selection()
 	$UI/ComponentSelectors/PlatformSelector/PlatformOptionsContainer.visible = false
-	calculate_drone_stats()
-	update_component_list()
+	_rebuild_full_drone_for_current_type()
 
 func update_platform_selection() -> void:
 	var button: Button = $UI.get_node_or_null("ComponentSelectors/PlatformSelector/PlatformButton") as Button
@@ -2267,7 +2645,7 @@ func _on_frame_selected(frame_name: String) -> void:
 		update_platform_selection()
 		update_frame_selection()
 		$UI/ComponentSelectors/FrameSelector/FrameOptionsContainer.visible = false
-		add_frame()
+		_rebuild_full_drone_for_current_type()
 
 func _on_board_selected(board_name: String) -> void:
 	if Global.is_component_available("board", board_name):
@@ -2851,6 +3229,7 @@ func create_drone_from_data(drone_data: Dictionary) -> void:
 		for prop_data in drone_data["propellers"]:
 			add_propeller_from_data(prop_data)
 
+	_trim_loaded_components_to_platform_limits()
 	_restore_loaded_motor_propeller_links()
 	_normalize_motor_propeller_links(true)
 	calculate_drone_stats()
@@ -2876,7 +3255,7 @@ func _restore_loaded_motor_propeller_links() -> void:
 			continue
 		var motor_slot: int = _get_motor_slot_index(motor)
 		if motor_slot < 0 and components_root != null:
-			var motor_local: Vector3 = components_root.to_local(motor.global_position)
+			var motor_local: Vector3 = _get_component_position_relative_to_frame(motor)
 			motor_slot = _get_motor_slot_from_local_pos(motor_local)
 			motor.set_meta("motor_slot", motor_slot)
 			_apply_motor_slot_recursive(motor, motor_slot)

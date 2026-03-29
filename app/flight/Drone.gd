@@ -517,7 +517,7 @@ func _get_propeller_dedupe_key(propeller: Node3D) -> String:
 		return "null"
 
 	if propeller.has_meta("motor_slot"):
-		return "slot:%d" % clampi(int(propeller.get_meta("motor_slot")), 0, 3)
+		return "slot:%d" % int(propeller.get_meta("motor_slot"))
 
 	var inferred_slot: int = _infer_slot_from_propeller_name(propeller.name)
 	if inferred_slot >= 0:
@@ -677,19 +677,25 @@ func find_propellers_guaranteed() -> Array:
 
 func _infer_slot_from_propeller_name(nm: String) -> int:
 	var s := nm.to_lower()
-	# Propeller_0..3
+	# Propeller_0..7 (и выше, если появятся новые платформы)
 	if s.begins_with("propeller_"):
 		var parts := s.split("_")
 		if parts.size() >= 2 and parts[parts.size() - 1].is_valid_int():
 			var idx := int(parts[parts.size() - 1])
-			if idx >= 0 and idx <= 3:
+			if idx >= 0:
 				return idx
-	# Propeller0..3
+	# Propeller0..7
 	if s.length() > 0:
-		var last := s.substr(s.length() - 1, 1)
-		if last.is_valid_int():
-			var idx2 := int(last)
-			if idx2 >= 0 and idx2 <= 3 and s.find("propeller") != -1:
+		var digit_suffix := ""
+		for i in range(s.length() - 1, -1, -1):
+			var ch := s.substr(i, 1)
+			if ch.is_valid_int():
+				digit_suffix = ch + digit_suffix
+			else:
+				break
+		if not digit_suffix.is_empty() and s.find("propeller") != -1:
+			var idx2 := int(digit_suffix)
+			if idx2 >= 0:
 				return idx2
 	return -1
 

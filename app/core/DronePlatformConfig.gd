@@ -34,7 +34,7 @@ const _PLATFORM_DATA := {
 		"board_attachment": Vector3(0.0, 0.06, 0.0),
 		"propeller_attachment_offset": Vector3(0.0, 0.30, 0.0),
 		"min_takeoff_motors": 3,
-		"speed_multiplier": 1.12,
+		"speed_multiplier": 1.15,
 		"motor_slots": [
 			{"label": "Правый", "position": Vector3(1.9260, 0.2240, 0.0)},
 			{"label": "Передний правый", "position": Vector3(0.9607, 0.2240, -1.6687)},
@@ -53,7 +53,7 @@ const _PLATFORM_DATA := {
 		"board_attachment": Vector3(0.0, 0.58, 0.0),
 		"propeller_attachment_offset": Vector3(0.0, 0.30, 0.0),
 		"min_takeoff_motors": 3,
-		"speed_multiplier": 1.24,
+		"speed_multiplier": 1.30,
 		"motor_slots": [
 			{"label": "Правый", "position": Vector3(1.5360, 0.5550, 0.0)},
 			{"label": "Передний правый", "position": Vector3(1.1080, 0.5550, -1.1080)},

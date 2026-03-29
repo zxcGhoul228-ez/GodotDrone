@@ -6,7 +6,7 @@ const GRAVITY = 9.8
 const AIR_DENSITY = 1.2
 const PROP_EFFICIENCY = 0.8
 const DRAG_COEFFICIENT = 0.3
-const MAX_TILT_ANGLE = 30.0  # Максимальный угол крена в градусах
+const MAX_TILT_ANGLE = 42.0  # Максимальный угол крена в градусах
 const TILT_RESPONSE = 2.0    # Коэффициент отклика на крен
 
 # Плавность дрейфа/кренов (без рандома и без «телепортов»)
@@ -16,7 +16,7 @@ const HORIZONTAL_BRAKE = 13.0
 const VERTICAL_ACCEL = 8.0
 const VELOCITY_DAMPING = 7.5
 const INPUT_TILT_ANGLE = 14.0
-const DRIFT_TILT_ANGLE = 7.0
+const DRIFT_TILT_ANGLE = 4.5
 const VERTICAL_TILT_ANGLE = 5.5
 const MAX_CONTROL_SPEED_FACTOR = 1.08
 const MIN_STEP_SPEED_FACTOR = 0.22
@@ -175,7 +175,7 @@ func get_speed_multiplier() -> float:
 	var power_factor: float = _get_effective_power_factor()
 	var stability: float = get_stability_factor()
 	var power_speed: float = clampf(0.28 + power_factor * 0.72, MIN_STEP_SPEED_FACTOR, 1.40)
-	var stability_speed: float = clampf(0.55 + stability * 0.45, 0.35, 1.0)
+	var stability_speed: float = clampf(0.72 + stability * 0.28, 0.52, 1.0)
 	return _get_platform_speed_multiplier() * power_speed * stability_speed
 
 func get_step_duration(direction: int = 0, steps: int = 1) -> float:
@@ -250,6 +250,34 @@ func _closest_slot_by_local_pos(local_pos: Vector3) -> int:
 			best_d = d
 			best_i = i
 	return best_i
+
+func _get_slot_distance(local_pos: Vector3, slot_index: int) -> float:
+	var slot_configs: Array[Dictionary] = _get_platform_slot_configs()
+	if slot_index < 0 or slot_index >= slot_configs.size():
+		return INF
+	var slot_data: Dictionary = slot_configs[slot_index] as Dictionary
+	var slot_pos: Vector3 = slot_data.get("position", Vector3.ZERO)
+	return local_pos.distance_to(slot_pos)
+
+func _resolve_slot_from_position(local_pos: Vector3, preferred_slot: int = -1) -> int:
+	var slot_configs: Array[Dictionary] = _get_platform_slot_configs()
+	if slot_configs.is_empty():
+		if preferred_slot >= 0:
+			return clampi(preferred_slot, 0, maxi(MOTOR_POSITIONS.size() - 1, 0))
+		return 0
+
+	var nearest_slot: int = _slot_from_local_pos(local_pos)
+	if preferred_slot < 0 or preferred_slot >= slot_configs.size():
+		return nearest_slot
+	if preferred_slot == nearest_slot:
+		return preferred_slot
+
+	var preferred_distance: float = _get_slot_distance(local_pos, preferred_slot)
+	var nearest_distance: float = _get_slot_distance(local_pos, nearest_slot)
+	var mismatch_margin: float = maxf(_get_reference_radius() * 0.18, 0.35)
+	if preferred_distance > nearest_distance + mismatch_margin:
+		return nearest_slot
+	return preferred_slot
 
 func _local_dir_to_world_dir(local_dir: Vector3) -> Vector3:
 	var root := _get_drone_root()
@@ -467,24 +495,27 @@ func setup_from_components(frame, board, motor_nodes: Array, propeller_nodes: Ar
 		var motor_mass = component_stats["motor"][motor_type]["mass"]
 
 		var local_pos = (_global_to_flat_local((motor as Node3D).global_position, root) if root else (motor as Node3D).position)
-		# 1) по четвертям — устойчиво
-		var slot = _slot_from_local_pos(local_pos)
-		# 2) если вдруг два мотора попали в одну четверть, добираем ближайший свободный
+		var preferred_slot: int = -1
+		if (motor as Node3D).has_meta("motor_slot"):
+			preferred_slot = int((motor as Node3D).get_meta("motor_slot"))
+		var slot: int = _resolve_slot_from_position(local_pos, preferred_slot)
 		if used_slots.has(slot):
-			slot = _closest_slot_by_local_pos(local_pos)
-			if used_slots.has(slot):
-				# последний фоллбек — первый свободный
+			var nearest_slot: int = _closest_slot_by_local_pos(local_pos)
+			if not used_slots.has(nearest_slot):
+				slot = nearest_slot
+			else:
 				for k in range(motor_slot_configs.size()):
 					if not used_slots.has(k):
 						slot = k
 						break
-
 		used_slots[slot] = true
-
+		var canonical_slot_pos: Vector3 = motor_slot_configs[slot].get("position", local_pos)
+		(motor as Node3D).set_meta("motor_slot", slot)
 		motors[slot]["present"] = true
 		motors[slot]["motor_type"] = motor_type
 		motors[slot]["thrust"] = motor_thrust
-		motors[slot]["position"] = local_pos
+		motors[slot]["position"] = canonical_slot_pos
+		motors[slot]["actual_position"] = local_pos
 
 		masses.append(motor_mass)
 		positions.append(local_pos)
@@ -500,17 +531,21 @@ func setup_from_components(frame, board, motor_nodes: Array, propeller_nodes: Ar
 		if prop == null or not is_instance_valid(prop):
 			continue
 
-		var slot: int = int(a.get("slot", 0))
-		slot = clampi(slot, 0, maxi(motor_slot_configs.size() - 1, 0))
-
+		var matched_slot: int = int(a.get("slot", 0))
+		var preferred_slot: int = -1
+		if prop.has_meta("attached_motor_slot"):
+			preferred_slot = int(prop.get_meta("attached_motor_slot"))
+		elif prop.has_meta("motor_slot"):
+			preferred_slot = int(prop.get_meta("motor_slot"))
 		var local_pos: Vector3 = a.get("local_pos", Vector3.ZERO)
-
-		var propeller_type: String = _extract_component_name(prop, "propeller", "Пропеллер1")
+		var slot: int = _resolve_slot_from_position(local_pos, preferred_slot)
+		if slot < 0 or slot >= motor_slot_configs.size() or not bool(motors[slot].get("present", false)):
+			slot = clampi(matched_slot, 0, maxi(motor_slot_configs.size() - 1, 0))
+		var propeller_type: String = _extract_component_name(prop, "propeller", str(component_stats["propeller"].keys()[0]))
 		var propeller_efficiency: float = float(component_stats["propeller"][propeller_type]["efficiency"])
 		var propeller_mass: float = float(component_stats["propeller"][propeller_type]["mass"])
-
-		# сохраняем слот в meta (на будущее/для дебага)
 		prop.set_meta("motor_slot", slot)
+		prop.set_meta("attached_motor_slot", slot)
 
 		var propeller_data: Dictionary = {
 			"position": local_pos,
@@ -698,32 +733,51 @@ func can_take_off() -> bool:
 	var required_motors: int = maxi(_get_required_motor_count(), 1)
 	var min_takeoff_motors: int = _get_min_takeoff_motor_count()
 	var active_fraction: float = float(active_motors_count) / float(required_motors)
-
-	# Слишком малой доли активных моторов недостаточно даже для нервного «полёта».
 	if active_motors_count < min_takeoff_motors:
 		return false
-
-	# Если масса нулевая/не посчиталась — не блокируем полёт
 	if total_mass <= 0.001:
 		return true
-
-	# В этой игре тяга/масса — условные величины, поэтому используем «коэффициент тяги».
 	var lift_ratio := lift_capacity / total_mass
-
-	# Чем меньше моторов — тем ниже порог (дрон всё равно будет сильнее проседать и дрейфовать).
-	var min_ratio := 0.92 if active_motors_count >= required_motors else lerpf(0.42, 0.70, clampf(active_fraction, 0.0, 1.0))
-
+	var full_build_ratio: float = 0.88
+	var partial_build_ratio: float = lerpf(0.34, 0.58, clampf(active_fraction, 0.0, 1.0))
+	var min_ratio: float = full_build_ratio if active_motors_count >= required_motors else partial_build_ratio
 	return lift_ratio >= min_ratio
-
-
 func get_active_motors_count() -> int:
-	"""Считает активные моторы (слоты, где есть мотор И пропеллер)"""
+	"""Counts active motor slots with both motor and propeller."""
 	var count = 0
 	for motor in motors:
 		if bool(motor.get("has_propeller", false)):
 			count += 1
 	return count
+func _get_missing_fraction() -> float:
+	var required_motors: int = maxi(_get_required_motor_count(), 1)
+	return clampf(float(required_motors - get_active_motors_count()) / float(required_motors), 0.0, 1.0)
+func _get_normalized_imbalance() -> float:
+	return clampf(thrust_imbalance.length() / _get_reference_radius(), 0.0, 1.0)
+func _get_platform_imbalance_sensitivity() -> float:
+	match platform_type:
+		DronePlatformConfig.PLATFORM_QUAD:
+			return 1.15
+		DronePlatformConfig.PLATFORM_HEXA:
+			return 0.88
+		DronePlatformConfig.PLATFORM_OCTO:
+			return 0.78
+		_:
+			return 1.0
 
+func _get_platform_visual_tilt_limit() -> float:
+	match platform_type:
+		DronePlatformConfig.PLATFORM_QUAD:
+			return 55.0
+		DronePlatformConfig.PLATFORM_HEXA:
+			return 42.0
+		DronePlatformConfig.PLATFORM_OCTO:
+			return 38.0
+		_:
+			return 42.0
+func _get_visual_imbalance_strength() -> float:
+	var base_strength: float = _get_missing_fraction() * 1.35 + _get_normalized_imbalance() * 1.25
+	return clampf(base_strength * _get_platform_imbalance_sensitivity(), 0.0, 1.0)
 func calculate_mass_properties(masses: Array, positions: Array):
 	"""Рассчитывает массу и центр масс"""
 	total_mass = 0.0
@@ -843,41 +897,48 @@ func get_drift_direction_world() -> Vector3:
 	return dir_local.normalized()
 
 func get_visual_tilt_degrees(direction: int = -1) -> Vector3:
-	"""Желаемый визуальный наклон дрона (в градусах)."""
+	"""Returns target visual tilt in degrees."""
 	var root: Node3D = _get_drone_root()
 	var command_local_dir: Vector3 = _get_command_local_direction(direction)
 	var horizontal_command: Vector3 = Vector3(command_local_dir.x, 0.0, command_local_dir.z)
-
 	var motion_world: Vector3 = velocity + _drift_velocity_world + _command_velocity_world * 0.25
 	motion_world.y = 0.0
 	if root != null and motion_world.length() > 0.001:
 		var motion_local: Vector3 = _world_dir_to_flat_local_dir(motion_world.normalized(), root)
 		horizontal_command = motion_local if horizontal_command == Vector3.ZERO else horizontal_command.lerp(motion_local, 0.65)
-
 	var drift_world: Vector3 = get_drift_direction_world()
 	var drift_local: Vector3 = Vector3.ZERO
 	if root != null and drift_world.length() > 0.001:
 		drift_local = _world_dir_to_flat_local_dir(drift_world.normalized(), root)
-
+	var imbalance_local: Vector3 = thrust_imbalance
+	imbalance_local.y = 0.0
+	if imbalance_local.length() > 0.001:
+		imbalance_local = imbalance_local.normalized()
 	var translation_factor: float = get_translation_factor()
 	var stability: float = get_stability_factor()
 	var input_strength: float = clampf(0.35 + translation_factor * 0.65, 0.0, 1.0)
-	var drift_strength: float = clampf((1.0 - stability) * DRIFT_STRENGTH_SCALE * get_imbalance_multiplier(), 0.0, 0.65)
-
+	var drift_strength: float = clampf((1.0 - stability) * DRIFT_STRENGTH_SCALE * get_imbalance_multiplier(), 0.0, 0.45)
+	var command_strength: float = clampf(horizontal_command.length(), 0.0, 1.0)
+	var motion_strength: float = clampf(motion_world.length() / 28.0, 0.0, 1.0)
+	var imbalance_motion_strength: float = maxf(command_strength, motion_strength)
+	var visual_tilt_limit: float = _get_platform_visual_tilt_limit()
+	var imbalance_tilt_angle: float = lerpf(8.0, visual_tilt_limit, imbalance_motion_strength)
+	imbalance_tilt_angle += command_strength * 8.0
+	var imbalance_strength: float = _get_visual_imbalance_strength()
 	var pitch: float = horizontal_command.z * INPUT_TILT_ANGLE * input_strength
 	pitch += drift_local.z * DRIFT_TILT_ANGLE * drift_strength
+	pitch += imbalance_local.z * imbalance_tilt_angle * imbalance_strength
 	if direction == 4:
 		pitch -= VERTICAL_TILT_ANGLE * input_strength
 	elif direction == 5:
 		pitch += VERTICAL_TILT_ANGLE * input_strength
-
 	var roll: float = -(horizontal_command.x * INPUT_TILT_ANGLE * input_strength + drift_local.x * DRIFT_TILT_ANGLE * drift_strength)
+	roll -= imbalance_local.x * imbalance_tilt_angle * imbalance_strength
 	return Vector3(
-		clampf(pitch, -MAX_TILT_ANGLE, MAX_TILT_ANGLE),
+		clampf(pitch, -visual_tilt_limit, visual_tilt_limit),
 		0.0,
-		clampf(roll, -MAX_TILT_ANGLE, MAX_TILT_ANGLE)
+		clampf(roll, -visual_tilt_limit, visual_tilt_limit)
 	)
-
 func apply_movement_physics(direction: int, current_pos: Vector3, target_pos: Vector3, delta: float, speed: float = 32.0) -> Vector3:
 	var safe_delta: float = maxf(delta, 0.0001)
 
@@ -957,12 +1018,9 @@ func apply_movement_physics(direction: int, current_pos: Vector3, target_pos: Ve
 	return next_pos
 
 func get_imbalance_multiplier() -> float:
-	"""Возвращает множитель разбалансировки в зависимости от отсутствующих моторов"""
-	var required_motors: int = maxi(_get_required_motor_count(), 1)
-	var missing_count: int = required_motors - get_active_motors_count()
-	var missing_fraction: float = clampf(float(missing_count) / float(required_motors), 0.0, 1.0)
-	var normalized_imbalance: float = clampf(thrust_imbalance.length() / _get_reference_radius(), 0.0, 1.0)
-	return 1.0 + missing_fraction * 1.2 + normalized_imbalance * 0.55
+	"""Returns a softened physical imbalance multiplier."""
+	var sensitivity: float = _get_platform_imbalance_sensitivity()
+	return 1.0 + (_get_missing_fraction() * 0.85 + _get_normalized_imbalance() * 0.35) * sensitivity
 func _assign_propellers_to_motor_slots_stable(propeller_nodes: Array, root: Node3D) -> Array:
 	# Возвращает Array из словарей:
 	# { "node": Node3D, "slot": int, "local_pos": Vector3 }
