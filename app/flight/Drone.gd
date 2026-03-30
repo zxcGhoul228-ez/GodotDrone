@@ -1361,10 +1361,10 @@ func perform_grid_step(direction: int) -> bool:
 			emit_crash_effect()
 			return false
 
-		var snapped_pos: Vector3 = _clamp_above_floor(target_pos if reached_target else final_pos)
 		var should_snap_to_target: bool = false
 		if drone_physics != null and drone_physics.has_method("is_grid_stable"):
 			should_snap_to_target = drone_physics.is_grid_stable()
+		var snapped_pos: Vector3 = _clamp_above_floor(target_pos if (reached_target and should_snap_to_target) else final_pos)
 		if should_snap_to_target and snapped_pos.distance_to(target_pos) <= GRID_SIZE * 0.25:
 			global_position = _clamp_above_floor(target_pos)
 		else:

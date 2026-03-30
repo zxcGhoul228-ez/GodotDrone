@@ -46,14 +46,15 @@ var component_stats = {
 	},
 	"propeller": {
 		"Пропеллер1": {"mass": 0.1, "efficiency": 0.9},
-		"Пропеллер2": {"mass": 0.15, "efficiency": 0.7},
-		"Пропеллер3": {"mass": 0.2, "efficiency": 0.8}
+		"Пропеллер2": {"mass": 0.14, "efficiency": 1.0},
+		"Пропеллер3": {"mass": 0.18, "efficiency": 1.12}
 	}
 }
 
 # Компоненты дрона
 var frame_mass: float = 0.0
 var board_mass: float = 0.0
+var board_power: float = 1.0
 var platform_type: String = DronePlatformConfig.PLATFORM_QUAD
 var motor_slot_configs: Array[Dictionary] = []
 
@@ -176,7 +177,8 @@ func get_speed_multiplier() -> float:
 	var stability: float = get_stability_factor()
 	var power_speed: float = clampf(0.28 + power_factor * 0.72, MIN_STEP_SPEED_FACTOR, 1.40)
 	var stability_speed: float = clampf(0.72 + stability * 0.28, 0.52, 1.0)
-	return _get_platform_speed_multiplier() * power_speed * stability_speed
+	var board_speed: float = clampf(board_power, 0.92, 1.22)
+	return _get_platform_speed_multiplier() * power_speed * stability_speed * board_speed
 
 func get_step_duration(direction: int = 0, steps: int = 1) -> float:
 	var is_vertical_move: bool = direction == 4 or direction == 5
@@ -404,6 +406,20 @@ func _get_frame_mass(frame_type: String) -> float:
 		_:
 			return 1.0
 
+func _get_board_mass_value(board_type: String) -> float:
+	if board_type.ends_with("2"):
+		return 0.35
+	if board_type.ends_with("3"):
+		return 0.4
+	return 0.3
+
+func _get_board_power_value(board_type: String) -> float:
+	if board_type.ends_with("2"):
+		return 1.1
+	if board_type.ends_with("3"):
+		return 1.2
+	return 1.0
+
 func find_closest_motor(propeller_pos: Vector3, motor_nodes: Array) -> int:
 	"""Находит индекс ближайшего слота мотора к пропеллеру.
 	Важно: возвращает 0..3 (слот), а не индекс в motor_nodes.
@@ -457,9 +473,12 @@ func setup_from_components(frame, board, motor_nodes: Array, propeller_nodes: Ar
 		print("📊 Рама: ", frame_type, " масса: ", frame_mass)
 
 	# Плата
+	board_mass = 0.0
+	board_power = 1.0
 	if board and is_instance_valid(board):
 		var board_type = _extract_component_name(board, "board", "Плата1")
-		board_mass = component_stats["board"][board_type]["mass"]
+		board_mass = _get_board_mass_value(board_type)
+		board_power = _get_board_power_value(board_type)
 		masses.append(board_mass)
 		positions.append(Vector3(0, 0.1, 0))
 		print("📊 Плата: ", board_type, " масса: ", board_mass)
@@ -704,7 +723,8 @@ func get_stability_factor() -> float:
 	var imbalance: float = thrust_imbalance.length() / _get_reference_radius()
 	var balance_factor: float = 1.0 - clampf(imbalance * 1.45, 0.0, 0.8)
 
-	var stability: float = motor_factor * (0.30 + 0.70 * balance_factor)
+	var board_factor: float = clampf(0.88 + board_power * 0.12, 0.88, 1.06)
+	var stability: float = motor_factor * (0.30 + 0.70 * balance_factor) * board_factor
 	return clampf(stability, 0.0, 1.0)
 
 func get_flight_behavior() -> Dictionary:

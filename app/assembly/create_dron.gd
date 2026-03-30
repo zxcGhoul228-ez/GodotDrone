@@ -103,8 +103,8 @@ var component_stats: Dictionary = {
 	},
 	"propeller": {
 		"Пропеллер1": {"mass": 0.1, "efficiency": 0.9},
-		"Пропеллер2": {"mass": 0.15, "efficiency": 0.7},
-		"Пропеллер3": {"mass": 0.2, "efficiency": 0.8}
+		"Пропеллер2": {"mass": 0.14, "efficiency": 1.0},
+		"Пропеллер3": {"mass": 0.18, "efficiency": 1.12}
 	}
 }
 
@@ -133,6 +133,20 @@ var propeller_prefabs: Dictionary = {
 }
 
 # Текущие выбранные типы компонентов
+func _get_board_mass_value(board_type: String) -> float:
+	if board_type.ends_with("2"):
+		return 0.35
+	if board_type.ends_with("3"):
+		return 0.4
+	return 0.3
+
+func _get_board_power_value(board_type: String) -> float:
+	if board_type.ends_with("2"):
+		return 1.1
+	if board_type.ends_with("3"):
+		return 1.2
+	return 1.0
+
 var current_platform_type: String = DronePlatformConfig.PLATFORM_QUAD
 var current_frame_type: String = "Рама1"
 var current_board_type: String = "Плата1"
@@ -195,6 +209,30 @@ func _clamp_slot_index(slot: int) -> int:
 
 func _get_slot_label(slot: int) -> String:
 	return DronePlatformConfig.get_slot_label(current_platform_type, slot)
+
+func _has_drone_frame() -> bool:
+	return drone_frame != null and is_instance_valid(drone_frame)
+
+func _has_drone_board() -> bool:
+	return drone_board != null and is_instance_valid(drone_board)
+
+func _can_select_platform() -> bool:
+	return not _has_drone_frame()
+
+func _can_open_board_selector() -> bool:
+	return _has_drone_frame()
+
+func _can_add_motor_component() -> bool:
+	return _has_drone_frame() and motors.size() < _get_slot_count()
+
+func _can_add_propeller_component() -> bool:
+	return motors.size() > 0 and propellers.size() < mini(motors.size(), _get_slot_count())
+
+func _refresh_component_selector_state() -> void:
+	_sync_platform_selector_state()
+	_sync_board_selector_state()
+	_sync_motor_selector_state()
+	_sync_propeller_selector_state()
 
 # ==================== ОСНОВНЫЕ ФУНКЦИИ ====================
 func _ready() -> void:
@@ -384,6 +422,7 @@ func get_component_radius(component: Node3D) -> float:
 			return 0.5
 
 func get_all_drone_components() -> Array:
+	_cleanup_component_arrays()
 	var components: Array = []
 	if drone_frame != null and is_instance_valid(drone_frame):
 		components.append(drone_frame)
@@ -391,13 +430,13 @@ func get_all_drone_components() -> Array:
 		components.append(drone_board)
 
 	for m in motors:
-		var motor: Node3D = m as Node3D
-		if motor != null and is_instance_valid(motor):
+		var motor: Node3D = _get_live_node3d(m)
+		if motor != null:
 			components.append(motor)
 
 	for p in propellers:
-		var prop: Node3D = p as Node3D
-		if prop != null and is_instance_valid(prop):
+		var prop: Node3D = _get_live_node3d(p)
+		if prop != null:
 			components.append(prop)
 
 	return components
@@ -406,7 +445,6 @@ func is_component_draggable(component: Node3D) -> bool:
 	if component == null or not is_instance_valid(component):
 		return false
 	return (component == drone_frame
-		or component == drone_board
 		or motors.has(component)
 		or propellers.has(component))
 
@@ -562,6 +600,7 @@ func stop_component_dragging() -> void:
 		hide_attachment_points()
 		update_component_list()
 		calculate_drone_stats()
+		_refresh_component_selector_state()
 		_apply_current_customization_to_assembly()
 		_save_assembly_autosave()
 		_tut_notify_after_drop(component_type)
@@ -642,11 +681,18 @@ func _is_propeller_node(node: Node) -> bool:
 			return true
 	return str(node.name).to_lower().find("propeller") != -1
 
+func _get_live_node3d(value: Variant) -> Node3D:
+	if value == null or not is_instance_valid(value):
+		return null
+	if value is Node3D:
+		return value as Node3D
+	return null
+
 func _cleanup_component_arrays() -> void:
 	var valid_motors: Array[Node3D] = []
 	for motor_variant in motors:
-		var motor: Node3D = motor_variant as Node3D
-		if motor != null and is_instance_valid(motor):
+		var motor: Node3D = _get_live_node3d(motor_variant)
+		if motor != null:
 			valid_motors.append(motor)
 	motors.clear()
 	motors.append_array(valid_motors)
@@ -654,8 +700,8 @@ func _cleanup_component_arrays() -> void:
 	var known_propellers: Dictionary = {}
 	var valid_propellers: Array[Node3D] = []
 	for prop_variant in propellers:
-		var propeller: Node3D = prop_variant as Node3D
-		if propeller == null or not is_instance_valid(propeller):
+		var propeller: Node3D = _get_live_node3d(prop_variant)
+		if propeller == null:
 			continue
 		var instance_id: int = int(propeller.get_instance_id())
 		if known_propellers.has(instance_id):
@@ -664,12 +710,12 @@ func _cleanup_component_arrays() -> void:
 		valid_propellers.append(propeller)
 
 	for motor_variant in motors:
-		var motor: Node3D = motor_variant as Node3D
-		if motor == null or not is_instance_valid(motor):
+		var motor: Node3D = _get_live_node3d(motor_variant)
+		if motor == null:
 			continue
 		for child in motor.get_children():
-			var child_propeller: Node3D = child as Node3D
-			if child_propeller == null or not is_instance_valid(child_propeller):
+			var child_propeller: Node3D = _get_live_node3d(child)
+			if child_propeller == null:
 				continue
 			if not _is_propeller_node(child_propeller):
 				continue
@@ -683,10 +729,10 @@ func _cleanup_component_arrays() -> void:
 	propellers.append_array(valid_propellers)
 
 	for key_variant in motor_propeller_map.keys():
-		var mapped_motor: Node3D = key_variant as Node3D
-		var mapped_propeller: Node3D = motor_propeller_map.get(mapped_motor) as Node3D
-		if mapped_motor == null or not is_instance_valid(mapped_motor) or mapped_propeller == null or not is_instance_valid(mapped_propeller):
-			motor_propeller_map.erase(mapped_motor)
+		var mapped_motor: Node3D = _get_live_node3d(key_variant)
+		var mapped_propeller: Node3D = _get_live_node3d(motor_propeller_map.get(key_variant, null))
+		if mapped_motor == null or mapped_propeller == null:
+			motor_propeller_map.erase(key_variant)
 
 func _clear_motor_slot_recursive(node: Node) -> void:
 	if node == null or not is_instance_valid(node):
@@ -701,9 +747,9 @@ func _detach_propeller_to_components_root(propeller: Node3D) -> void:
 		return
 
 	for key_variant in motor_propeller_map.keys():
-		var mapped_motor: Node3D = key_variant as Node3D
-		if mapped_motor == null or not is_instance_valid(mapped_motor):
-			motor_propeller_map.erase(mapped_motor)
+		var mapped_motor: Node3D = _get_live_node3d(key_variant)
+		if mapped_motor == null:
+			motor_propeller_map.erase(key_variant)
 			continue
 		if motor_propeller_map.get(mapped_motor) == propeller:
 			motor_propeller_map.erase(mapped_motor)
@@ -785,8 +831,8 @@ func _normalize_motor_propeller_links(force_snap_loose_propellers: bool = false)
 		assigned_propellers[int(preferred_propeller.get_instance_id())] = true
 
 	for prop_variant in propellers:
-		var propeller: Node3D = prop_variant as Node3D
-		if propeller == null or not is_instance_valid(propeller):
+		var propeller: Node3D = _get_live_node3d(prop_variant)
+		if propeller == null:
 			continue
 		var propeller_id: int = int(propeller.get_instance_id())
 		if assigned_propellers.has(propeller_id):
@@ -814,8 +860,8 @@ func _normalize_motor_propeller_links(force_snap_loose_propellers: bool = false)
 					var candidate_slot: int = int(slot_variant)
 					if claimed_slots.has(candidate_slot):
 						continue
-					var candidate_motor: Node3D = motors_by_slot[candidate_slot] as Node3D
-					if candidate_motor == null or not is_instance_valid(candidate_motor):
+					var candidate_motor: Node3D = _get_live_node3d(motors_by_slot.get(candidate_slot, null))
+					if candidate_motor == null:
 						continue
 					var distance: float = propeller.global_position.distance_to(candidate_motor.global_position)
 					if distance < nearest_distance:
@@ -835,8 +881,8 @@ func _normalize_motor_propeller_links(force_snap_loose_propellers: bool = false)
 			_detach_propeller_to_components_root(propeller)
 			continue
 
-		var target_motor: Node3D = motors_by_slot[target_slot] as Node3D
-		if target_motor == null or not is_instance_valid(target_motor):
+		var target_motor: Node3D = _get_live_node3d(motors_by_slot.get(target_slot, null))
+		if target_motor == null:
 			continue
 
 		_attach_propeller_to_motor_clean(propeller, target_motor)
@@ -844,8 +890,8 @@ func _normalize_motor_propeller_links(force_snap_loose_propellers: bool = false)
 		assigned_propellers[propeller_id] = true
 
 	for prop_variant in propellers:
-		var propeller: Node3D = prop_variant as Node3D
-		if propeller == null or not is_instance_valid(propeller):
+		var propeller: Node3D = _get_live_node3d(prop_variant)
+		if propeller == null:
 			continue
 		if assigned_propellers.has(int(propeller.get_instance_id())):
 			continue
@@ -860,8 +906,8 @@ func _attach_propeller_to_motor(propeller: Node3D, motor: Node3D) -> void:
 		return
 
 	for key_variant in motor_propeller_map.keys():
-		var mapped_motor: Node3D = key_variant as Node3D
-		if mapped_motor == null or not is_instance_valid(mapped_motor):
+		var mapped_motor: Node3D = _get_live_node3d(key_variant)
+		if mapped_motor == null:
 			continue
 		if motor_propeller_map[mapped_motor] != propeller:
 			continue
@@ -870,8 +916,8 @@ func _attach_propeller_to_motor(propeller: Node3D, motor: Node3D) -> void:
 		break
 
 	if motor_propeller_map.has(motor):
-		var current_propeller: Node3D = motor_propeller_map[motor] as Node3D
-		if current_propeller != null and is_instance_valid(current_propeller) and current_propeller != propeller:
+		var current_propeller: Node3D = _get_live_node3d(motor_propeller_map.get(motor, null))
+		if current_propeller != null and current_propeller != propeller:
 			current_propeller.reparent($Components, true)
 			motor_propeller_map.erase(motor)
 
@@ -906,7 +952,7 @@ func _attach_propeller_to_motor(propeller: Node3D, motor: Node3D) -> void:
 	else:
 		lateral = -0.08
 
-	var p3d: Node3D = propeller as Node3D
+	var p3d: Node3D = propeller
 	p3d.position = Vector3(lateral, 0.3, 0.0)
 	p3d.rotation = Vector3.ZERO
 
@@ -918,11 +964,12 @@ func _attach_propeller_to_motor_clean(propeller: Node3D, motor: Node3D) -> void:
 
 	var components_root: Node3D = $Components as Node3D
 	for key_variant in motor_propeller_map.keys():
-		var mapped_motor: Node3D = key_variant as Node3D
-		if mapped_motor == null or not is_instance_valid(mapped_motor):
+		var mapped_motor: Node3D = _get_live_node3d(key_variant)
+		if mapped_motor == null:
+			motor_propeller_map.erase(key_variant)
 			continue
-		var mapped_propeller: Node3D = motor_propeller_map[mapped_motor] as Node3D
-		if mapped_propeller == null or not is_instance_valid(mapped_propeller):
+		var mapped_propeller: Node3D = _get_live_node3d(motor_propeller_map.get(mapped_motor, null))
+		if mapped_propeller == null:
 			motor_propeller_map.erase(mapped_motor)
 			continue
 		if mapped_propeller == propeller and mapped_motor != motor:
@@ -960,8 +1007,8 @@ func _find_mapped_motor_for_propeller(propeller: Node3D) -> Node3D:
 	if propeller == null or not is_instance_valid(propeller):
 		return null
 	for key_variant in motor_propeller_map.keys():
-		var mapped_motor: Node3D = key_variant as Node3D
-		if mapped_motor == null or not is_instance_valid(mapped_motor):
+		var mapped_motor: Node3D = _get_live_node3d(key_variant)
+		if mapped_motor == null:
 			continue
 		if motor_propeller_map[mapped_motor] == propeller:
 			return mapped_motor
@@ -974,16 +1021,16 @@ func _update_motor_propeller_connection_clean(motor: Node3D) -> void:
 	if motor == null or not is_instance_valid(motor):
 		return
 	if motor_propeller_map.has(motor):
-		var mapped_propeller: Node3D = motor_propeller_map[motor] as Node3D
-		if mapped_propeller != null and is_instance_valid(mapped_propeller):
+		var mapped_propeller: Node3D = _get_live_node3d(motor_propeller_map.get(motor, null))
+		if mapped_propeller != null:
 			_attach_propeller_to_motor_clean(mapped_propeller, motor)
 			return
 
 	var closest_propeller: Node3D = null
 	var closest_distance: float = INF
 	for p in propellers:
-		var prop: Node3D = p as Node3D
-		if prop == null or not is_instance_valid(prop):
+		var prop: Node3D = _get_live_node3d(p)
+		if prop == null:
 			continue
 		var d: float = prop.global_position.distance_to(motor.global_position)
 		if d < PROP_SNAP_RADIUS and d < closest_distance:
@@ -1002,8 +1049,8 @@ func _snap_propeller_to_motor_clean(propeller: Node3D) -> void:
 	var closest_motor: Node3D = null
 	var closest_distance: float = INF
 	for m in motors:
-		var motor: Node3D = m as Node3D
-		if motor == null or not is_instance_valid(motor):
+		var motor: Node3D = _get_live_node3d(m)
+		if motor == null:
 			continue
 		var d: float = propeller.global_position.distance_to(motor.global_position)
 		if d < closest_distance:
@@ -1024,14 +1071,14 @@ func update_motor_propeller_connection(motor: Node3D) -> void:
 	return
 	var old_propeller: Node3D = null
 	if motor_propeller_map.has(motor):
-		old_propeller = motor_propeller_map[motor] as Node3D
+		old_propeller = _get_live_node3d(motor_propeller_map.get(motor, null))
 
 	var closest_propeller: Node3D = null
 	var closest_distance: float = INF
 
 	for p in propellers:
-		var prop: Node3D = p as Node3D
-		if prop == null or not is_instance_valid(prop):
+		var prop: Node3D = _get_live_node3d(p)
+		if prop == null:
 			continue
 		if prop == dragged_component:
 			continue
@@ -1052,9 +1099,17 @@ func snap_board_to_frame(board: Node3D) -> void:
 	var current_pos: Vector3 = board.global_position
 
 	if current_pos.distance_to(target_pos) < 1.0:
-		board.global_position = target_pos
-		board.rotation = drone_frame.rotation
-		drone_board = board
+		_mount_board_to_frame(board)
+
+func _mount_board_to_frame(board: Node3D) -> void:
+	if board == null or not is_instance_valid(board):
+		return
+	if drone_frame == null or not is_instance_valid(drone_frame):
+		return
+
+	board.global_position = drone_frame.global_position + _get_board_attachment_position()
+	board.rotation = Vector3.ZERO
+	drone_board = board
 
 func snap_propeller_to_motor(propeller: Node3D) -> void:
 	_snap_propeller_to_motor_clean(propeller)
@@ -1223,8 +1278,8 @@ func show_propeller_attachment_points() -> void:
 
 		var motor_free: bool = true
 		if motor_propeller_map.has(motor):
-			var already: Node3D = motor_propeller_map[motor] as Node3D
-			if already != null and is_instance_valid(already) and already != dragged_component:
+			var already: Node3D = _get_live_node3d(motor_propeller_map.get(motor, null))
+			if already != null and already != dragged_component:
 				motor_free = false
 
 		point.material_override = green_material if motor_free else red_material
@@ -1232,8 +1287,8 @@ func show_propeller_attachment_points() -> void:
 
 func hide_attachment_points() -> void:
 	for p in attachment_points:
-		var point: Node3D = p as Node3D
-		if point != null and is_instance_valid(point):
+		var point: Node3D = _get_live_node3d(p)
+		if point != null:
 			point.queue_free()
 	attachment_points.clear()
 
@@ -1290,14 +1345,14 @@ func find_closest_motor_for_propeller(position: Vector3) -> Node3D:
 	var best_dist: float = INF
 
 	for m in motors:
-		var motor: Node3D = m as Node3D
-		if motor == null or not is_instance_valid(motor):
+		var motor: Node3D = _get_live_node3d(m)
+		if motor == null:
 			continue
 
 		var motor_free: bool = true
 		if motor_propeller_map.has(motor):
-			var already: Node3D = motor_propeller_map[motor] as Node3D
-			if already != null and is_instance_valid(already) and already != dragged_component:
+			var already: Node3D = _get_live_node3d(motor_propeller_map.get(motor, null))
+			if already != null and already != dragged_component:
 				motor_free = false
 
 		if motor_free:
@@ -1334,6 +1389,7 @@ func add_frame() -> void:
 
 	calculate_drone_stats()
 	update_component_list()
+	_refresh_component_selector_state()
 	_apply_current_customization_to_assembly()
 	start_component_dragging(drone_frame, mouse_pos)
 	call_deferred("_tut_notify", "frame_spawned")
@@ -1354,17 +1410,41 @@ func add_board() -> void:
 	$Components.add_child(new_board)
 	drone_board = new_board
 	new_board.set_meta("component_type", current_board_type)
-
-	var mouse_pos: Vector2 = get_viewport().get_mouse_position()
-	var world_pos: Vector3 = screen_to_world_position(mouse_pos)
-	new_board.position = world_pos
 	_tag_component_for_customization(new_board, "board")
+	_mount_board_to_frame(new_board)
 
 	calculate_drone_stats()
 	update_component_list()
+	_refresh_component_selector_state()
 	_apply_current_customization_to_assembly()
-	start_component_dragging(drone_board, mouse_pos)
+	_save_assembly_autosave()
+	_tut_notify_after_drop("board")
 	call_deferred("_tut_notify", "board_spawned")
+
+func _replace_existing_board(board_type: String) -> void:
+	if drone_board == null or not is_instance_valid(drone_board):
+		add_board()
+		return
+
+	var board_prefab: PackedScene = board_prefabs.get(board_type, null)
+	if board_prefab == null:
+		return
+
+	drone_board.queue_free()
+	drone_board = null
+
+	var new_board: Node3D = board_prefab.instantiate() as Node3D
+	$Components.add_child(new_board)
+	drone_board = new_board
+	new_board.set_meta("component_type", board_type)
+	_tag_component_for_customization(new_board, "board")
+	_mount_board_to_frame(new_board)
+
+	calculate_drone_stats()
+	update_component_list()
+	_refresh_component_selector_state()
+	_apply_current_customization_to_assembly()
+	_save_assembly_autosave()
 
 func add_motor() -> void:
 	if not Global.is_component_available("motor", current_motor_type):
@@ -1393,6 +1473,7 @@ func add_motor() -> void:
 
 	calculate_drone_stats()
 	update_component_list()
+	_refresh_component_selector_state()
 	_apply_current_customization_to_assembly()
 	start_component_dragging(new_motor, mouse_pos)
 	call_deferred("_tut_notify", "motor_spawned")
@@ -1426,6 +1507,7 @@ func add_propeller() -> void:
 
 	calculate_drone_stats()
 	update_component_list()
+	_refresh_component_selector_state()
 	_apply_current_customization_to_assembly()
 	start_component_dragging(new_prop, mouse_pos)
 	call_deferred("_tut_notify", "propeller_spawned")
@@ -1439,6 +1521,7 @@ func delete_frame() -> void:
 	drone_frame = null
 	calculate_drone_stats()
 	update_component_list()
+	_refresh_component_selector_state()
 	_apply_current_customization_to_assembly()
 	_save_assembly_autosave()
 
@@ -1448,28 +1531,39 @@ func delete_board() -> void:
 	drone_board = null
 	calculate_drone_stats()
 	update_component_list()
+	_refresh_component_selector_state()
 	_apply_current_customization_to_assembly()
 	_save_assembly_autosave()
 
 func delete_motor(index: int) -> void:
+	_cleanup_component_arrays()
 	if index < 0 or index >= motors.size():
 		return
 
-	var motor: Node3D = motors[index] as Node3D
+	var motor: Node3D = _get_live_node3d(motors[index])
+	if motor == null:
+		motors.remove_at(index)
+		return
 	_delete_motor_with_attached_propellers(motor)
 	calculate_drone_stats()
 	update_component_list()
+	_refresh_component_selector_state()
 	_apply_current_customization_to_assembly()
 	_save_assembly_autosave()
 
 func delete_propeller(index: int) -> void:
+	_cleanup_component_arrays()
 	if index < 0 or index >= propellers.size():
 		return
 
-	var prop: Node3D = propellers[index] as Node3D
+	var prop: Node3D = _get_live_node3d(propellers[index])
+	if prop == null:
+		propellers.remove_at(index)
+		return
 	_remove_propeller_node(prop)
 	calculate_drone_stats()
 	update_component_list()
+	_refresh_component_selector_state()
 	_apply_current_customization_to_assembly()
 	_save_assembly_autosave()
 
@@ -1552,11 +1646,16 @@ func _remove_propeller_node(propeller: Node3D) -> void:
 		return
 
 	for key_variant in motor_propeller_map.keys():
-		var mapped_motor: Node3D = key_variant as Node3D
+		var mapped_motor: Node3D = _get_live_node3d(key_variant)
 		if mapped_motor == null:
+			motor_propeller_map.erase(key_variant)
 			continue
-		if motor_propeller_map.get(mapped_motor) == propeller:
-			motor_propeller_map.erase(mapped_motor)
+		var mapped_propeller: Node3D = _get_live_node3d(motor_propeller_map.get(key_variant, null))
+		if mapped_propeller == null:
+			motor_propeller_map.erase(key_variant)
+			continue
+		if mapped_propeller == propeller:
+			motor_propeller_map.erase(key_variant)
 
 	propellers.erase(propeller)
 	propeller.queue_free()
@@ -1568,14 +1667,14 @@ func _collect_propellers_for_motor(motor: Node3D) -> Array[Node3D]:
 		return attached_propellers
 
 	var motor_slot: int = _get_motor_slot_index(motor)
-	var mapped_propeller: Node3D = motor_propeller_map.get(motor, null) as Node3D
-	if mapped_propeller != null and is_instance_valid(mapped_propeller):
+	var mapped_propeller: Node3D = _get_live_node3d(motor_propeller_map.get(motor, null))
+	if mapped_propeller != null:
 		known_propellers[int(mapped_propeller.get_instance_id())] = true
 		attached_propellers.append(mapped_propeller)
 
 	for child in motor.get_children():
-		var child_propeller: Node3D = child as Node3D
-		if child_propeller == null or not is_instance_valid(child_propeller):
+		var child_propeller: Node3D = _get_live_node3d(child)
+		if child_propeller == null:
 			continue
 		if not _is_propeller_node(child_propeller):
 			continue
@@ -1586,8 +1685,8 @@ func _collect_propellers_for_motor(motor: Node3D) -> Array[Node3D]:
 		attached_propellers.append(child_propeller)
 
 	for prop_variant in propellers:
-		var propeller: Node3D = prop_variant as Node3D
-		if propeller == null or not is_instance_valid(propeller):
+		var propeller: Node3D = _get_live_node3d(prop_variant)
+		if propeller == null:
 			continue
 		var prop_id: int = int(propeller.get_instance_id())
 		if known_propellers.has(prop_id):
@@ -1699,8 +1798,8 @@ func _trim_loaded_components_to_platform_limits() -> void:
 	var kept_propellers_by_slot: Dictionary = {}
 	var propellers_to_remove: Array[Node3D] = []
 	for prop_variant in propellers:
-		var propeller: Node3D = prop_variant as Node3D
-		if propeller == null or not is_instance_valid(propeller):
+		var propeller: Node3D = _get_live_node3d(prop_variant)
+		if propeller == null:
 			continue
 		var slot_hint: int = _get_component_slot_hint(propeller)
 		var slot: int = slot_hint if slot_hint >= 0 and slot_hint < required_slots else _resolve_component_slot(propeller, -1)
@@ -1713,8 +1812,8 @@ func _trim_loaded_components_to_platform_limits() -> void:
 		kept_propellers_by_slot[slot] = propeller
 
 	for prop_variant in propellers_to_remove:
-		var propeller_to_remove: Node3D = prop_variant as Node3D
-		if propeller_to_remove == null or not is_instance_valid(propeller_to_remove):
+		var propeller_to_remove: Node3D = _get_live_node3d(prop_variant)
+		if propeller_to_remove == null:
 			continue
 		_remove_propeller_node(propeller_to_remove)
 
@@ -1742,11 +1841,7 @@ func _rebuild_full_drone_for_current_type() -> void:
 	_assembly_autosave_suspended = false
 	calculate_drone_stats()
 	update_component_list()
-	update_platform_selection()
-	update_frame_selection()
-	update_board_selection()
-	update_motor_selection()
-	update_propeller_selection()
+	_refresh_component_selector_state()
 	_apply_current_customization_to_assembly()
 	update_camera_position()
 	_save_assembly_autosave()
@@ -1761,6 +1856,7 @@ func clear_drone() -> void:
 
 	calculate_drone_stats()
 	update_component_list()
+	_refresh_component_selector_state()
 	_save_assembly_autosave()
 
 func screen_to_world_position(screen_pos: Vector2) -> Vector3:
@@ -1783,6 +1879,7 @@ func clamp_position(position: Vector3) -> Vector3:
 
 # ==================== СТАТЫ ====================
 func calculate_drone_stats() -> void:
+	_cleanup_component_arrays()
 	if not is_dragging_component:
 		_normalize_motor_propeller_links()
 
@@ -1801,8 +1898,7 @@ func calculate_drone_stats() -> void:
 		drone_stats["total_mass"] = float(drone_stats["total_mass"]) + float(frame_stat["mass"])
 
 	if bool(drone_stats["board_present"]):
-		var board_stat: Dictionary = component_stats["board"][current_board_type]
-		drone_stats["total_mass"] = float(drone_stats["total_mass"]) + float(board_stat["mass"])
+		drone_stats["total_mass"] = float(drone_stats["total_mass"]) + _get_board_mass_value(current_board_type)
 
 	var motor_slots: Dictionary = {}
 	for m in motors:
@@ -1821,8 +1917,8 @@ func calculate_drone_stats() -> void:
 
 	var propeller_slots: Dictionary = {}
 	for p in propellers:
-		var prop: Node3D = p as Node3D
-		if prop != null and is_instance_valid(prop):
+		var prop: Node3D = _get_live_node3d(p)
+		if prop != null:
 			var prop_type: String = current_propeller_type
 			if prop.has_meta("component_type"):
 				prop_type = str(prop.get_meta("component_type"))
@@ -2280,7 +2376,6 @@ func create_component_selectors_ui() -> void:
 	component_selectors.add_theme_constant_override("separation", 10)
 
 	create_platform_section(component_selectors)
-	create_frame_section(component_selectors)
 	create_board_section(component_selectors)
 	create_motor_section(component_selectors)
 	create_propeller_section(component_selectors)
@@ -2288,11 +2383,7 @@ func create_component_selectors_ui() -> void:
 	$UI.add_child(component_selectors)
 	_apply_assembly_ui_theme()
 	_layout_assembly_overlay()
-	update_platform_selection()
-	update_frame_selection()
-	update_board_selection()
-	update_motor_selection()
-	update_propeller_selection()
+	_refresh_component_selector_state()
 
 func create_platform_section(parent: VBoxContainer) -> void:
 	var platform_section: VBoxContainer = VBoxContainer.new()
@@ -2474,11 +2565,11 @@ func _on_propeller_menu_toggled() -> void:
 
 func _close_other_menus(except_menu: String) -> void:
 	var menus: Dictionary = {
-		"platform": $UI/ComponentSelectors/PlatformSelector/PlatformOptionsContainer,
-		"frame": $UI/ComponentSelectors/FrameSelector/FrameOptionsContainer,
-		"board": $UI/ComponentSelectors/BoardSelector/BoardOptionsContainer,
-		"motor": $UI/ComponentSelectors/MotorSelector/MotorOptionsContainer,
-		"propeller": $UI/ComponentSelectors/PropellerSelector/PropellerOptionsContainer
+		"platform": $UI.get_node_or_null("ComponentSelectors/PlatformSelector/PlatformOptionsContainer"),
+		"frame": $UI.get_node_or_null("ComponentSelectors/FrameSelector/FrameOptionsContainer"),
+		"board": $UI.get_node_or_null("ComponentSelectors/BoardSelector/BoardOptionsContainer"),
+		"motor": $UI.get_node_or_null("ComponentSelectors/MotorSelector/MotorOptionsContainer"),
+		"propeller": $UI.get_node_or_null("ComponentSelectors/PropellerSelector/PropellerOptionsContainer")
 	}
 	for k in menus.keys():
 		if str(k) != except_menu:
@@ -2512,7 +2603,7 @@ func create_platform_options() -> void:
 		options.add_child(button)
 		platform_buttons.append(button)
 
-	update_platform_selection()
+	_refresh_component_selector_state()
 
 func create_frame_options() -> void:
 	var options: VBoxContainer = $UI/ComponentSelectors/FrameSelector/FrameOptionsContainer
@@ -2539,7 +2630,7 @@ func create_frame_options() -> void:
 		options.add_child(button)
 		frame_buttons.append(button)
 
-	update_frame_selection()
+	_refresh_component_selector_state()
 
 func create_board_options() -> void:
 	var options: VBoxContainer = $UI/ComponentSelectors/BoardSelector/BoardOptionsContainer
@@ -2565,7 +2656,7 @@ func create_board_options() -> void:
 		options.add_child(button)
 		board_buttons.append(button)
 
-	update_board_selection()
+	_refresh_component_selector_state()
 
 func create_motor_options() -> void:
 	var options: VBoxContainer = $UI/ComponentSelectors/MotorSelector/MotorOptionsContainer
@@ -2591,7 +2682,7 @@ func create_motor_options() -> void:
 		options.add_child(button)
 		motor_buttons.append(button)
 
-	update_motor_selection()
+	_refresh_component_selector_state()
 
 func create_propeller_options() -> void:
 	var options: VBoxContainer = $UI/ComponentSelectors/PropellerSelector/PropellerOptionsContainer
@@ -2617,15 +2708,20 @@ func create_propeller_options() -> void:
 		options.add_child(button)
 		propeller_buttons.append(button)
 
-	update_propeller_selection()
+	_refresh_component_selector_state()
 
 func _on_platform_selected(platform_id: String) -> void:
+	var platform_frame_type: String = _get_default_frame_for_platform(platform_id)
+	if not Global.is_component_available("frame", platform_frame_type):
+		return
+	if not _can_select_platform():
+		return
+
 	_set_platform_type(platform_id)
-	update_platform_selection()
-	create_frame_options()
-	update_frame_selection()
+	current_frame_type = platform_frame_type
 	$UI/ComponentSelectors/PlatformSelector/PlatformOptionsContainer.visible = false
-	_rebuild_full_drone_for_current_type()
+	_refresh_component_selector_state()
+	add_frame()
 
 func update_platform_selection() -> void:
 	var button: Button = $UI.get_node_or_null("ComponentSelectors/PlatformSelector/PlatformButton") as Button
@@ -2640,31 +2736,40 @@ func update_platform_selection() -> void:
 
 func _on_frame_selected(frame_name: String) -> void:
 	if Global.is_component_available("frame", frame_name):
+		if not _can_select_platform():
+			return
 		_sync_platform_from_frame_type(frame_name)
 		current_frame_type = frame_name
-		update_platform_selection()
-		update_frame_selection()
-		$UI/ComponentSelectors/FrameSelector/FrameOptionsContainer.visible = false
-		_rebuild_full_drone_for_current_type()
+		var options: VBoxContainer = $UI.get_node_or_null("ComponentSelectors/FrameSelector/FrameOptionsContainer") as VBoxContainer
+		if options != null:
+			options.visible = false
+		_refresh_component_selector_state()
+		add_frame()
 
 func _on_board_selected(board_name: String) -> void:
 	if Global.is_component_available("board", board_name):
+		if not _can_open_board_selector():
+			return
 		current_board_type = board_name
-		update_board_selection()
 		$UI/ComponentSelectors/BoardSelector/BoardOptionsContainer.visible = false
-		add_board()
+		if drone_board != null and is_instance_valid(drone_board):
+			_replace_existing_board(board_name)
+		else:
+			add_board()
 
 func _on_motor_selected(motor_name: String) -> void:
 	if Global.is_component_available("motor", motor_name):
+		if not _can_add_motor_component():
+			return
 		current_motor_type = motor_name
-		update_motor_selection()
 		$UI/ComponentSelectors/MotorSelector/MotorOptionsContainer.visible = false
 		add_motor()
 
 func _on_propeller_selected(propeller_name: String) -> void:
 	if Global.is_component_available("propeller", propeller_name):
+		if not _can_add_propeller_component():
+			return
 		current_propeller_type = propeller_name
-		update_propeller_selection()
 		$UI/ComponentSelectors/PropellerSelector/PropellerOptionsContainer.visible = false
 		add_propeller()
 
@@ -2682,17 +2787,142 @@ func update_board_selection() -> void:
 
 func update_motor_selection() -> void:
 	var b: Button = $UI/ComponentSelectors/MotorSelector/MotorButton
-	b.text = "Двигатели: " + current_motor_type
+	b.text = "Следующий мотор: " + current_motor_type
 	for bt in motor_buttons:
 		_apply_selector_option_theme(bt, bt.text == current_motor_type, not bt.disabled)
 
 func update_propeller_selection() -> void:
 	var b: Button = $UI/ComponentSelectors/PropellerSelector/PropellerButton
-	b.text = "Пропеллеры: " + current_propeller_type
+	b.text = "Следующий пропеллер: " + current_propeller_type
 	for bt in propeller_buttons:
 		_apply_selector_option_theme(bt, bt.text == current_propeller_type, not bt.disabled)
 
 # ==================== СОХРАНЕНИЕ / ЗАГРУЗКА + СКРИНШОТЫ ====================
+func _get_selector_button(path: String) -> Button:
+	return $UI.get_node_or_null(path) as Button
+
+func _get_selector_options(path: String) -> CanvasItem:
+	return $UI.get_node_or_null(path) as CanvasItem
+
+func _sync_platform_selector_state() -> void:
+	var button: Button = _get_selector_button("ComponentSelectors/PlatformSelector/PlatformButton")
+	if button != null:
+		button.text = "Вид дрона: " + DronePlatformConfig.get_platform_label(current_platform_type)
+		button.disabled = not _can_select_platform()
+		button.tooltip_text = "" if not button.disabled else "Удалите текущую раму, чтобы выбрать другой вид дрона."
+
+	var options: CanvasItem = _get_selector_options("ComponentSelectors/PlatformSelector/PlatformOptionsContainer")
+	if options != null and button != null and button.disabled:
+		options.visible = false
+
+	for platform_button_variant in platform_buttons:
+		var platform_button: Button = platform_button_variant as Button
+		if platform_button == null:
+			continue
+		var platform_id: String = str(platform_button.get_meta("platform_id"))
+		var required_frame_type: String = _get_default_frame_for_platform(platform_id)
+		var is_unlocked: bool = Global.is_component_available("frame", required_frame_type)
+		platform_button.disabled = (not is_unlocked) or (not _can_select_platform())
+		if not is_unlocked:
+			platform_button.tooltip_text = "Не куплено в магазине."
+		elif platform_button.disabled:
+			platform_button.tooltip_text = "Сначала удалите текущую раму."
+		else:
+			platform_button.tooltip_text = ""
+		_apply_selector_option_theme(platform_button, platform_id == current_platform_type, is_unlocked)
+
+func _sync_board_selector_state() -> void:
+	var button: Button = _get_selector_button("ComponentSelectors/BoardSelector/BoardButton")
+	var can_open: bool = _can_open_board_selector()
+	if button != null:
+		button.text = "Платы: " + current_board_type
+		button.disabled = not can_open
+		button.tooltip_text = "" if can_open else "Сначала установите раму."
+
+	var options: CanvasItem = _get_selector_options("ComponentSelectors/BoardSelector/BoardOptionsContainer")
+	if options != null and button != null and button.disabled:
+		options.visible = false
+
+	for board_button_variant in board_buttons:
+		var board_button: Button = board_button_variant as Button
+		if board_button == null:
+			continue
+		var is_unlocked: bool = Global.is_component_available("board", board_button.text)
+		board_button.disabled = (not is_unlocked) or (not can_open)
+		if not is_unlocked:
+			board_button.tooltip_text = "Не куплено в магазине."
+		elif not can_open:
+			board_button.tooltip_text = "Сначала установите раму."
+		else:
+			board_button.tooltip_text = ""
+		_apply_selector_option_theme(board_button, board_button.text == current_board_type, is_unlocked)
+
+func _sync_motor_selector_state() -> void:
+	var button: Button = _get_selector_button("ComponentSelectors/MotorSelector/MotorButton")
+	var can_add: bool = _can_add_motor_component()
+	if button != null:
+		button.text = "Следующий мотор: " + current_motor_type
+		button.disabled = not can_add
+		if not _has_drone_frame():
+			button.tooltip_text = "Сначала установите раму."
+		elif motors.size() >= _get_slot_count():
+			button.tooltip_text = "Все моторы для этого вида дрона уже установлены."
+		else:
+			button.tooltip_text = ""
+
+	var options: CanvasItem = _get_selector_options("ComponentSelectors/MotorSelector/MotorOptionsContainer")
+	if options != null and button != null and button.disabled:
+		options.visible = false
+
+	for motor_button_variant in motor_buttons:
+		var motor_button: Button = motor_button_variant as Button
+		if motor_button == null:
+			continue
+		var is_unlocked: bool = Global.is_component_available("motor", motor_button.text)
+		motor_button.disabled = (not is_unlocked) or (not can_add)
+		if not is_unlocked:
+			motor_button.tooltip_text = "Не куплено в магазине."
+		elif not _has_drone_frame():
+			motor_button.tooltip_text = "Сначала установите раму."
+		elif motors.size() >= _get_slot_count():
+			motor_button.tooltip_text = "Все моторы для этого вида дрона уже установлены."
+		else:
+			motor_button.tooltip_text = ""
+		_apply_selector_option_theme(motor_button, motor_button.text == current_motor_type, is_unlocked)
+
+func _sync_propeller_selector_state() -> void:
+	var button: Button = _get_selector_button("ComponentSelectors/PropellerSelector/PropellerButton")
+	var can_add: bool = _can_add_propeller_component()
+	if button != null:
+		button.text = "Следующий пропеллер: " + current_propeller_type
+		button.disabled = not can_add
+		if motors.size() <= 0:
+			button.tooltip_text = "Сначала установите хотя бы один мотор."
+		elif propellers.size() >= mini(motors.size(), _get_slot_count()):
+			button.tooltip_text = "Все доступные пропеллеры уже установлены."
+		else:
+			button.tooltip_text = ""
+
+	var options: CanvasItem = _get_selector_options("ComponentSelectors/PropellerSelector/PropellerOptionsContainer")
+	if options != null and button != null and button.disabled:
+		options.visible = false
+
+	for propeller_button_variant in propeller_buttons:
+		var propeller_button: Button = propeller_button_variant as Button
+		if propeller_button == null:
+			continue
+		var is_unlocked: bool = Global.is_component_available("propeller", propeller_button.text)
+		propeller_button.disabled = (not is_unlocked) or (not can_add)
+		if not is_unlocked:
+			propeller_button.tooltip_text = "Не куплено в магазине."
+		elif motors.size() <= 0:
+			propeller_button.tooltip_text = "Сначала установите хотя бы один мотор."
+		elif propellers.size() >= mini(motors.size(), _get_slot_count()):
+			propeller_button.tooltip_text = "Все доступные пропеллеры уже установлены."
+		else:
+			propeller_button.tooltip_text = ""
+		_apply_selector_option_theme(propeller_button, propeller_button.text == current_propeller_type, is_unlocked)
+
 func add_save_load_buttons() -> void:
 	if $UI.has_node("SaveLoadContainer"):
 		load_slots_info()
@@ -2735,6 +2965,7 @@ func show_load_menu() -> void:
 
 func _build_current_drone_data() -> Dictionary:
 	_normalize_motor_propeller_links(true)
+	_cleanup_component_arrays()
 	var drone_data: Dictionary = {
 		"platform_type": current_platform_type,
 		"frame": get_component_data(drone_frame),
@@ -2744,13 +2975,13 @@ func _build_current_drone_data() -> Dictionary:
 	}
 
 	for m in motors:
-		var motor: Node3D = m as Node3D
-		if motor != null and is_instance_valid(motor):
+		var motor: Node3D = _get_live_node3d(m)
+		if motor != null:
 			drone_data["motors"].append(get_component_data(motor))
 
 	for p in propellers:
-		var prop: Node3D = p as Node3D
-		if prop != null and is_instance_valid(prop):
+		var prop: Node3D = _get_live_node3d(p)
+		if prop != null:
 			drone_data["propellers"].append(get_component_data(prop))
 
 	return drone_data
@@ -2794,6 +3025,7 @@ func _apply_loaded_drone_data(drone_data: Dictionary) -> void:
 	create_drone_from_data(drone_data)
 	_assembly_autosave_suspended = false
 	_update_cosmetic_tags()
+	_refresh_component_selector_state()
 	_apply_current_customization_to_assembly()
 	update_camera_position()
 
@@ -3216,7 +3448,7 @@ func create_drone_from_data(drone_data: Dictionary) -> void:
 		var frame_data: Dictionary = drone_data["frame"] as Dictionary
 		frame_data["component_type"] = _resolve_saved_component_type(frame_data, "frame", "Рама1")
 		_sync_platform_from_frame_type(str(frame_data.get("component_type", "Рама1")))
-	update_platform_selection()
+	_refresh_component_selector_state()
 
 	if drone_data.has("frame") and drone_data["frame"] != null:
 		add_frame_from_data(drone_data["frame"])
@@ -3261,8 +3493,8 @@ func _restore_loaded_motor_propeller_links() -> void:
 			_apply_motor_slot_recursive(motor, motor_slot)
 
 	for prop_variant in propellers:
-		var propeller: Node3D = prop_variant as Node3D
-		if propeller == null or not is_instance_valid(propeller):
+		var propeller: Node3D = _get_live_node3d(prop_variant)
+		if propeller == null:
 			continue
 		var target_slot: int = -1
 		if propeller.has_meta("attached_motor_slot"):
@@ -3298,8 +3530,7 @@ func add_frame_from_data(frame_data: Dictionary) -> void:
 	new_frame.set_meta("component_type", frame_type)
 	_tag_component_for_customization(new_frame, "frame")
 	current_frame_type = frame_type
-	update_platform_selection()
-	update_frame_selection()
+	_refresh_component_selector_state()
 	_apply_current_customization_to_assembly()
 
 func add_board_from_data(board_data: Dictionary) -> void:
@@ -3312,14 +3543,16 @@ func add_board_from_data(board_data: Dictionary) -> void:
 	var new_board: Node3D = prefab.instantiate() as Node3D
 	$Components.add_child(new_board)
 
-	new_board.position = Vector3(board_data["position"]["x"], board_data["position"]["y"], board_data["position"]["z"])
-	new_board.rotation = Vector3(board_data["rotation"]["x"], board_data["rotation"]["y"], board_data["rotation"]["z"])
-
 	drone_board = new_board
 	new_board.set_meta("component_type", board_type)
 	_tag_component_for_customization(new_board, "board")
+	if drone_frame != null and is_instance_valid(drone_frame):
+		_mount_board_to_frame(new_board)
+	else:
+		new_board.position = Vector3(board_data["position"]["x"], board_data["position"]["y"], board_data["position"]["z"])
+		new_board.rotation = Vector3(board_data["rotation"]["x"], board_data["rotation"]["y"], board_data["rotation"]["z"])
 	current_board_type = board_type
-	update_board_selection()
+	_refresh_component_selector_state()
 	_apply_current_customization_to_assembly()
 
 func add_motor_from_data(motor_data: Dictionary) -> void:
@@ -3347,7 +3580,7 @@ func add_motor_from_data(motor_data: Dictionary) -> void:
 
 	if motors.size() == 1:
 		current_motor_type = motor_type
-		update_motor_selection()
+	_refresh_component_selector_state()
 	_apply_current_customization_to_assembly()
 
 func add_propeller_from_data(prop_data: Dictionary) -> void:
@@ -3382,7 +3615,7 @@ func add_propeller_from_data(prop_data: Dictionary) -> void:
 
 	if propellers.size() == 1:
 		current_propeller_type = prop_type
-		update_propeller_selection()
+	_refresh_component_selector_state()
 	_apply_current_customization_to_assembly()
 
 func show_slot_action_message(slot_index: int, is_save_mode: bool) -> void:
@@ -3503,8 +3736,8 @@ func ensure_slots_marked_for_export() -> void:
 	# 2) Пропеллеры: слот берём у мотора, к которому они привязаны (motor_propeller_map),
 	# а если связи нет — ищем ближайший мотор
 	for p in propellers:
-		var prop: Node3D = p as Node3D
-		if prop == null or not is_instance_valid(prop):
+		var prop: Node3D = _get_live_node3d(p)
+		if prop == null:
 			continue
 
 		var slot: int = -1
@@ -3583,6 +3816,7 @@ func export_drone_scene() -> bool:
 	if is_dragging_component:
 		stop_component_dragging()
 	_normalize_motor_propeller_links(true)
+	_cleanup_component_arrays()
 	calculate_drone_stats()
 	ensure_propellers_marked()
 	_update_cosmetic_tags()
@@ -3635,16 +3869,16 @@ func export_drone_scene() -> bool:
 		"propellers": []
 	}
 
-	for motor in motors:
-		if is_instance_valid(motor):
-			var motor_node: Node3D = motor as Node3D
+	for motor_variant in motors:
+		var motor_node: Node3D = _get_live_node3d(motor_variant)
+		if motor_node != null:
 			var motor_slot: int = _resolve_component_slot(motor_node, drone_info["motors"].size())
 			var motor_type: String = current_motor_type
-			if motor_node != null and motor_node.has_meta("component_type"):
+			if motor_node.has_meta("component_type"):
 				motor_type = str(motor_node.get_meta("component_type"))
 			drone_info["motors"].append({
-				"position": motor.global_position,
-				"rotation": motor.rotation,
+				"position": motor_node.global_position,
+				"rotation": motor_node.rotation,
 				"type": motor_type,
 				"slot": motor_slot,
 				"slot_name": _slot_name_from_index(motor_slot),
@@ -3653,16 +3887,16 @@ func export_drone_scene() -> bool:
 			if motor_slot not in drone_info["motor_slots"]:
 				drone_info["motor_slots"].append(motor_slot)
 
-	for propeller in propellers:
-		if is_instance_valid(propeller):
-			var prop_node: Node3D = propeller as Node3D
+	for propeller_variant in propellers:
+		var prop_node: Node3D = _get_live_node3d(propeller_variant)
+		if prop_node != null:
 			var prop_slot: int = _resolve_component_slot(prop_node, drone_info["propellers"].size())
 			var prop_type: String = current_propeller_type
-			if prop_node != null and prop_node.has_meta("component_type"):
+			if prop_node.has_meta("component_type"):
 				prop_type = str(prop_node.get_meta("component_type"))
 			drone_info["propellers"].append({
-				"position": propeller.global_position,
-				"rotation": propeller.rotation,
+				"position": prop_node.global_position,
+				"rotation": prop_node.rotation,
 				"type": prop_type,
 				"slot": prop_slot,
 				"slot_name": _slot_name_from_index(prop_slot)
@@ -3956,7 +4190,7 @@ func calculate_physics_data() -> Dictionary:
 		total_mass += frame_mass
 
 	if drone_board != null and is_instance_valid(drone_board):
-		var board_mass: float = float(component_stats["board"][current_board_type]["mass"])
+		var board_mass: float = _get_board_mass_value(current_board_type)
 		var board_pos: Vector3 = _get_board_attachment_position()
 		total_mass += board_mass
 		weighted_mass += board_pos * board_mass
@@ -3981,8 +4215,8 @@ func calculate_physics_data() -> Dictionary:
 		motor_states[slot]["thrust"] = motor_thrust
 
 	for prop_variant in propellers:
-		var propeller: Node3D = prop_variant as Node3D
-		if propeller == null or not is_instance_valid(propeller):
+		var propeller: Node3D = _get_live_node3d(prop_variant)
+		if propeller == null:
 			continue
 
 		var slot: int = _resolve_component_slot(propeller, propellers.find(propeller))
@@ -4029,7 +4263,10 @@ func calculate_physics_data() -> Dictionary:
 	var stability: float = clampf(active_fraction * (1.0 - clampf(normalized_imbalance * 1.4, 0.0, 0.9)), 0.0, 1.0)
 	var baseline_slot_thrust: float = 8.0 * 0.9
 	var power_factor: float = total_active_thrust / maxf(float(required_slots) * baseline_slot_thrust, 0.001)
-	var speed_multiplier: float = DronePlatformConfig.get_speed_multiplier(current_platform_type) * clampf(0.28 + power_factor * 0.72, 0.22, 1.40) * clampf(0.55 + stability * 0.45, 0.35, 1.0)
+	var board_speed_factor: float = 1.0
+	if drone_board != null and is_instance_valid(drone_board):
+		board_speed_factor = clampf(_get_board_power_value(current_board_type), 0.92, 1.22)
+	var speed_multiplier: float = DronePlatformConfig.get_speed_multiplier(current_platform_type) * clampf(0.28 + power_factor * 0.72, 0.22, 1.40) * clampf(0.55 + stability * 0.45, 0.35, 1.0) * board_speed_factor
 
 	return {
 		"platform_type": current_platform_type,

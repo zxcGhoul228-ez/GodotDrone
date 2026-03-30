@@ -1292,13 +1292,33 @@ func _collect_nodes_with_meta(root: Node, meta_name: String, result: Array) -> v
 	for child in root.get_children():
 		_collect_nodes_with_meta(child, meta_name, result)
 
+func _ensure_default_material_snapshot(mesh_node: MeshInstance3D) -> void:
+	if mesh_node == null or not is_instance_valid(mesh_node):
+		return
+	if mesh_node.has_meta("cosmetic_default_material_captured"):
+		return
+	mesh_node.set_meta("cosmetic_default_material_captured", true)
+	mesh_node.set_meta("cosmetic_default_material_override", mesh_node.material_override)
+
+func _restore_default_material_snapshot(mesh_node: MeshInstance3D) -> void:
+	if mesh_node == null or not is_instance_valid(mesh_node):
+		return
+	if mesh_node.has_meta("cosmetic_default_material_override"):
+		mesh_node.material_override = mesh_node.get_meta("cosmetic_default_material_override") as Material
+	else:
+		mesh_node.material_override = null
+
 func _apply_style_to_node(root: Node, style: Dictionary) -> void:
 	if root == null or not is_instance_valid(root):
 		return
 	if root is MeshInstance3D:
 		var mesh_node: MeshInstance3D = root as MeshInstance3D
+		_ensure_default_material_snapshot(mesh_node)
 		var material: Material = _build_cosmetic_material(style)
-		mesh_node.material_override = material
+		if material == null:
+			_restore_default_material_snapshot(mesh_node)
+		else:
+			mesh_node.material_override = material
 	for child in root.get_children():
 		_apply_style_to_node(child, style)
 

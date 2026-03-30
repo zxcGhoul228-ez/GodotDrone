@@ -27,11 +27,12 @@ var title_overlay: Label = null
 	$CenterContainer/VBoxContainer/HBoxContainer2/Button6
 ]
 
-# Варианты для каждого типа предметов
-var frame_variants: Array[String] = ["Рама1", "Рама2", "Рама3"]
-var board_variants: Array[String] = ["Плата1", "Плата2", "Плата3"]
-var motor_variants: Array[String] = ["Мотор1", "Мотор2", "Мотор3"]
-var propeller_variants: Array[String] = ["Пропеллер1", "Пропеллер2", "Пропеллер3"]
+# Варианты для магазина: только те детали, которые нужно покупать отдельно.
+var board_variants: Array[String] = ["Плата2", "Плата3"]
+var motor_variants: Array[String] = ["Мотор2", "Мотор3"]
+var propeller_variants: Array[String] = ["Пропеллер2", "Пропеллер3"]
+var booster_variants: Array[String] = ["Буст1", "Буст2"]
+var shop_item_pool: Array[String] = []
 
 # Текстуры для каждого предмета
 var item_textures = {
@@ -54,13 +55,19 @@ var item_textures = {
 # Текущие отображаемые предметы
 var current_items: Array[String] = []
 
-var last_frame_index = -1
-var last_board_index = -1
-var last_motor_index = -1
-var last_propeller_index = -1
+var last_shop_roll: Array[String] = []
 
 # Цены для каждого предмета
-var item_prices: Array[int] = [10, 20, 50, 30, 40, 50]
+var item_prices := {
+	"Плата2": 20,
+	"Плата3": 50,
+	"Мотор2": 30,
+	"Мотор3": 45,
+	"Пропеллер2": 25,
+	"Пропеллер3": 40,
+	"Буст1": 30,
+	"Буст2": 50
+}
 
 # Стоимость обновления и коэффициент увеличения
 var refresh_cost = 10
@@ -90,6 +97,7 @@ func _ready():
 	
 	# Инициализируем генератор случайных чисел
 	randomize()
+	shop_item_pool = board_variants + motor_variants + propeller_variants + booster_variants
 	
 	# Инициализируем начальный ассортимент
 	refresh_shop_items()
@@ -459,7 +467,7 @@ func setup_buttons():
 		var item_name: String = current_items[i]
 		
 		# Устанавливаем текст на кнопке
-		var button_text: String = "%s\n%d монет" % [item_name, item_prices[i]]
+		var button_text: String = "%s\n%d монет" % [item_name, int(item_prices.get(item_name, 0))]
 		set_button_text(button, button_text)
 
 		# Устанавливаем текстуру превью после создания внутренних нод кнопки
@@ -486,8 +494,8 @@ func get_random_index_different_from(array_size: int, last_index: int) -> int:
 	return new_index
 
 func _on_item_bought(item_index):
-	var price: int = int(item_prices[item_index])
 	var product_name: String = current_items[item_index]
+	var price: int = int(item_prices.get(product_name, 0))
 	
 	if product_name in Global.purchased_items:
 		print("Этот предмет уже куплен!")
@@ -557,24 +565,22 @@ func _on_quests_pressed() -> void:
 
 func refresh_shop_items():
 	current_items.clear()
-	
-	var frame_index: int = get_random_index_different_from(frame_variants.size(), last_frame_index)
-	var board_index: int = get_random_index_different_from(board_variants.size(), last_board_index)
-	var motor_index: int = get_random_index_different_from(motor_variants.size(), last_motor_index)
-	var propeller_index: int = get_random_index_different_from(propeller_variants.size(), last_propeller_index)
-	
-	last_frame_index = frame_index
-	last_board_index = board_index
-	last_motor_index = motor_index
-	last_propeller_index = propeller_index
-	
-	current_items.append(frame_variants[frame_index])
-	current_items.append(board_variants[board_index])
-	current_items.append(motor_variants[motor_index])
-	current_items.append(propeller_variants[propeller_index])
-	
-	current_items.append("Буст1")
-	current_items.append("Буст2")
+
+	var candidates: Array[String] = shop_item_pool.duplicate()
+	candidates.shuffle()
+	var target_count: int = mini(buttons.size(), candidates.size())
+	for i in range(target_count):
+		current_items.append(candidates[i])
+
+	if current_items == last_shop_roll and candidates.size() > 1:
+		var first_item: String = str(candidates[0])
+		candidates.remove_at(0)
+		candidates.append(first_item)
+		current_items.clear()
+		for i in range(target_count):
+			current_items.append(candidates[i])
+
+	last_shop_roll = current_items.duplicate()
 	
 	print("Новый ассортимент: ", current_items)
 
@@ -590,7 +596,7 @@ func update_buttons_state():
 		else:
 			button.disabled = false
 			button.modulate = Color.WHITE
-			set_button_text(button, "%s\n%d монет" % [product_name, item_prices[i]])
+			set_button_text(button, "%s\n%d монет" % [product_name, int(item_prices.get(product_name, 0))])
 
 func _on_back_pressed():
 	get_tree().change_scene_to_file("res://app/main_menu/main_scene.tscn")
@@ -625,10 +631,9 @@ func _get_tutorial_steps() -> Array:
 • Клик по товару — покупка (если хватает монет).
 • Купленные вещи складываются в [b]Global.purchased_items[/b] и станут доступны в создании дрона."""},
 		{"title": "Типы деталей", "text": """В магазине могут попадаться:
-• [b]Рамы[/b] (Рама1/2/3)
-• [b]Платы[/b] (Плата1/2/3)
-• [b]Моторы[/b] (Мотор1/2/3)
-• [b]Пропеллеры[/b] (Пропеллер1/2/3)
+• [b]Платы[/b] (Плата2/3)
+• [b]Моторы[/b] (Мотор2/3)
+• [b]Пропеллеры[/b] (Пропеллер2/3)
 • [b]Бусты[/b] (Буст1/2) — если ты используешь их в логике, они тоже покупаются как предмет."""},
 		{"title": "Обновление витрины", "text": """Кнопка [b]refresh[/b] меняет набор товаров.
 Стоимость обновления начинается с [b]10[/b] монет и увеличивается на [b]+5[/b] после каждого обновления."""},

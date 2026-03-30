@@ -16,6 +16,8 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 config/name="Новый игровой проект"
 run/main_scene="res://app/main_menu/main_scene.tscn"
+config/use_custom_user_dir=true
+config/custom_user_dir_name="GodotDrone"
 config/features=PackedStringArray("4.6", "Forward Plus")
 config/icon="res://content/branding/icon.svg"
 
