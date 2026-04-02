@@ -1680,11 +1680,11 @@ func hide_loading_screen():
 func _direct_scene_load(scene_path: String):
 	print("🔄 Прямая загрузка сцены...")
 	
-	if FileAccess.file_exists(scene_path):
+	if ResourceLoader.exists(scene_path):
 		get_tree().change_scene_to_file(scene_path)
 	else:
 		print("❌ Файл не найден: ", scene_path)
-		get_tree().change_scene_to_file("res://app/flight/DroneScene.tscn")
+		get_tree().change_scene_to_file("res://app/main_menu/main_scene.tscn")
 	
 	hide_loading_screen()
 
