@@ -668,12 +668,24 @@ func execute_actions(sequence: Array) -> bool:
 			print("❌ Ошибка движения")
 			return false
 		
-		await get_tree().create_timer(0.1).timeout
+		if not await _wait_for_tree_timer(0.1):
+			return false
 	
 	# После выполнения всех команд
 	print("✅ Все команды выполнены успешно")
 	print("🎯 ПРОГРАММА ЗАВЕРШЕНА С УСПЕХОМ")
 	return true
+
+func _wait_for_tree_timer(duration: float) -> bool:
+	if duration <= 0.0:
+		return get_tree() != null and is_inside_tree()
+	if get_tree() == null or not is_inside_tree():
+		return false
+	var timer: SceneTreeTimer = get_tree().create_timer(duration)
+	if timer == null:
+		return false
+	await timer.timeout
+	return get_tree() != null and is_inside_tree()
 
 # Вспомогательная функция для получения имени направления
 func get_direction_name(direction: int) -> String:

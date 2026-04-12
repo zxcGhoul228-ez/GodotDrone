@@ -11,34 +11,29 @@ const SCENE_SHOP := "res://app/shop/shop.tscn"
 # Шаги:
 # 0  -> подсветить "Сборка"
 # 1  -> ждать перехода в сцену сборки
-# 2  -> подсветить кнопку "Рама"
-# 3  -> ждать установки рамы
+# 2  -> подсветить "Вид дрона"
+# 3  -> ждать выбор квадрокоптера и установку рамы
 # 4  -> подсветить кнопку "Плата"
 # 5  -> ждать установки платы
 # 6  -> подсветить кнопку "Мотор"
 # 7  -> ждать 4 мотора
 # 8  -> подсветить кнопку "Пропеллер"
 # 9  -> ждать 4 пропеллера
-# 10 -> подсветить "Сохранить"
-# 11 -> ждать saved
-# 12 -> подсветить "Загрузить"
-# 13 -> ждать loaded
-# 14 -> (пропуск) экспорт происходит автоматически при загрузке
-# 16 -> подсказка: ESC -> в главное меню
-# 17 -> ждать сцены главного меню
-# 18 -> подсветить "Выбор уровня"
-# 19 -> ждать сцены выбора уровней
-# 20 -> подсветить 1-й уровень
-# 21 -> ждать загрузки уровня
-# 22 -> подсказка: TAB -> программирование
-# 23 -> ждать programming_open
-# 24 -> подсветка кнопки "Подсказка" (алгоритм по нажатию)
-# 25 -> ждать level_completed
-# 26 -> ждать возврата в главное меню
-# 27 -> подсветить "Магазин"
-# 28 -> ждать сцены магазина
-# 29 -> финал
-# 30 -> ожидание клика для завершения
+# 10 -> подсказка: ESC -> в главное меню и сохранить дрон
+# 11 -> ждать сцены главного меню
+# 12 -> подсветить "Выбор уровня"
+# 13 -> ждать сцены выбора уровней
+# 14 -> подсветить 1-й уровень
+# 15 -> ждать загрузки уровня
+# 16 -> подсказка: TAB -> программирование
+# 17 -> ждать programming_open
+# 18 -> подсветка кнопки "Подсказка"
+# 19 -> ждать level_completed
+# 20 -> ждать возврата в главное меню
+# 21 -> подсветить "Магазин"
+# 22 -> ждать сцены магазина
+# 23 -> финал
+# 24 -> ожидание клика для завершения
 
 var active: bool = false
 var step: int = 0
@@ -75,7 +70,7 @@ var _pending_arg: String = ""
 
 # Для подсказки в программировании
 var _hint_revealed: bool = false
-const _PROGRAM_HINT := "Алгоритм: [b]3 назад[/b], [b]3 вправо[/b], [b]1 вверх[/b]."
+const _PROGRAM_HINT := "Алгоритм: [b]3 назад[/b], [b]3 вправо[/b], [b]1 вниз[/b]."
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -104,11 +99,10 @@ func notify(event_name: String, data: Variant = null) -> void:
 		return
 
 	match event_name:
-		# Меню выбора (первый вариант)
-		"frame_menu_open":
+		"platform_menu_open":
 			if step == 3:
-				_set_text("Выбери [b]раму[/b]: нажми первый доступный вариант в списке.")
-				_highlight_first_enabled_in_container("UI/ComponentSelectors/FrameSelector/FrameOptionsContainer")
+				_set_text("Выбери [b]вид дрона[/b]: открой список и нажми [b]«Квадрокоптер»[/b].")
+				_highlight_first_enabled_in_container("UI/ComponentSelectors/PlatformSelector/PlatformOptionsContainer")
 		"board_menu_open":
 			if step == 5:
 				_set_text("Выбери [b]плату[/b]: нажми первый доступный вариант в списке.")
@@ -121,11 +115,9 @@ func notify(event_name: String, data: Variant = null) -> void:
 			if step == 9:
 				_set_text("Выбери [b]пропеллер[/b]: нажми первый доступный вариант, затем поставь 4 пропеллера.")
 				_highlight_first_enabled_in_container("UI/ComponentSelectors/PropellerSelector/PropellerOptionsContainer")
-
-		# Спавн детали (после нажатия варианта) — меняем текст на "перетащи"
 		"frame_spawned":
 			if step == 3:
-				_set_text("Отлично! Теперь [b]перетащи раму[/b] и [b]отпусти ЛКМ[/b], чтобы установить её.")
+				_set_text("Отлично! Рама для квадрокоптера появилась сразу. Теперь [b]перетащи раму[/b] и [b]отпусти ЛКМ[/b], чтобы установить её.")
 				_clear_highlight()
 		"board_spawned":
 			if step == 5:
@@ -133,14 +125,12 @@ func notify(event_name: String, data: Variant = null) -> void:
 				_clear_highlight()
 		"motor_spawned":
 			if step == 7:
-				_set_text("Перетащи мотор на точку крепления и отпусти ЛКМ. Нужно поставить [b]4 мотора[/b].")
+				_set_text("Перетащи мотор на свободную точку крепления и отпусти ЛКМ. Нужно поставить [b]4 мотора[/b].")
 				_clear_highlight()
 		"propeller_spawned":
 			if step == 9:
 				_set_text("Перетащи пропеллер на мотор и отпусти ЛКМ. Нужно поставить [b]4 пропеллера[/b].")
 				_clear_highlight()
-
-		# Факт установки/прогресс
 		"frame_added":
 			if step == 3:
 				_next() # -> 4
@@ -167,25 +157,15 @@ func notify(event_name: String, data: Variant = null) -> void:
 					_set_text("Отлично! Пропеллер установлен. Осталось поставить [b]%d[/b].\nНажми [b]«Пропеллер»[/b], выбери вариант и поставь следующий." % left)
 					_highlight_node_path("UI/ComponentSelectors/PropellerSelector/PropellerButton")
 					_arrow_enabled = true
-
-		"saved":
-			if step == 11:
-				_next() # -> 12
-		"loaded":
-			if step == 13:
-				# Экспорт происходит автоматически при загрузке: не требуем отдельный шаг "Экспорт".
-				step = 16
-				_advance()
 		"programming_open":
-			if step == 23:
-				_next() # -> 24
+			if step == 17:
+				_next() # -> 18
 		"hint_pressed":
-			# Подсказка на уровне (не двигает шаги)
-			if step == 25 and not _hint_revealed:
+			if step == 19 and not _hint_revealed:
 				_hint_revealed = true
 				_set_text(_get_programming_text())
 		"level_completed":
-			if step == 25:
+			if step == 19:
 				_handle_level_completed()
 		_:
 			pass
@@ -197,7 +177,13 @@ func _process(_delta: float) -> void:
 	var sp := _get_scene_path()
 	if sp != _last_scene_path:
 		_last_scene_path = sp
+		_hide_highlight_visuals_for_transition()
 		_on_scene_changed(sp)
+
+	if _is_loading_overlay_visible():
+		_hide_highlight_visuals_for_transition()
+		_adjust_hint_panel_position()
+		return
 
 	_retry_pending_highlight()
 	_update_highlight_position()
@@ -230,7 +216,7 @@ func _input(event: InputEvent) -> void:
 		return
 
 	# В финале обучения реагируем на ЛЮБОЕ нажатие (даже если UI "съедает" событие)
-	if step == 30:
+	if step == 24:
 		if event is InputEventMouseButton and event.pressed:
 			stop_tutorial(true)
 		elif event is InputEventKey and event.pressed:
@@ -241,7 +227,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	# В финале любой клик/клавиша завершает
-	if step >= 30:
+	if step >= 24:
 		if event is InputEventMouseButton and event.pressed:
 			stop_tutorial(true)
 		elif event is InputEventKey and event.pressed:
@@ -251,122 +237,106 @@ func _on_scene_changed(scene_path: String) -> void:
 	# Переходы между сценами
 	if step == 1 and scene_path == SCENE_CREATE:
 		_next() # -> 2
-	elif step == 17 and scene_path == SCENE_MAIN:
-		_next() # -> 18
-	elif step == 19 and scene_path == SCENE_LEVEL_SELECT:
-		_next() # -> 20
-	elif step == 21:
+	elif step == 11 and scene_path == SCENE_MAIN:
+		_next() # -> 12
+	elif step == 13 and scene_path == SCENE_LEVEL_SELECT:
+		_next() # -> 14
+	elif step == 15:
 		# Считаем что попали на уровень (любая сцена, не являющаяся меню/созданием/магазином)
 		if scene_path != "" and scene_path != SCENE_LEVEL_SELECT and scene_path != SCENE_MAIN and scene_path != SCENE_CREATE and scene_path != SCENE_SHOP:
-			_next() # -> 22
-	elif step == 26 and scene_path == SCENE_MAIN:
-		_next() # -> 27
-	elif step == 28 and scene_path == SCENE_SHOP:
-		_next() # -> 29
+			_next() # -> 16
+	elif step == 20 and scene_path == SCENE_MAIN:
+		_next() # -> 21
+	elif step == 22 and scene_path == SCENE_SHOP:
+		_next() # -> 23
 
 func _handle_level_completed() -> void:
 	if not active:
 		return
 
-	# На некоторых уровнях игра не возвращает в меню автоматически.
-	# Поэтому делаем переход сами.
-	_set_text("Уровень пройден! Возвращаемся в главное меню…")
+	_set_text("Уровень пройден! Посмотри результаты и нажми [b]«Главное меню»[/b] в окне завершения уровня.")
 	_clear_highlight()
 	_arrow_enabled = false
-	step = 26
-	if get_tree():
-		get_tree().change_scene_to_file(SCENE_MAIN)
+	step = 20
 
 func _advance() -> void:
 	match step:
 		0:
-			_set_text("Нажми [b]«Сборка дрона»[/b], чтобы собрать своего первого дрона.")
+			_set_text("Нажми [b]«Сборка дрона»[/b], чтобы начать учебную сборку [b]квадрокоптера[/b].")
 			_highlight_button_by_text("Сборка")
 			_arrow_enabled = true
 			step = 1
 
 		2:
-			_set_text("Сначала сделаем [b]раму[/b]. Нажми кнопку [b]«Рама»[/b] и выбери вариант.")
-			_highlight_node_path("UI/ComponentSelectors/FrameSelector/FrameButton")
+			_set_text("Сначала выбери [b]вид дрона[/b]. Нажми [b]«Вид дрона»[/b] и выбери [b]«Квадрокоптер»[/b].")
+			_highlight_node_path("UI/ComponentSelectors/PlatformSelector/PlatformButton")
 			_arrow_enabled = true
 			step = 3
 			call_deferred("_poll_create_progress")
 
 		4:
-			_set_text("Теперь нужна [b]плата[/b]. Нажми [b]«Плата»[/b] и выбери вариант.")
+			_set_text("Теперь нужна [b]плата управления[/b]. Нажми [b]«Плата»[/b] и выбери вариант.")
 			_highlight_node_path("UI/ComponentSelectors/BoardSelector/BoardButton")
 			_arrow_enabled = true
 			step = 5
 			call_deferred("_poll_create_progress")
 
 		6:
-			_set_text("Поставь [b]4 мотора[/b]. Нажимай [b]«Мотор»[/b], выбирай вариант и [b]ставь по одному мотору[/b] (нужно 4).")
+			_set_text("Время для тяги. Нажимай [b]«Мотор»[/b], выбирай вариант и [b]ставь по одному мотору[/b], пока не закроешь все [b]4 точки крепления[/b].")
 			_highlight_node_path("UI/ComponentSelectors/MotorSelector/MotorButton")
 			_arrow_enabled = true
 			step = 7
 			call_deferred("_poll_create_progress")
 
 		8:
-			_set_text("Остались [b]пропеллеры[/b]. Нажимай [b]«Пропеллер»[/b] и [b]ставь по одному[/b] (нужно 4).")
+			_set_text("Осталось завершить сборку. Нажимай [b]«Пропеллер»[/b] и [b]ставь по одному пропеллеру[/b], пока на каждом моторе не будет винта.")
 			_highlight_node_path("UI/ComponentSelectors/PropellerSelector/PropellerButton")
 			_arrow_enabled = true
 			step = 9
 			call_deferred("_poll_create_progress")
 
 		10:
-			_set_text("Нажми [b]ESC[/b], затем [b]«Сохранить»[/b], чтобы сохранить дрона в ячейку.")
-			_highlight_button_by_text("Сохран")
+			_set_text("Квадрокоптер собран: рама, плата, [b]4 мотора[/b] и [b]4 пропеллера[/b] на месте. Загляни в характеристики слева: дрон должен быть [b]сбалансирован[/b].\nТеперь нажми [b]ESC[/b], затем [b]«В главное меню»[/b]. Этот дрон сохранится и загрузится на уровне.")
+			_highlight_button_by_text("главн")
 			_arrow_enabled = true
 			step = 11
 
 		12:
-			_set_text("Теперь нажми [b]«Загрузить»[/b]. После загрузки дрон [b]автоматически экспортируется на уровни[/b] — можно сразу идти в выбор уровня.")
-			_highlight_button_by_text("Загруз")
-			_arrow_enabled = true
-			step = 13
-
-		16:
-			_set_text("Нажми [b]ESC[/b], затем в меню выдели [b]«В главное меню»[/b] и нажми на неё.")
-			_highlight_button_by_text("главн")
-			_arrow_enabled = true
-			step = 17
-
-		18:
 			_set_text("Теперь нажми [b]«Выбор уровня»[/b].")
 			_highlight_button_by_text("Выбор")
 			_arrow_enabled = true
-			step = 19
+			step = 13
 
-		20:
+		14:
 			_set_text("Выбери [b]первый уровень[/b].")
 			_highlight_first_level_button()
 			_arrow_enabled = true
-			step = 21
+			step = 15
 
-		22:
+		16:
 			_set_text("На уровне нажми [b]TAB[/b], чтобы открыть блок программирования.")
 			_clear_highlight()
 			_arrow_enabled = false
-			step = 23
+			step = 17
 
-		24:
+		18:
 			_hint_revealed = false
 			_set_text(_get_programming_text())
 			_highlight_hint_button()
 			_arrow_enabled = true
-			step = 25
+			step = 19
 
-		27:
+		21:
 			_set_text("Уровень пройден! Заглянем в [b]магазин[/b]. Нажми [b]«Магазин»[/b].")
 			_highlight_button_by_text("Магаз")
 			_arrow_enabled = true
-			step = 28
+			step = 22
 
-		29:
+		23:
 			_set_text("В магазине можно покупать новые, улучшенные детали и усиления для дрона.\n\n[b]Поздравляю![/b] Ты прошёл обучение 🎉\nНажми любую кнопку, чтобы вернуться в главное меню.")
 			_clear_highlight()
 			_arrow_enabled = false
-			step = 30
+			step = 24
 
 		_:
 			pass
@@ -1042,6 +1012,25 @@ func _clear_highlight() -> void:
 		_arrow_line.visible = false
 	if _arrow_head and is_instance_valid(_arrow_head):
 		_arrow_head.visible = false
+
+func _hide_highlight_visuals_for_transition() -> void:
+	_target = null
+	if _highlight and is_instance_valid(_highlight):
+		_highlight.visible = false
+	if _shade and is_instance_valid(_shade):
+		_shade.visible = false
+	if _arrow_line and is_instance_valid(_arrow_line):
+		_arrow_line.visible = false
+	if _arrow_head and is_instance_valid(_arrow_head):
+		_arrow_head.visible = false
+
+func _is_loading_overlay_visible() -> bool:
+	if get_tree() == null or get_tree().root == null:
+		return false
+	var loading_screen: Node = get_tree().root.get_node_or_null("LoadingScreen")
+	if loading_screen == null or not (loading_screen is CanvasItem):
+		return false
+	return (loading_screen as CanvasItem).visible
 
 func _update_highlight_position() -> void:
 	if not _highlight or not is_instance_valid(_highlight):
