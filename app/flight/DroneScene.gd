@@ -21,7 +21,7 @@ const START_POINT_X = 0
 const START_POINT_Z = 0
 const START_POINT_Y = 0.0 # спавн на уровне пола (y=0)
 const HIGHLIGHT_COLOR_WARNING = Color(1.0, 0.3, 0.3, 0.7)
-const LEVEL_ONE_HINT_TEXT = "Для первого уровня хватит простого маршрута: сместите дрон к цели по плоскости, а затем поднимите его перед финишной точкой."
+const LEVEL_ONE_HINT_TEXT = "Для первого уровня хватит простого маршрута: 3 вправо, 3 назад, 1 вниз."
 
 # ==================== ПУТИ К КОМНАТАМ ====================
 const ROOM_PATHS = [
@@ -868,12 +868,25 @@ func animate_stars(stars_container: HBoxContainer, stars_earned: int):
 				var star_label = star_frame.get_child(0) as Label
 				if star_label:
 					# Ждем задержку перед анимацией каждой звезды
-					await get_tree().create_timer(i * 0.2).timeout
+					if not await _wait_for_tree_timer(i * 0.2):
+						return
 					
 					# Анимация звезды
 					var tween = create_tween()
 					tween.tween_property(star_label, "scale", Vector2(1.5, 1.5), 0.5)
 					tween.tween_property(star_label, "scale", Vector2(1.2, 1.2), 0.3)
+
+func _wait_for_tree_timer(duration: float) -> bool:
+	if duration <= 0.0:
+		return get_tree() != null and is_inside_tree()
+	if get_tree() == null or not is_inside_tree():
+		return false
+	var timer: SceneTreeTimer = get_tree().create_timer(duration)
+	if timer == null:
+		return false
+	await timer.timeout
+	return get_tree() != null and is_inside_tree()
+
 func _clear_success_canvas():
 	var existing: CanvasLayer = get_node_or_null("SuccessCanvas") as CanvasLayer
 	if existing != null:
@@ -998,6 +1011,9 @@ func _on_continue_pressed(canvas: CanvasLayer):
 func return_to_selection():
 	print("🔄 Возвращаемся к выбору уровней...")
 	Input.set_mouse_mode(Input.MOUSE_MODE_VISIBLE)
+	if _is_tutorial_active():
+		get_tree().change_scene_to_file("res://app/main_menu/main_scene.tscn")
+		return
 	get_tree().change_scene_to_file("res://app/ui/game_level.tscn")
 
 # ==================== СИСТЕМА ДРОНА ====================
@@ -2592,3 +2608,9 @@ func _tutorial_notify_level_completed() -> void:
 	var tut := get_node_or_null("/root/tut")
 	if tut != null and tut.has_method("notify"):
 		tut.notify("level_completed")
+
+func _is_tutorial_active() -> bool:
+	var tut := get_node_or_null("/root/tut")
+	if tut == null:
+		return false
+	return bool(tut.get("active"))

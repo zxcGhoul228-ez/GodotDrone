@@ -864,6 +864,17 @@ func rotate_propellers(delta):
 	if Engine.get_frames_drawn() % 120 == 0 and propellers.size() > 0 and current_propeller_speed > 100:
 		print("🌀 Вращение: ", int(current_propeller_speed), "°/с")
 
+func _wait_for_tree_timer(duration: float) -> bool:
+	if duration <= 0.0:
+		return get_tree() != null and is_inside_tree()
+	if get_tree() == null or not is_inside_tree():
+		return false
+	var timer: SceneTreeTimer = get_tree().create_timer(duration)
+	if timer == null:
+		return false
+	await timer.timeout
+	return get_tree() != null and is_inside_tree()
+
 # ВЫПОЛНЕНИЕ ПРОГРАММЫ - ИСПРАВЛЕННЫЙ КОД
 func execute_sequence(sequence: Array):
 	if is_executing:
@@ -886,7 +897,9 @@ func execute_sequence(sequence: Array):
 	start_position = _clamp_above_floor(start_position)
 	
 	# Ждем раскрутки
-	await get_tree().create_timer(0.3).timeout
+	if not await _wait_for_tree_timer(0.3):
+		is_executing = false
+		return
 	print("🌀 Пропеллеры раскручены")
 	
 	# Выполняем команды
@@ -896,7 +909,9 @@ func execute_sequence(sequence: Array):
 	stop_propellers()
 	
 	# Ждем остановки
-	await get_tree().create_timer(0.3).timeout
+	if not await _wait_for_tree_timer(0.3):
+		is_executing = false
+		return
 	
 	is_executing = false
 	
@@ -1721,7 +1736,8 @@ func show_crash_message():
 		add_child(crash_canvas)
 	
 	# Автоматическое скрытие через 3 секунды
-	await get_tree().create_timer(3.0).timeout
+	if not await _wait_for_tree_timer(3.0):
+		return
 	if is_instance_valid(crash_canvas):
 		crash_canvas.queue_free()
 

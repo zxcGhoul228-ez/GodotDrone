@@ -10,6 +10,7 @@ const MIN_VERTICAL_ANGLE: float = 0.0
 const MAX_VERTICAL_ANGLE: float = PI / 2.0 - 0.2
 const PROP_SNAP_RADIUS := 3.0
 const ASSEMBLY_AUTOSAVE_PATH := "user://assembly_autosave.json"
+const TUTORIAL_REQUIRED_PLATFORM := DronePlatformConfig.PLATFORM_QUAD
 
 
 const BOUNDS_MIN: Vector3 = Vector3(-5, 0, -5)
@@ -2583,6 +2584,8 @@ func _on_platform_menu_toggled() -> void:
 	options.visible = not options.visible
 	if options.visible and options.get_child_count() == 0:
 		create_platform_options()
+	if options.visible:
+		call_deferred("_tut_notify", "platform_menu_open")
 	call_deferred("_layout_assembly_overlay")
 
 func create_platform_options() -> void:
@@ -2711,6 +2714,9 @@ func create_propeller_options() -> void:
 	_refresh_component_selector_state()
 
 func _on_platform_selected(platform_id: String) -> void:
+	if _is_tutorial_active() and platform_id != TUTORIAL_REQUIRED_PLATFORM:
+		return
+
 	var platform_frame_type: String = _get_default_frame_for_platform(platform_id)
 	if not Global.is_component_available("frame", platform_frame_type):
 		return
@@ -2721,6 +2727,7 @@ func _on_platform_selected(platform_id: String) -> void:
 	current_frame_type = platform_frame_type
 	$UI/ComponentSelectors/PlatformSelector/PlatformOptionsContainer.visible = false
 	_refresh_component_selector_state()
+	_tut_notify("platform_selected", platform_id)
 	add_frame()
 
 func update_platform_selection() -> void:
@@ -2952,12 +2959,16 @@ func add_save_load_buttons() -> void:
 	load_slots_info()
 
 func show_save_menu() -> void:
+	if _is_tutorial_active():
+		return
 	if current_save_ui != null and is_instance_valid(current_save_ui):
 		current_save_ui.queue_free()
 	current_save_ui = create_slot_menu(true, "СОХРАНЕНИЕ ДРОНА")
 	$UI.add_child(current_save_ui)
 
 func show_load_menu() -> void:
+	if _is_tutorial_active():
+		return
 	if current_save_ui != null and is_instance_valid(current_save_ui):
 		current_save_ui.queue_free()
 	current_save_ui = create_slot_menu(false, "ЗАГРУЗКА ДРОНА")
@@ -3010,7 +3021,7 @@ func _read_drone_data_file(file_path: String) -> Dictionary:
 	return drone_data
 
 func _save_assembly_autosave() -> void:
-	if _assembly_autosave_suspended or is_dragging_component:
+	if _is_tutorial_active() or _assembly_autosave_suspended or is_dragging_component:
 		return
 
 	var file: FileAccess = FileAccess.open(ASSEMBLY_AUTOSAVE_PATH, FileAccess.WRITE)
@@ -3030,6 +3041,8 @@ func _apply_loaded_drone_data(drone_data: Dictionary) -> void:
 	update_camera_position()
 
 func _load_assembly_autosave() -> bool:
+	if _is_tutorial_active():
+		return false
 	var drone_data: Dictionary = _read_drone_data_file(ASSEMBLY_AUTOSAVE_PATH)
 	if drone_data.is_empty():
 		return false
@@ -3038,7 +3051,39 @@ func _load_assembly_autosave() -> bool:
 	return true
 
 func _restore_assembly_session() -> void:
+	if _is_tutorial_active():
+		_prepare_tutorial_assembly_session()
+		return
 	_load_assembly_autosave()
+
+func _prepare_tutorial_assembly_session() -> void:
+	_assembly_autosave_suspended = true
+	_clear_drone_components_only()
+	current_platform_type = TUTORIAL_REQUIRED_PLATFORM
+	current_frame_type = _get_default_frame_for_platform(TUTORIAL_REQUIRED_PLATFORM)
+	current_board_type = "Плата1"
+	current_motor_type = "Мотор1"
+	current_propeller_type = "Пропеллер1"
+	if current_save_ui != null and is_instance_valid(current_save_ui):
+		current_save_ui.queue_free()
+		current_save_ui = null
+	_close_other_menus("")
+	calculate_drone_stats()
+	update_component_list()
+	_refresh_component_selector_state()
+	_apply_current_customization_to_assembly()
+	update_camera_position()
+	_assembly_autosave_suspended = false
+
+func _is_tutorial_build_complete() -> bool:
+	_cleanup_component_arrays()
+	calculate_drone_stats()
+	return current_platform_type == TUTORIAL_REQUIRED_PLATFORM \
+		and bool(drone_stats.get("frame_present", false)) \
+		and bool(drone_stats.get("board_present", false)) \
+		and int(drone_stats.get("missing_motors", 0)) == 0 \
+		and int(drone_stats.get("missing_propellers", 0)) == 0 \
+		and bool(drone_stats.get("is_balanced", false))
 
 func _slot_json_path(slot_index: int) -> String:
 	return "user://drone_slot_%d.json" % slot_index
@@ -3341,6 +3386,8 @@ func _on_slot_button_pressed(slot_index: int, is_save_mode: bool) -> void:
 	show_slot_action_message(slot_index, is_save_mode)
 
 func save_drone_to_slot(slot_index: int) -> void:
+	if _is_tutorial_active():
+		return
 	var drone_data: Dictionary = _build_current_drone_data()
 
 	var file: FileAccess = FileAccess.open(_slot_json_path(slot_index), FileAccess.WRITE)
@@ -3359,6 +3406,8 @@ func save_drone_to_slot(slot_index: int) -> void:
 	_tut_notify("saved")
 
 func load_drone_from_slot(slot_index: int) -> void:
+	if _is_tutorial_active():
+		return
 	var data: Dictionary = _read_drone_data_file(_slot_json_path(slot_index))
 	if data.is_empty():
 		return
@@ -3769,6 +3818,8 @@ func _export_drone_on_scene_exit() -> void:
 		stop_component_dragging()
 	else:
 		_save_assembly_autosave()
+	if _is_tutorial_active() and not _is_tutorial_build_complete():
+		return
 	_suppress_export_popup = true
 	export_drone_scene()
 	_suppress_export_popup = false
@@ -4861,8 +4912,9 @@ func _ensure_pause_menu() -> void:
 	# --- быстрые действия ---
 	vbox.add_child(_pm_btn("▶ Продолжить", Callable(self, "_on_pause_resume_pressed")))
 	vbox.add_child(_pm_btn("🔌 Arduino (схема)", Callable(self, "_on_pause_arduino_pressed")))
-	vbox.add_child(_pm_btn("💾 Сохранить (слоты)", Callable(self, "_on_pause_save_pressed")))
-	vbox.add_child(_pm_btn("📂 Загрузить", Callable(self, "_on_pause_load_pressed")))
+	if not _is_tutorial_active():
+		vbox.add_child(_pm_btn("💾 Сохранить (слоты)", Callable(self, "_on_pause_save_pressed")))
+		vbox.add_child(_pm_btn("📂 Загрузить", Callable(self, "_on_pause_load_pressed")))
 	vbox.add_child(_pm_btn("⚙ Настройки", Callable(self, "_on_pause_settings_pressed")))
 	vbox.add_child(_pm_btn("🏠 В главное меню", Callable(self, "_on_pause_main_menu_pressed")))
 	vbox.add_child(_pm_btn("⛔ Выйти из игры", Callable(self, "_on_pause_quit_pressed")))
