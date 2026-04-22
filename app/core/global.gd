@@ -674,7 +674,7 @@ func get_drone_signature(profile: Dictionary) -> String:
 	for slot in motor_slots:
 		slot_parts.append(str(slot))
 	var slot_signature := ",".join(slot_parts)
-	return "%s|%s|%s|%d|%d|%s" % [
+	return "%s|%s|%s|%s|%d|%d|%s" % [
 		str(profile.get("platform_type", DronePlatformConfig.get_platform_for_frame_type(str(profile.get("frame_type", ""))))),
 		str(profile.get("frame_type", "frame")),
 		str(profile.get("board_type", "board")),

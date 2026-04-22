@@ -88,9 +88,25 @@ func complete_level():
 	
 	# Сохраняем прогресс через Global
 	if Global:
-		Global.complete_level(level_number, current_steps, stars)
+		var completion_time_ms := _estimate_completion_time_ms(stars)
+		Global.complete_level(level_number, completion_time_ms)
 	
 	show_level_complete_ui(stars)
+
+func _estimate_completion_time_ms(stars: int) -> int:
+	if Global and Global.has_method("get_level_ideal_time_ms"):
+		var ideal_time_ms: int = int(Global.call("get_level_ideal_time_ms", level_number))
+		if ideal_time_ms > 0:
+			match stars:
+				3:
+					return ideal_time_ms
+				2:
+					return int(round(float(ideal_time_ms) * 1.85))
+				1:
+					return int(round(float(ideal_time_ms) * 2.5))
+				_:
+					return int(round(float(ideal_time_ms) * 3.1))
+	return maxi(current_steps, 1) * 1000
 
 func calculate_stars() -> int:
 	if current_steps <= target_steps * 0.5:
@@ -165,4 +181,4 @@ func _on_retry_pressed():
 	get_tree().reload_current_scene()
 
 func _on_menu_pressed():
-	get_tree().change_scene_to_file("res://game_level.tscn")
+	get_tree().change_scene_to_file("res://app/ui/game_level.tscn")

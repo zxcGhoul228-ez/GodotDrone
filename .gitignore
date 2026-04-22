@@ -8,3 +8,4 @@ export_presets.cfg
 *.bak 
 Game_1.8.exe
 *.exe
+build/
