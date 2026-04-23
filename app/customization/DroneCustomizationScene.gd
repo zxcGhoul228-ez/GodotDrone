@@ -811,7 +811,7 @@ func _focus_camera_on_preview() -> void:
 	camera.look_at(center + Vector3(0.0, minf(size.y * 0.12, 0.75), 0.0), Vector3.UP)
 
 func _get_preview_focus_data(root: Node3D, ignore_nested_roots: bool = false) -> Dictionary:
-	if root == null or not is_instance_valid(root):
+	if root == null or not is_instance_valid( 	root):
 		return {
 			"center": Vector3.ZERO,
 			"radius": 1.8,

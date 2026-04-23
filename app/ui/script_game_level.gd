@@ -354,7 +354,7 @@ func _load_level():
 		Global.current_level = selected_level
 
 	var level_path: String = "res://app/flight/levels/Level%d.tscn" % selected_level
-	if not FileAccess.file_exists(level_path):
+	if not ResourceLoader.exists(level_path):
 		level_path = "res://app/flight/DroneScene.tscn"
 
 	Global.load_scene_with_loading(level_path)

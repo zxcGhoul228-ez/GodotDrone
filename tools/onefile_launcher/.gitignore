@@ -1,0 +1,5 @@
+bin/
+obj/
+publish/
+.payload_stage/
+Payload/payload.zip
