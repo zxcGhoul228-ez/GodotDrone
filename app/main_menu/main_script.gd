@@ -43,7 +43,6 @@ func _sync_root_rect():
 		return
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	position = Vector2.ZERO
-	size = viewport_size
 	custom_minimum_size = viewport_size
 
 func _prepare_layout_nodes():
@@ -51,7 +50,6 @@ func _prepare_layout_nodes():
 	if background != null:
 		background.set_anchors_preset(Control.PRESET_FULL_RECT)
 		background.position = Vector2.ZERO
-		background.size = get_viewport_rect().size
 		background.custom_minimum_size = Vector2.ZERO
 		background.expand_mode = 1
 		background.stretch_mode = 6
@@ -205,8 +203,6 @@ func _layout_screen():
 
 	if background != null:
 		background.position = Vector2.ZERO
-		background.size = viewport_size
-
 	var left_margin: float = clampf(viewport_size.x * 0.05, 36.0, 92.0)
 	var title_top: float = clampf(viewport_size.y * 0.09, 48.0, 104.0)
 	var panel_top: float = clampf(viewport_size.y * 0.18, 176.0, 226.0)

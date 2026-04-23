@@ -349,7 +349,7 @@ albedo_color = Color(0.9, 0.9, 0.9, 1)
 [sub_resource type="BoxShape3D" id="BoxShape3D_a6awf"]
 size = Vector3(8, 4, 8)
 
-[node name="ExportedDrone" type="CharacterBody3D" unique_id=368804147]
+[node name="ExportedDrone" type="CharacterBody3D" unique_id=528579807]
 script = ExtResource("1_vqjtt")
 metadata/drone_physics = {
 "active_motors": 4,
@@ -377,32 +377,32 @@ metadata/drone_info = {
 "motor_slots": [0, 1, 2, 3],
 "motor_type": "Мотор1",
 "motors": [{
-"position": Vector3(-3.4855676, 0.98, 2.8655317),
+"position": Vector3(-4.568985, 0.98, 1.9271398),
 "recommended_pin": "D9",
 "rotation": Vector3(0, 0, 0),
 "slot": 3,
 "slot_name": "Левый",
 "type": "Мотор1"
 }, {
-"position": Vector3(-1.3855677, 0.98, 0.7655318),
+"position": Vector3(-2.4689844, 0.98, -0.17286015),
 "recommended_pin": "D3",
 "rotation": Vector3(0, 0, 0),
 "slot": 0,
 "slot_name": "Передний",
 "type": "Мотор1"
 }, {
-"position": Vector3(0.71443224, 0.98, 2.8655317),
-"recommended_pin": "D5",
-"rotation": Vector3(0, 0, 0),
-"slot": 1,
-"slot_name": "Правый",
-"type": "Мотор1"
-}, {
-"position": Vector3(-1.3855677, 0.98, 4.9655313),
+"position": Vector3(-2.4689844, 0.98, 4.0271397),
 "recommended_pin": "D6",
 "rotation": Vector3(0, 0, 0),
 "slot": 2,
 "slot_name": "Задний",
+"type": "Мотор1"
+}, {
+"position": Vector3(-0.36898446, 0.98, 1.9271398),
+"recommended_pin": "D5",
+"rotation": Vector3(0, 0, 0),
+"slot": 1,
+"slot_name": "Правый",
 "type": "Мотор1"
 }],
 "physics": {
@@ -426,25 +426,25 @@ metadata/drone_info = {
 "propeller_slots": [0, 1, 2, 3],
 "propeller_type": "Пропеллер1",
 "propellers": [{
-"position": Vector3(-3.4855676, 1.28, 2.8655317),
+"position": Vector3(-4.568985, 1.28, 1.9271398),
 "rotation": Vector3(0, 0, 0),
 "slot": 3,
 "slot_name": "Левый",
 "type": "Пропеллер1"
 }, {
-"position": Vector3(-1.3855677, 1.28, 0.7655318),
+"position": Vector3(-2.4689844, 1.28, -0.17286015),
 "rotation": Vector3(0, 0, 0),
 "slot": 0,
 "slot_name": "Передний",
 "type": "Пропеллер1"
 }, {
-"position": Vector3(0.71443224, 1.28, 2.8655317),
+"position": Vector3(-0.36898446, 1.28, 1.9271398),
 "rotation": Vector3(0, 0, 0),
 "slot": 1,
 "slot_name": "Правый",
 "type": "Пропеллер1"
 }, {
-"position": Vector3(-1.3855677, 1.28, 4.9655313),
+"position": Vector3(-2.4689844, 1.28, 4.0271397),
 "rotation": Vector3(0, 0, 0),
 "slot": 2,
 "slot_name": "Задний",
@@ -453,7 +453,7 @@ metadata/drone_info = {
 "recommended_motor_pins": PackedStringArray("D3", "D5", "D6", "D9")
 }
 
-[node name="Node3D" type="Node3D" parent="." unique_id=1591032915 instance=ExtResource("2_o0d0p")]
+[node name="Node3D" type="Node3D" parent="." unique_id=1214231116 instance=ExtResource("2_o0d0p")]
 script = ExtResource("3_g18g7")
 component_name = "Рама дрона"
 component_type = "frame"
@@ -462,14 +462,14 @@ component_mass = 1.0
 metadata/component_type = "Рама1"
 metadata/cosmetic_part_root = "frame"
 
-[node name="_MeshInstance3D_219" type="MeshInstance3D" parent="Node3D" unique_id=117820691]
+[node name="_MeshInstance3D_219" type="MeshInstance3D" parent="Node3D" unique_id=1335381]
 transform = Transform3D(0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, 0, 0, 0)
 material_override = SubResource("StandardMaterial3D_hb4vh")
 mesh = ExtResource("4_8mrux")
 metadata/cosmetic_default_material_captured = true
 metadata/cosmetic_default_material_override = SubResource("StandardMaterial3D_hb4vh")
 
-[node name="_Node3D_223" type="Node3D" parent="." unique_id=1770302836 instance=ExtResource("5_vyf7v")]
+[node name="_Node3D_223" type="Node3D" parent="." unique_id=1983538214 instance=ExtResource("5_vyf7v")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0.099999905)
 script = ExtResource("3_g18g7")
 component_name = "Плата управления"
@@ -489,8 +489,8 @@ skeleton = NodePath("")
 metadata/cosmetic_default_material_captured = true
 metadata/cosmetic_default_material_override = null
 
-[node name="_Node3D_227" type="Node3D" parent="." unique_id=1517403584 instance=ExtResource("8_y71q5")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.1, 0.48000002, 0)
+[node name="_Node3D_227" type="Node3D" parent="." unique_id=1866764133 instance=ExtResource("8_y71q5")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.1000006, 0.48000002, 0)
 script = ExtResource("3_g18g7")
 component_name = "Двигатель"
 component_type = "motor"
@@ -501,14 +501,14 @@ metadata/component_type = "Мотор1"
 metadata/cosmetic_part_root = "motor_3"
 metadata/motor_slot = 3
 
-[node name="_MeshInstance3D_228" type="MeshInstance3D" parent="_Node3D_227" unique_id=592710465]
+[node name="_MeshInstance3D_228" type="MeshInstance3D" parent="_Node3D_227" unique_id=1901100687]
 material_override = SubResource("StandardMaterial3D_y35r0")
 mesh = SubResource("CylinderMesh_rvq53")
 metadata/motor_slot = 3
 metadata/cosmetic_default_material_captured = true
 metadata/cosmetic_default_material_override = SubResource("StandardMaterial3D_y35r0")
 
-[node name="Propeller_0" type="Node3D" parent="_Node3D_227" unique_id=535598203 groups=["drone_propellers"] instance=ExtResource("9_bjsdy")]
+[node name="Propeller_0" type="Node3D" parent="_Node3D_227" unique_id=797575579 groups=["drone_propellers"] instance=ExtResource("9_bjsdy")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
 script = ExtResource("3_g18g7")
 component_name = "Пропеллер"
@@ -524,7 +524,7 @@ metadata/motor_slot = 3
 metadata/propeller_index = 0
 metadata/propeller_type = "Пропеллер1"
 
-[node name="_MeshInstance3D_259" type="MeshInstance3D" parent="_Node3D_227/Propeller_0" unique_id=1534280931]
+[node name="_MeshInstance3D_259" type="MeshInstance3D" parent="_Node3D_227/Propeller_0" unique_id=1540524053]
 transform = Transform3D(0.01, 0, 0, 0, 0.01, 0, 0, 0, 0.01, 0, 0, 0)
 material_override = SubResource("StandardMaterial3D_yhqg2")
 mesh = ExtResource("10_1b42u")
@@ -533,7 +533,7 @@ metadata/cosmetic_default_material_captured = true
 metadata/cosmetic_default_material_override = SubResource("StandardMaterial3D_yhqg2")
 metadata/motor_slot = 3
 
-[node name="_Node3D_233" type="Node3D" parent="." unique_id=119588137 instance=ExtResource("8_y71q5")]
+[node name="_Node3D_237" type="Node3D" parent="." unique_id=313736813 instance=ExtResource("8_y71q5")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.48000002, -2.1)
 script = ExtResource("3_g18g7")
 component_name = "Двигатель"
@@ -545,14 +545,14 @@ metadata/component_type = "Мотор1"
 metadata/cosmetic_part_root = "motor_0"
 metadata/motor_slot = 0
 
-[node name="_MeshInstance3D_234" type="MeshInstance3D" parent="_Node3D_233" unique_id=533553008]
+[node name="_MeshInstance3D_238" type="MeshInstance3D" parent="_Node3D_237" unique_id=1293299360]
 material_override = SubResource("StandardMaterial3D_wf7ln")
 mesh = SubResource("CylinderMesh_ummiu")
 metadata/motor_slot = 0
 metadata/cosmetic_default_material_captured = true
 metadata/cosmetic_default_material_override = SubResource("StandardMaterial3D_wf7ln")
 
-[node name="Propeller_1" type="Node3D" parent="_Node3D_233" unique_id=1920916586 groups=["drone_propellers"] instance=ExtResource("9_bjsdy")]
+[node name="Propeller_1" type="Node3D" parent="_Node3D_237" unique_id=1329651221 groups=["drone_propellers"] instance=ExtResource("9_bjsdy")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
 script = ExtResource("3_g18g7")
 component_name = "Пропеллер"
@@ -568,7 +568,7 @@ metadata/motor_slot = 0
 metadata/propeller_index = 1
 metadata/propeller_type = "Пропеллер1"
 
-[node name="_MeshInstance3D_269" type="MeshInstance3D" parent="_Node3D_233/Propeller_1" unique_id=1307977162]
+[node name="_MeshInstance3D_265" type="MeshInstance3D" parent="_Node3D_237/Propeller_1" unique_id=1974587673]
 transform = Transform3D(0.01, 0, 0, 0, 0.01, 0, 0, 0, 0.01, 0, 0, 0)
 material_override = SubResource("StandardMaterial3D_f0ytx")
 mesh = ExtResource("10_1b42u")
@@ -577,52 +577,8 @@ metadata/cosmetic_default_material_captured = true
 metadata/cosmetic_default_material_override = SubResource("StandardMaterial3D_f0ytx")
 metadata/motor_slot = 0
 
-[node name="_Node3D_239" type="Node3D" parent="." unique_id=1559982808 instance=ExtResource("8_y71q5")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.1, 0.48000002, 0)
-script = ExtResource("3_g18g7")
-component_name = "Двигатель"
-component_type = "motor"
-can_attach_to = PackedStringArray("propeller")
-component_mass = 0.2
-component_thrust = 8.0
-metadata/component_type = "Мотор1"
-metadata/cosmetic_part_root = "motor_1"
-metadata/motor_slot = 1
-
-[node name="_MeshInstance3D_240" type="MeshInstance3D" parent="_Node3D_239" unique_id=681765003]
-material_override = SubResource("StandardMaterial3D_6qv7q")
-mesh = SubResource("CylinderMesh_21v4b")
-metadata/motor_slot = 1
-metadata/cosmetic_default_material_captured = true
-metadata/cosmetic_default_material_override = SubResource("StandardMaterial3D_6qv7q")
-
-[node name="Propeller_2" type="Node3D" parent="_Node3D_239" unique_id=613595161 groups=["drone_propellers"] instance=ExtResource("9_bjsdy")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
-script = ExtResource("3_g18g7")
-component_name = "Пропеллер"
-component_type = "propeller"
-can_attach_to = PackedStringArray()
-component_mass = 0.1
-component_thrust = 1.0
-metadata/is_drone_propeller = true
-metadata/component_type = "Пропеллер1"
-metadata/cosmetic_part_root = "propeller_1"
-metadata/attached_motor_slot = 1
-metadata/motor_slot = 1
-metadata/propeller_index = 2
-metadata/propeller_type = "Пропеллер1"
-
-[node name="_MeshInstance3D_275" type="MeshInstance3D" parent="_Node3D_239/Propeller_2" unique_id=1175905374]
-transform = Transform3D(0.01, 0, 0, 0, 0.01, 0, 0, 0, 0.01, 0, 0, 0)
-material_override = SubResource("StandardMaterial3D_23cbw")
-mesh = ExtResource("10_1b42u")
-metadata/is_drone_propeller = true
-metadata/cosmetic_default_material_captured = true
-metadata/cosmetic_default_material_override = SubResource("StandardMaterial3D_23cbw")
-metadata/motor_slot = 1
-
-[node name="_Node3D_245" type="Node3D" parent="." unique_id=1849992586 instance=ExtResource("8_y71q5")]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.48000002, 2.0999997)
+[node name="_Node3D_243" type="Node3D" parent="." unique_id=704934886 instance=ExtResource("8_y71q5")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.48000002, 2.1)
 script = ExtResource("3_g18g7")
 component_name = "Двигатель"
 component_type = "motor"
@@ -633,14 +589,14 @@ metadata/component_type = "Мотор1"
 metadata/cosmetic_part_root = "motor_2"
 metadata/motor_slot = 2
 
-[node name="_MeshInstance3D_246" type="MeshInstance3D" parent="_Node3D_245" unique_id=1067669989]
-material_override = SubResource("StandardMaterial3D_pwsis")
-mesh = SubResource("CylinderMesh_17ogt")
+[node name="_MeshInstance3D_244" type="MeshInstance3D" parent="_Node3D_243" unique_id=1782096013]
+material_override = SubResource("StandardMaterial3D_6qv7q")
+mesh = SubResource("CylinderMesh_21v4b")
 metadata/motor_slot = 2
 metadata/cosmetic_default_material_captured = true
-metadata/cosmetic_default_material_override = SubResource("StandardMaterial3D_pwsis")
+metadata/cosmetic_default_material_override = SubResource("StandardMaterial3D_6qv7q")
 
-[node name="Propeller_3" type="Node3D" parent="_Node3D_245" unique_id=1609250258 groups=["drone_propellers"] instance=ExtResource("9_bjsdy")]
+[node name="Propeller_3" type="Node3D" parent="_Node3D_243" unique_id=1919817672 groups=["drone_propellers"] instance=ExtResource("9_bjsdy")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
 script = ExtResource("3_g18g7")
 component_name = "Пропеллер"
@@ -656,15 +612,59 @@ metadata/motor_slot = 2
 metadata/propeller_index = 3
 metadata/propeller_type = "Пропеллер1"
 
-[node name="_MeshInstance3D_285" type="MeshInstance3D" parent="_Node3D_245/Propeller_3" unique_id=846719590]
+[node name="_MeshInstance3D_277" type="MeshInstance3D" parent="_Node3D_243/Propeller_3" unique_id=1782167211]
+transform = Transform3D(0.01, 0, 0, 0, 0.01, 0, 0, 0, 0.01, 0, 0, 0)
+material_override = SubResource("StandardMaterial3D_23cbw")
+mesh = ExtResource("10_1b42u")
+metadata/is_drone_propeller = true
+metadata/cosmetic_default_material_captured = true
+metadata/cosmetic_default_material_override = SubResource("StandardMaterial3D_23cbw")
+metadata/motor_slot = 2
+
+[node name="_Node3D_249" type="Node3D" parent="." unique_id=855621864 instance=ExtResource("8_y71q5")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2.1, 0.48000002, 0)
+script = ExtResource("3_g18g7")
+component_name = "Двигатель"
+component_type = "motor"
+can_attach_to = PackedStringArray("propeller")
+component_mass = 0.2
+component_thrust = 8.0
+metadata/component_type = "Мотор1"
+metadata/cosmetic_part_root = "motor_1"
+metadata/motor_slot = 1
+
+[node name="_MeshInstance3D_250" type="MeshInstance3D" parent="_Node3D_249" unique_id=451321165]
+material_override = SubResource("StandardMaterial3D_pwsis")
+mesh = SubResource("CylinderMesh_17ogt")
+metadata/motor_slot = 1
+metadata/cosmetic_default_material_captured = true
+metadata/cosmetic_default_material_override = SubResource("StandardMaterial3D_pwsis")
+
+[node name="Propeller_2" type="Node3D" parent="_Node3D_249" unique_id=668782140 groups=["drone_propellers"] instance=ExtResource("9_bjsdy")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.3, 0)
+script = ExtResource("3_g18g7")
+component_name = "Пропеллер"
+component_type = "propeller"
+can_attach_to = PackedStringArray()
+component_mass = 0.1
+component_thrust = 1.0
+metadata/is_drone_propeller = true
+metadata/component_type = "Пропеллер1"
+metadata/cosmetic_part_root = "propeller_1"
+metadata/attached_motor_slot = 1
+metadata/motor_slot = 1
+metadata/propeller_index = 2
+metadata/propeller_type = "Пропеллер1"
+
+[node name="_MeshInstance3D_271" type="MeshInstance3D" parent="_Node3D_249/Propeller_2" unique_id=182993990]
 transform = Transform3D(0.01, 0, 0, 0, 0.01, 0, 0, 0, 0.01, 0, 0, 0)
 material_override = SubResource("StandardMaterial3D_veqpj")
 mesh = ExtResource("10_1b42u")
 metadata/is_drone_propeller = true
 metadata/cosmetic_default_material_captured = true
 metadata/cosmetic_default_material_override = SubResource("StandardMaterial3D_veqpj")
-metadata/motor_slot = 2
+metadata/motor_slot = 1
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=699336937]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1141017993]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2, 0)
 shape = SubResource("BoxShape3D_a6awf")

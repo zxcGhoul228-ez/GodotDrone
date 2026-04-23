@@ -1022,11 +1022,10 @@ func create_drone():
 	for child in drone_container.get_children():
 		child.queue_free()
 	
-	var drone_paths = [
-		"res://exported_drone.tscn",
-		"user://exported_drone.tscn", 
-		"res://app/flight/Drone.tscn"
-	]
+	# Prefer the runtime save so exported builds do not pick a stale bundled drone scene first.
+	var drone_paths: Array[String] = ["user://exported_drone.tscn"]
+	if OS.has_feature("editor"):
+		drone_paths.append("res://exported_drone.tscn")
 	
 	var drone_loaded = false
 	for path in drone_paths:

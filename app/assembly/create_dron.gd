@@ -35,8 +35,7 @@ const CUSTOMIZATION_SCENE_PATH := "res://app/customization/DroneCustomizationSce
 # ==================== ПУТИ СЦЕН ====================
 const CREATE_DRONE_SCENE_PATH := "res://app/assembly/create_dron.tscn"
 const ARDUINO_SCENE_PATHS: Array[String] = [
-	"res://app/arduino/DroneConnectionScene.tscn",
-	"res://app/arduino/drone_connection_scene.tscn"
+	"res://app/arduino/DroneConnectionScene.tscn"
 ]
 
 # ==================== ESC-МЕНЮ (ПАУЗА) ====================
@@ -3975,8 +3974,18 @@ func export_drone_scene() -> bool:
 	var result: int = packed_scene.pack(drone_root)
 
 	if result == OK:
-		ResourceSaver.save(packed_scene, "user://exported_drone.tscn")
-		ResourceSaver.save(packed_scene, "res://exported_drone.tscn")
+		var exported_scene_path := "user://exported_drone.tscn"
+		var save_result: int = ResourceSaver.save(packed_scene, exported_scene_path)
+		if save_result != OK:
+			push_error("Failed to save exported drone scene to %s (error %d)" % [exported_scene_path, save_result])
+			return false
+
+		# Keep the editor fallback up to date without depending on a writable res:// in exported builds.
+		if OS.has_feature("editor"):
+			var editor_scene_path := "res://exported_drone.tscn"
+			var editor_save_result: int = ResourceSaver.save(packed_scene, editor_scene_path)
+			if editor_save_result != OK:
+				push_warning("Failed to refresh editor drone scene at %s (error %d)" % [editor_scene_path, editor_save_result])
 
 		print("✅ Дрон экспортирован!")
 		print("   - Тип ноды: ", drone_root.get_class())

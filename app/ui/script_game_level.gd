@@ -30,7 +30,6 @@ func _sync_root_rect():
 		return
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	position = Vector2.ZERO
-	size = viewport_size
 	custom_minimum_size = viewport_size
 
 func _prepare_background():
@@ -41,7 +40,6 @@ func _prepare_background():
 	background.expand_mode = 1
 	background.stretch_mode = 6
 	background.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	background.size = get_viewport_rect().size
 
 func _find_nodes():
 	level_containers.clear()
@@ -107,8 +105,6 @@ func _layout_screen():
 
 	if background != null:
 		background.position = Vector2.ZERO
-		background.size = viewport_size
-
 	var header_top: float = 28.0
 	var title_height: float = clampf(viewport_size.y * 0.12, 104.0, 136.0)
 	var title_width: float = clampf(viewport_size.x * 0.44, 520.0, 840.0)
